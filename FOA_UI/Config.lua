@@ -466,6 +466,13 @@ SlashCmdList.INKUI = function(msg)
 		else
 			for _, line in ipairs(Ink.blocked) do print("|cffFFF468FOA|r " .. line) end
 		end
+		local errs = Ink.db and Ink.db.errors
+		if errs and #errs > 0 then
+			print("|cffFFF468FOA|r 최근 오류 (최대 8개):")
+			for i = math.max(1, #errs - 7), #errs do print("|cffFF6B5EFOA|r " .. errs[i]) end
+		else
+			print("|cffFFF468FOA|r 기록된 오류가 없어요.")
+		end
 	elseif msg == "kb" or msg == "단축키" then
 		Ink:OpenQuickKeybind()
 	elseif msg == "layout" then

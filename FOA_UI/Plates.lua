@@ -306,7 +306,9 @@ end
 
 function M:UpdateLook(f)
 	local u = f.unit
-	local isTarget = UnitIsUnit(u, "target")
+	-- 대상 여부: "대상의 이름표 = 이 이름표"로 비교 (UnitIsUnit 은 비공개 값일 수 있다)
+	local tp = C_NamePlate.GetNamePlateForUnit("target")
+	local isTarget = tp ~= nil and tp == f:GetParent()
 	local a = C.accent
 	-- 어그로: 내가 위협 1순위면 붉은 테두리
 	local threat = plain(UnitThreatSituation("player", u))
@@ -331,7 +333,7 @@ function M:UpdateLook(f)
 		f:SetFrameLevel(5)
 	end
 	-- 대상이 있을 때 나머지는 살짝 흐리게
-	f:SetAlpha((UnitExists("target") and not isTarget) and 0.6 or 1)
+	f:SetAlpha((plain(UnitExists("target")) and not isTarget) and 0.6 or 1)
 end
 
 -- 정예·희귀 테두리 켜기/끄기 (color = 테두리·빛, shine = 지나가는 반짝임 색)
@@ -372,7 +374,8 @@ function M:UpdateInfo(f)
 		f.elite:Hide()
 		SetRank(f, nil)
 	end
-	local idx = GetRaidTargetIndex(u)
+	local okI, idx = pcall(GetRaidTargetIndex, u)
+	idx = okI and plain(idx) or nil
 	if idx then
 		SetRaidTargetIconTexture(f.raid, idx)
 		f.raid:Show()
@@ -562,13 +565,17 @@ local function IsFriendly(unit)
 end
 M.IsFriendly = IsFriendly
 
-function M:OnAdded(unit)
-	local plate = C_NamePlate.GetNamePlateForUnit(unit)
-	if not plate or plate:IsForbidden() then return end
-	local f = plate.ink or Build(plate)
-	f.unit = unit
-	plates[unit] = f
-	HideBlizzard(plate, unit)
+-- 오류 기록 (같은 내용은 30초에 한 번만)
+local lastErr = {}
+local function PlateError(where, err)
+	local key = where .. tostring(err)
+	local now = GetTime()
+	if lastErr[key] and now - lastErr[key] < 30 then return end
+	lastErr[key] = now
+	Ink:LogError("Plates." .. where .. ": " .. tostring(err))
+end
+
+function M:Draw(f, unit)
 	local friendly = IsFriendly(unit)
 	self:SetFriendly(f, friendly)
 	self:UpdateInfo(f)
@@ -579,16 +586,58 @@ function M:OnAdded(unit)
 	else
 		self:UpdateAll(f)
 	end
+end
+
+function M:OnAdded(unit)
+	local plate = C_NamePlate.GetNamePlateForUnit(unit)
+	if not plate or plate:IsForbidden() then return end
+	local okB, f = pcall(function() return plate.ink or Build(plate) end)
+	if not okB or not f then
+		PlateError("Build", f)
+		RestoreBlizzard(plate)
+		return
+	end
+	f.unit = unit
+	f.failAt = nil
+	plates[unit] = f
 	f:Show()
+	local ok, err = pcall(self.Draw, self, f, unit)
+	if not ok then
+		-- FOA 이름표를 못 그리면 블리자드 기본 이름표라도 보이게
+		PlateError("Draw", err)
+		plates[unit] = nil
+		f.unit = nil
+		f.failAt = GetTime()
+		f:Hide()
+		RestoreBlizzard(plate)
+		return
+	end
+	HideBlizzard(plate, unit)
 	-- 첫 프레임에 공격 가능 여부가 틀리게 나올 수 있어 한 번 더 확인
 	C_Timer.After(0.1, function()
 		if plates[unit] ~= f then return end
 		local fr = IsFriendly(unit)
 		if fr ~= f.friendly then
-			M:SetFriendly(f, fr)
-			if not fr then M:UpdateAll(f) end
+			local okD, errD = pcall(M.Draw, M, f, unit)
+			if not okD then PlateError("Recheck", errD) end
 		end
 	end)
+end
+
+-- 이벤트를 놓쳤거나 그리기에 실패한 이름표를 다시 잡는다 (0.2초마다)
+function M:Heal()
+	local now = GetTime()
+	for _, plate in ipairs(C_NamePlate.GetNamePlates() or {}) do
+		if not plate:IsForbidden() then
+			local u = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+			if u then
+				local f = plates[u]
+				local broken = not f or f ~= plate.ink or not f:IsShown() or f.unit ~= u
+				local cooling = plate.ink and plate.ink.failAt and now - plate.ink.failAt < 3
+				if broken and not cooling then self:OnAdded(u) end
+			end
+		end
+	end
 end
 
 function M:OnRemoved(unit)
@@ -693,7 +742,7 @@ function M:Init()
 	}) do
 		e:RegisterEvent(ev)
 	end
-	e:SetScript("OnEvent", function(_, event, unit)
+	local function OnEvent(_, event, unit)
 		if event == "NAME_PLATE_UNIT_ADDED" then
 			M:OnAdded(unit)
 			return
@@ -733,6 +782,10 @@ function M:Init()
 				if fr ~= f.friendly then M:SetFriendly(f, fr) end
 			end
 		end
+	end
+	e:SetScript("OnEvent", function(self, event, unit)
+		local ok, err = pcall(OnEvent, self, event, unit)
+		if not ok then PlateError(event, err) end
 	end)
 	-- 아군 이름은 가까울 때(약 28미터)나 대상/마우스오버일 때만 보인다.
 	-- 네임플레이트는 거리와 상관없이 같은 크기로 그려져서, 멀리 있는 NPC 이름이 크게 겹쳐 보이기 때문.
@@ -741,13 +794,14 @@ function M:Init()
 		t = t + el
 		if t < 0.2 then return end
 		t = 0
+		local okH, errH = pcall(M.Heal, M)
+		if not okH then PlateError("Heal", errH) end
 		for u, f in pairs(plates) do
 			-- 적/아군이 바뀌었으면(정보가 늦게 왔거나 반응이 바뀜) 바로 모양을 바꾼다
 			local fr = IsFriendly(u)
 			if fr ~= f.friendly then
-				M:SetFriendly(f, fr)
-				M:UpdateInfo(f)
-				if not fr then M:UpdateAll(f) end
+				local ok, err = pcall(M.Draw, M, f, u)
+				if not ok then PlateError("Redraw", err) end
 				f:Show()
 			end
 			if f.friendly then
