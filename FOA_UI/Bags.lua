@@ -363,6 +363,117 @@ local function IconButton(parent, label, tip, onClick)
 	return b
 end
 
+-------------------------------------------------------------------------------
+-- 가방 칸 (가방 창 위에 붙는 작은 줄): 가방 1~4 + 재료 가방
+--  가방을 끌어다 놓거나, 가방을 집은 채로 칸을 누르면 끼운다. 칸의 가방을 끌어내면 뺀다.
+-------------------------------------------------------------------------------
+local BAG_SLOT = 34
+local EMPTY_BAG = "Interface\\PaperDoll\\UI-PaperDoll-Slot-Bag"
+
+local function BagInv(bag)
+	return C_Container.ContainerIDToInventoryID and C_Container.ContainerIDToInventoryID(bag)
+end
+
+local function NewBagSlot(parent, bag)
+	local b = CreateFrame("Button", nil, parent)
+	b:SetSize(BAG_SLOT, BAG_SLOT)
+	b.bag = bag
+	b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	b:RegisterForDrag("LeftButton")
+	b.icon = b:CreateTexture(nil, "ARTWORK")
+	b.icon:SetPoint("TOPLEFT", 1, -1)
+	b.icon:SetPoint("BOTTOMRIGHT", -1, 1)
+	b.skin = Ink:IconSkin(b, b.icon, true)
+	b.skin.bg:SetVertexColor(1, 1, 1, 0.05)
+	b.count = Ink:Text(b.skin.top, F.latinB, 10, C.text, "RIGHT")
+	b.count:SetPoint("BOTTOMRIGHT", -3, 3)
+	b.count:SetShadowOffset(1, -1)
+	b.hl = b:CreateTexture(nil, "HIGHLIGHT")
+	b.hl:SetTexture(Ink.tex.round4)
+	b.hl:SetAllPoints()
+	b.hl:SetVertexColor(1, 1, 1, 0.12)
+	b.hl:SetBlendMode("ADD")
+	local function put(self)
+		local inv = BagInv(self.bag)
+		if not inv then return end
+		if CursorHasItem() then PutItemInBag(inv) else PickupBagFromSlot(inv) end
+	end
+	b:SetScript("OnClick", put)
+	b:SetScript("OnReceiveDrag", put)
+	b:SetScript("OnDragStart", function(self)
+		local inv = BagInv(self.bag)
+		if inv then PickupBagFromSlot(inv) end
+	end)
+	b:SetScript("OnEnter", function(self)
+		local inv = BagInv(self.bag)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		if inv and GetInventoryItemTexture("player", inv) then
+			GameTooltip:SetInventoryItem("player", inv)
+		else
+			GameTooltip:SetText(self.bag == REAGENT_BAG and "재료 가방 칸" or "빈 가방 칸")
+			GameTooltip:AddLine("가방을 끌어다 놓으면 끼워집니다.", 0.7, 0.7, 0.7)
+		end
+		GameTooltip:Show()
+	end)
+	b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	return b
+end
+
+function M:BuildBagBar()
+	local f = self.frame
+	local list = {}
+	for i = 1, NUM_BAGS do list[#list + 1] = i end
+	if REAGENT_BAG and BagInv(REAGENT_BAG) then list[#list + 1] = REAGENT_BAG end
+	local bar = CreateFrame("Frame", nil, f)
+	bar:SetSize(PAD * 2 + #list * BAG_SLOT + (#list - 1) * 6 + 8, BAG_SLOT + 20)
+	bar:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, 6)
+	bar:EnableMouse(true)
+	bar.bg = Ink:Round(bar, "BACKGROUND", false, false)
+	bar.bg:SetAllPoints()
+	bar.bg:SetVertexColor(0.035, 0.04, 0.052, 0.95)
+	bar.bd = Ink:Round(bar, "BORDER", false, true)
+	bar.bd:SetAllPoints()
+	bar.bd:SetVertexColor(1, 1, 1, 0.08)
+	bar.slots = {}
+	local x = PAD
+	for i, bag in ipairs(list) do
+		if bag == REAGENT_BAG then x = x + 8 end -- 재료 가방은 살짝 띄운다
+		local b = NewBagSlot(bar, bag)
+		b:SetPoint("LEFT", bar, "LEFT", x, 0)
+		x = x + BAG_SLOT + 6
+		bar.slots[i] = b
+	end
+	bar:Hide()
+	f.bagBar = bar
+end
+
+function M:UpdateBagBar()
+	local bar = self.frame and self.frame.bagBar
+	if not bar or not bar:IsShown() then return end
+	for _, b in ipairs(bar.slots) do
+		local inv = BagInv(b.bag)
+		local tex = inv and GetInventoryItemTexture("player", inv)
+		b.icon:SetTexture(tex or EMPTY_BAG)
+		b.icon:SetDesaturated(not tex)
+		b.icon:SetAlpha(tex and 1 or 0.35)
+		local n = tex and C_Container.GetContainerNumSlots(b.bag) or 0
+		b.count:SetText(n > 0 and n or "")
+	end
+end
+
+function M:ToggleBagBar(show)
+	local bar = self.frame and self.frame.bagBar
+	if not bar then return end
+	if show == nil then show = not bar:IsShown() end
+	bar:SetShown(show)
+	Ink.db.bagBarOpen = show
+	local btn = self.frame.bagBtn
+	btn.base = show and { C.accent[1], C.accent[2], C.accent[3], 0.22 } or { 1, 1, 1, 0.05 }
+	btn.bg:SetVertexColor(unpack(btn.base))
+	btn.text:SetTextColor(show and C.accent[1] or C.soft[1], show and C.accent[2] or C.soft[2], show and C.accent[3] or C.soft[3])
+	self:UpdateBagBar()
+end
+
 function M:Build()
 	local f = CreateFrame("Frame", "InkUIBags", Ink.root)
 	f:SetSize(WIDTH, 300)
@@ -433,7 +544,7 @@ function M:Build()
 
 	-- 검색
 	local sb = CreateFrame("EditBox", nil, f)
-	sb:SetSize(150, 24)
+	sb:SetSize(124, 24)
 	sb:SetPoint("RIGHT", f.sort, "LEFT", -8, 0)
 	sb:SetAutoFocus(false)
 	sb:SetFont(F.sans, 12, "")
@@ -459,9 +570,16 @@ function M:Build()
 	end)
 	f.search = sb
 
+	-- 가방 칸 열기/닫기 (가방 바꿔 끼우기)
+	f.bagBtn = IconButton(f, "가방 칸", "가방 칸 보기 / 숨기기\n가방을 끌어다 놓아 바꿔 끼웁니다", function() M:ToggleBagBar() end)
+	f.bagBtn.text:SetFont(F.semi, 11, "")
+	f.bagBtn:SetWidth(52)
+	f.bagBtn:SetPoint("RIGHT", sb, "LEFT", -6, 0)
+
 	-- 제목 줄(끌기 영역)이 버튼을 덮지 않도록 버튼들을 위로 올린다
 	drag:SetFrameLevel(f:GetFrameLevel() + 1)
-	for _, w in ipairs({ f.close, f.sort, sb }) do w:SetFrameLevel(f:GetFrameLevel() + 6) end
+	for _, w in ipairs({ f.close, f.sort, sb, f.bagBtn }) do w:SetFrameLevel(f:GetFrameLevel() + 6) end
+	self:BuildBagBar()
 
 	-- 분류 탭
 	f.tabs = {}
@@ -517,6 +635,7 @@ function M:Build()
 
 	f:SetScript("OnShow", function()
 		M:Refresh()
+		if Ink.db.bagBarOpen then M:ToggleBagBar(true) end
 		if PlaySound and SOUNDKIT then PlaySound(SOUNDKIT.IG_BACKPACK_OPEN) end
 	end)
 	f:SetScript("OnHide", function()
@@ -905,7 +1024,7 @@ function M:Init()
 	end
 
 	local e = CreateFrame("Frame")
-	for _, ev in ipairs({ "BAG_UPDATE_DELAYED", "BAG_UPDATE", "ITEM_LOCK_CHANGED", "BAG_UPDATE_COOLDOWN",
+	for _, ev in ipairs({ "BAG_CONTAINER_UPDATE", "BAG_UPDATE_DELAYED", "BAG_UPDATE", "ITEM_LOCK_CHANGED", "BAG_UPDATE_COOLDOWN",
 		"INVENTORY_SEARCH_UPDATE", "BAG_NEW_ITEMS_UPDATED", "PLAYER_MONEY", "PLAYER_REGEN_ENABLED",
 		"QUEST_ACCEPTED", "UNIT_QUEST_LOG_CHANGED", "PLAYER_EQUIPMENT_CHANGED" }) do
 		pcall(e.RegisterEvent, e, ev)
@@ -919,6 +1038,10 @@ function M:Init()
 		if not M.frame:IsShown() then
 			if event == "PLAYER_REGEN_ENABLED" then M.dirty = nil end
 			return
+		end
+		if event == "BAG_CONTAINER_UPDATE" or event == "BAG_UPDATE_DELAYED" or event == "PLAYER_EQUIPMENT_CHANGED" then
+			M:UpdateBagBar()
+			if event == "BAG_CONTAINER_UPDATE" then M:Schedule() return end
 		end
 		if event == "BAG_UPDATE" or event == "BAG_UPDATE_DELAYED" then
 			M:Schedule()

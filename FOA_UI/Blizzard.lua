@@ -1039,33 +1039,13 @@ function Ink:OpenQuickKeybind()
 end
 
 -------------------------------------------------------------------------------
--- 새로 배운 주문 자동 배치 (FOA 설정 "새 주문 자동 배치", 기본 켜짐)
---  블리자드도 빈 칸에 넣어 주지만, 바 페이지 / 탈것 상태 등에 따라 빠지는 경우가 있어
---  배운 뒤 잠시 기다렸다가 아직 어느 바에도 없으면 기본 바 첫 빈 칸에 넣는다.
+-- 새로 배운 주문 자동 배치
+--  FOA가 직접 주문을 집어서 놓으면(PickupSpell / PlaceAction) 블리자드 행동단축바 코드가
+--  오염돼 전투 중 "MultiBar...:HideBase() 막힘"이 생긴다. 그래서 블리자드(서버)의
+--  자동 배치 설정만 켜 두고, FOA는 들어간 자리를 알려 주기만 한다.
 -------------------------------------------------------------------------------
-local PUSH_SLOTS = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72 }
-
-local function OnAnyBar(spellID)
-	if not (C_ActionBar and C_ActionBar.FindSpellActionButtons) then return true end
-	local ids = { spellID }
-	if C_Spell and C_Spell.GetOverrideSpell then
-		local o = C_Spell.GetOverrideSpell(spellID)
-		if o and o ~= spellID then ids[#ids + 1] = o end
-	end
-	if FindBaseSpellByID then
-		local b = FindBaseSpellByID(spellID)
-		if b and b ~= spellID then ids[#ids + 1] = b end
-	end
-	for _, id in ipairs(ids) do
-		local slots = C_ActionBar.FindSpellActionButtons(id)
-		if slots and #slots > 0 then return true end
-	end
-	return false
-end
-
 local function FlashSlot(slot)
-	local name = slot <= 12 and ("ActionButton" .. slot) or ("MultiBarBottomLeftButton" .. (slot - 60))
-	local b = _G[name]
+	local b = _G["ActionButton" .. slot]
 	local s = b and b.inkSkin
 	if not (s and s.border) then return end
 	s.border:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 1)
@@ -1074,83 +1054,47 @@ local function FlashSlot(slot)
 	end)
 end
 
-function M:PushSpell(spellID, quiet)
-	if not spellID then return end
-	if Ink.db.autoPush == false then return end
-	if C_Spell and C_Spell.IsSpellPassive and C_Spell.IsSpellPassive(spellID) then return end
-	if InCombatLockdown() then
-		self.pushQueue = self.pushQueue or {}
-		self.pushQueue[#self.pushQueue + 1] = spellID
-		return
+function M:ApplyAutoPush()
+	if InCombatLockdown() then return end
+	local want = Ink.db.autoPush == false and "0" or "1"
+	if C_CVar and C_CVar.GetCVar and C_CVar.GetCVar("AutoPushSpellToActionBar") ~= nil
+		and C_CVar.GetCVar("AutoPushSpellToActionBar") ~= want then
+		pcall(C_CVar.SetCVar, "AutoPushSpellToActionBar", want)
 	end
-	if OnAnyBar(spellID) then return end
-	for _, slot in ipairs(PUSH_SLOTS) do
-		if not HasAction(slot) then
-			ClearCursor()
-			local ok = pcall(C_Spell.PickupSpell, spellID)
-			if ok and GetCursorInfo() then
-				PlaceAction(slot)
-				ClearCursor()
-				FlashSlot(slot)
-				if not quiet then
-					local link = C_Spell.GetSpellLink and C_Spell.GetSpellLink(spellID)
-					local where = slot <= 12 and ("기본 바 " .. slot .. "번") or ("두 번째 바 " .. (slot - 60) .. "번")
-					print("|cffFFF468FOA|r 새 주문 " .. (link or "") .. " → " .. where)
-				end
-				return true
-			end
-			return
-		end
-	end
-end
-
--- 전문화를 바꿨는데 기본 바가 거의 비어 있으면(처음 쓰는 전문화) 그 전문화 주문으로 채운다
-function M:FillSpec()
-	if Ink.db.autoPush == false or InCombatLockdown() then return end
-	if not (C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines and C_SpellBook.GetSpellBookItemInfo) then return end
-	local empty = 0
-	for slot = 1, 12 do if not HasAction(slot) then empty = empty + 1 end end
-	if empty < 6 then return end
-	local bank = Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
-	local placed = 0
-	for line = 2, C_SpellBook.GetNumSpellBookSkillLines() do
-		local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
-		if info and not info.offSpecID and not info.isGuild and not info.shouldHide then
-			for i = info.itemIndexOffset + 1, info.itemIndexOffset + info.numSpellBookItems do
-				local it = C_SpellBook.GetSpellBookItemInfo(i, bank)
-				if it and it.spellID and not it.isPassive and not it.isOffSpec
-					and it.itemType == (Enum.SpellBookItemType and Enum.SpellBookItemType.Spell or 1) then
-					local ok, did = pcall(M.PushSpell, M, it.spellID, true)
-					if ok and did then placed = placed + 1 end
-				end
-			end
-		end
-	end
-	if placed > 0 then print("|cffFFF468FOA|r 새 전문화 주문 " .. placed .. "개를 행동단축바에 넣었어요.") end
 end
 
 function M:SetupAutoPush()
+	self:ApplyAutoPush()
 	local e = CreateFrame("Frame")
-	for _, ev in ipairs({ "LEARNED_SPELL_IN_SKILL_LINE", "LEARNED_SPELL_IN_TAB", "PLAYER_REGEN_ENABLED", "PLAYER_SPECIALIZATION_CHANGED" }) do
-		pcall(e.RegisterEvent, e, ev)
-	end
-	e:SetScript("OnEvent", function(_, event, spellID, _, isGuildPerk)
-		if event == "PLAYER_SPECIALIZATION_CHANGED" then
-			if spellID ~= "player" then return end
-			-- 블리자드가 그 전문화의 바를 불러온 뒤에
-			C_Timer.After(2, function() pcall(M.FillSpec, M) end)
-			return
+	pcall(e.RegisterEvent, e, "SPELL_PUSHED_TO_ACTIONBAR")
+	pcall(e.RegisterEvent, e, "PLAYER_ENTERING_WORLD")
+	e:SetScript("OnEvent", function(_, event, spellID, slot, page)
+		if event == "PLAYER_ENTERING_WORLD" then M:ApplyAutoPush() return end
+		if Ink.db.autoPush == false then return end
+		local link = spellID and C_Spell and C_Spell.GetSpellLink and C_Spell.GetSpellLink(spellID)
+		if slot then
+			print("|cffFFF468FOA|r 새 주문 " .. (link or "") .. " → " .. (page and page > 1 and (page .. "번 바 ") or "기본 바 ") .. slot .. "번")
+			if not page or page == 1 then C_Timer.After(0.6, function() FlashSlot(slot) end) end
 		end
-		if event == "PLAYER_REGEN_ENABLED" then
-			local q = M.pushQueue
-			M.pushQueue = nil
-			for _, id in ipairs(q or {}) do pcall(M.PushSpell, M, id) end
-			return
-		end
-		if isGuildPerk then return end
-		-- 블리자드가 먼저 넣을 시간을 준다
-		C_Timer.After(1.2, function() pcall(M.PushSpell, M, spellID) end)
 	end)
+end
+
+-------------------------------------------------------------------------------
+-- 주문 강조(발동 효과 반짝임)가 FOA 테두리 아래에 묻히지 않게 위로 올린다
+-------------------------------------------------------------------------------
+function M:HookSpellAlerts()
+	local mgr = ActionButtonSpellAlertManager
+	if not mgr or self.alertHooked then return end
+	self.alertHooked = true
+	local function raise(_, button)
+		local a = button and button.SpellActivationAlert
+		if a and a.SetFrameLevel and not (a.IsProtected and a:IsProtected() and InCombatLockdown()) then
+			local top = button.inkSkin and button.inkSkin.top
+			local lvl = (top and top:GetFrameLevel() or button:GetFrameLevel()) + 2
+			if a:GetFrameLevel() < lvl then a:SetFrameLevel(lvl) end
+		end
+	end
+	if mgr.ShowAlert then hooksecurefunc(mgr, "ShowAlert", raise) end
 end
 
 -------------------------------------------------------------------------------
@@ -1315,7 +1259,7 @@ function M:Init()
 	self:SkinQuest()
 	self:SkinBuffs()
 	-- 부가 기능은 하나가 실패해도 나머지에 영향이 없게 따로따로
-	for _, fn in ipairs({ "BuildAddonList", "SetupQueue", "HookKeybindMode", "SetupAutoPush", "HideVehicleSeats", "DisableTutorials", "SetupTalk" }) do
+	for _, fn in ipairs({ "BuildAddonList", "SetupQueue", "HookKeybindMode", "SetupAutoPush", "HookSpellAlerts", "HideVehicleSeats", "DisableTutorials", "SetupTalk" }) do
 		local ok, err = pcall(self[fn], self)
 		if not ok then Ink:LogError("Blizzard." .. fn .. ": " .. tostring(err)) end
 	end
