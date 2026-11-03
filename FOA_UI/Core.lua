@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.19.1"
+Ink.version = "0.19.2"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 

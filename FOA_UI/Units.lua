@@ -499,6 +499,96 @@ function ns.DispelWatch(parent, build, level)
 	return w
 end
 
+-------------------------------------------------------------------------------
+-- 힐 예측 + 보호막: 체력바 채움 끝에 "들어올 치유량"(초록)과 "보호막"(흰색)을 이어 붙인다
+--  비공개 숫자도 계산 없이 막대에 그대로 넘기면 되는 방식 (전투 중에도 동작)
+-------------------------------------------------------------------------------
+function ns.AttachHealPredict(hp, healColor, absorbAlpha)
+	local clip = CreateFrame("Frame", nil, hp)
+	clip:SetAllPoints(hp)
+	clip:SetClipsChildren(true)
+	clip:SetFrameLevel(hp:GetFrameLevel() + 1)
+	local function piece(r, g, b, a)
+		local sb = CreateFrame("StatusBar", nil, clip)
+		sb:SetStatusBarTexture(Ink.tex.white)
+		sb:SetStatusBarColor(r, g, b, a)
+		sb:SetMinMaxValues(0, 1)
+		sb:SetValue(0)
+		return sb
+	end
+	local hc = healColor or C.green
+	local heal = piece(hc[1], hc[2], hc[3], 0.55)
+	heal:SetPoint("TOPLEFT", hp:GetStatusBarTexture(), "TOPRIGHT")
+	heal:SetPoint("BOTTOMLEFT", hp:GetStatusBarTexture(), "BOTTOMRIGHT")
+	local absorb = piece(1, 1, 1, absorbAlpha or 0.45)
+	absorb:SetPoint("TOPLEFT", heal:GetStatusBarTexture(), "TOPRIGHT")
+	absorb:SetPoint("BOTTOMLEFT", heal:GetStatusBarTexture(), "BOTTOMRIGHT")
+	local function size()
+		local w = hp:GetWidth()
+		if w and w > 0 then heal:SetWidth(w); absorb:SetWidth(w) end
+	end
+	hp:HookScript("OnSizeChanged", size)
+	size()
+	return { heal = heal, absorb = absorb, size = size }
+end
+
+function ns.UpdateHealPredict(p, unit)
+	if not p or not unit then return end
+	p.size()
+	safe(function()
+		local mx = UnitHealthMax(unit)
+		p.heal:SetMinMaxValues(0, mx)
+		p.absorb:SetMinMaxValues(0, mx)
+		p.heal:SetValue(UnitGetIncomingHeals and UnitGetIncomingHeals(unit) or 0)
+		p.absorb:SetValue(UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit) or 0)
+	end)
+end
+
+-------------------------------------------------------------------------------
+-- 정신집중 주문 틱 표시 (주문 ID → 몇 번 들어가는지)
+--  전투 기록을 못 읽어서 표로 정한다. 없는 주문은 틱 표시 없음.
+-------------------------------------------------------------------------------
+local CHANNEL_TICKS = {
+	-- 사제
+	[47540] = 3, [47757] = 3, [47758] = 3, [373129] = 3, [400169] = 3, -- 회개 / 어둠의 질책
+	[15407] = 6, [391403] = 4, [263165] = 4, [64843] = 5,             -- 정신의 채찍 / 정신 채찍: 광기 / 공허의 격류 / 천상의 찬가
+	-- 흑마법사
+	[234153] = 5, [198590] = 5, [755] = 5,                             -- 생명력 흡수 / 영혼 흡수 / 생명력 집중
+	-- 마법사
+	[5143] = 5, [205021] = 5,                                          -- 비전 작렬 / 얼음 광선
+	-- 수도사
+	[113656] = 5, [115175] = 8, [117952] = 4, [101546] = 4,            -- 분노의 주먹 / 위안의 안개 / 번개 전류 / 회전 학다리차기
+	-- 드루이드
+	[740] = 5,                                                         -- 평온
+	-- 사냥꾼
+	[257044] = 7,                                                      -- 속사
+	-- 기원사
+	[356995] = 4,                                                      -- 파열
+}
+
+local function SetTicks(cb, n)
+	cb.ticks = cb.ticks or {}
+	local w = cb.bar:GetWidth()
+	for i = 1, math.max(#cb.ticks, (n or 1) - 1) do
+		local t = cb.ticks[i]
+		if n and i < n then
+			if not t then
+				t = cb.bar:CreateTexture(nil, "OVERLAY", nil, 7)
+				t:SetColorTexture(1, 1, 1, 0.75)
+				t:SetWidth(1.5)
+				cb.ticks[i] = t
+			end
+			t:ClearAllPoints()
+			t:SetPoint("CENTER", cb.bar, "LEFT", w * i / n, 0)
+			t:SetHeight(math.max(8, cb.bar:GetHeight() + 6))
+			t:Show()
+		elseif t then
+			t:Hide()
+		end
+	end
+end
+ns.CHANNEL_TICKS = CHANNEL_TICKS
+
 -- 시전바 (secret 안전: DurationObject + SetTimerDuration)
 local function CastBar(parent, w, barH, fillColor, nameColor)
 	local cb = CreateFrame("Frame", nil, parent)
@@ -530,6 +620,7 @@ end
 
 local function CastUpdate(cb, unit)
 	if not cb or cb.preview then return end
+	local channelTicks
 	local name, text, _, startTime, endTime, _, _, notInterruptible = UnitCastingInfo(unit)
 	local dur, dir
 	local E = Enum.StatusBarTimerDirection
@@ -537,12 +628,15 @@ local function CastUpdate(cb, unit)
 		dur = UnitCastingDuration and UnitCastingDuration(unit)
 		dir = E and E.ElapsedTime
 	else
-		name, text, _, startTime, endTime, _, notInterruptible = UnitChannelInfo(unit)
+		local spellID
+		name, text, _, startTime, endTime, _, notInterruptible, spellID = UnitChannelInfo(unit)
 		if name then
 			dur = UnitChannelDuration and UnitChannelDuration(unit)
 			dir = E and E.RemainingTime
+			channelTicks = plain(spellID) and CHANNEL_TICKS[plain(spellID)] or nil
 		end
 	end
+	SetTicks(cb, channelTicks)
 	if not name then
 		cb.dur, cb.endTime = nil, nil
 		cb:Hide()

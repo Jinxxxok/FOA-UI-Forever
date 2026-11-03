@@ -101,6 +101,8 @@ local function BuildPartyVisual(f)
 
 	f.power = Ink:Bar(f, P_W, 2, C.mana, C.trackSoft)
 	f.power:SetPoint("TOPLEFT", 0, -31)
+	-- 들어올 치유량(초록) + 보호막(흰색)
+	f.pred = ns.AttachHealPredict(f.hp)
 
 	f.auras = ns.AuraRow(f, 18, 7)
 	f.auras:SetPoint("TOPLEFT", 0, -38)
@@ -141,6 +143,7 @@ function M:UpdatePartyHealth(f)
 		f.hp:SetMinMaxValues(0, UnitHealthMax(u))
 		f.hp:SetValue(UnitHealth(u))
 	end)
+	ns.UpdateHealPredict(f.pred, u)
 	local dead = plain(UnitIsDeadOrGhost(u))
 	local off = plain(UnitIsConnected(u)) == false
 	if off then
@@ -300,6 +303,9 @@ local function BuildRaidVisual(f)
 	f.line:SetHeight(2)
 	f.line:SetStatusBarTexture(Ink.tex.white)
 	f.line:SetMinMaxValues(0, 1)
+	-- 들어올 치유량 + 보호막 (칸 안을 옅게 채운다)
+	f.pred = ns.AttachHealPredict(f.hp, C.green, 0.28)
+	f.pred.heal:SetStatusBarColor(C.green[1], C.green[2], C.green[3], 0.38)
 	f.top = CreateFrame("Frame", nil, f)
 	f.top:SetAllPoints()
 	f.top:SetFrameLevel(f.hp:GetFrameLevel() + 3)
@@ -368,6 +374,7 @@ function M:UpdateRaid(f)
 		f.hp:SetValue(UnitHealth(u))
 		f.line:SetValue(UnitHealth(u))
 	end)
+	ns.UpdateHealPredict(f.pred, u)
 	local dead = plain(UnitIsDeadOrGhost(u))
 	local off = plain(UnitIsConnected(u)) == false
 	if off then
@@ -633,8 +640,9 @@ function M:Init()
 		"UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_AURA",
 		"UNIT_NAME_UPDATE", "UNIT_CONNECTION", "UNIT_THREAT_SITUATION_UPDATE", "UNIT_FLAGS", "UNIT_IN_RANGE_UPDATE",
 		"GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "INSPECT_READY", "PLAYER_REGEN_ENABLED",
+		"UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED",
 	}) do
-		e:RegisterEvent(ev)
+		pcall(e.RegisterEvent, e, ev)
 	end
 	e:SetScript("OnEvent", function(_, event, arg)
 		if event == "INSPECT_READY" then
@@ -650,6 +658,7 @@ function M:Init()
 		for _, f in ipairs(M.party or {}) do
 			if f.unit == arg and f:IsShown() then
 				if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then M:UpdatePartyHealth(f)
+				elseif event == "UNIT_HEAL_PREDICTION" or event == "UNIT_ABSORB_AMOUNT_CHANGED" then ns.UpdateHealPredict(f.pred, f.unit)
 				elseif event == "UNIT_AURA" then
 					if f.auraBox then M:UpdatePartyHealth(f) else M:UpdatePartyAuras(f) end
 				elseif event:find("POWER") then M:UpdatePartyPower(f)
