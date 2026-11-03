@@ -1,0 +1,739 @@
+-- InkUI · 네임플레이트
+--  적: 이름 / 체력바 / 체력% / 내 디버프(위) / 시전바(아래, 차단 가능 여부 색 구분) / 대상 강조 / 어그로 표시 / 징표
+--  아군: 이름만 깔끔하게
+-- 블리자드 기본 네임플레이트는 투명하게 두고(클릭 판정은 그대로) 그 위에 Ink 프레임을 얹는다.
+
+local _, ns = ...
+local Ink = ns.Ink
+local M = Ink:Module("Plates")
+local F, C = Ink.font, Ink.c
+local safe, plain = Ink.safe, Ink.plain
+
+local W, BAR_H = 132, 6
+local SetRank -- 아래에서 정의 (정예/희귀 테두리)
+local plates = {}   -- unit → ink 프레임
+M.plates = plates
+
+-------------------------------------------------------------------------------
+-- 블리자드 플레이트 숨기기
+-------------------------------------------------------------------------------
+local hookedUF = setmetatable({}, { __mode = "k" })
+
+local function KillMouse(f)
+	if not f or f:IsForbidden() then return end
+	if f.EnableMouse and f:IsMouseEnabled() and not f:IsProtected() then f:EnableMouse(false) end
+	for _, c in ipairs({ f:GetChildren() }) do KillMouse(c) end
+end
+
+local function HideBlizzard(plate, unit)
+	local uf = plate.UnitFrame
+	if not uf or uf:IsForbidden() then return end
+	uf:SetAlpha(0)
+	if uf.castBar then uf.castBar:UnregisterAllEvents() end
+	if uf.AurasFrame then KillMouse(uf.AurasFrame) end
+	if not hookedUF[uf] then
+		hookedUF[uf] = true
+		local busy
+		hooksecurefunc(uf, "SetAlpha", function(self, a)
+			if busy or not a or a == 0 then return end
+			local u = self.unit or (self.GetUnit and self:GetUnit())
+			if u and plates[u] then
+				busy = true
+				self:SetAlpha(0)
+				busy = nil
+			end
+		end)
+	end
+end
+
+local function RestoreBlizzard(plate)
+	local uf = plate.UnitFrame
+	if not uf or uf:IsForbidden() then return end
+	uf:SetAlpha(1)
+end
+
+-------------------------------------------------------------------------------
+-- Ink 플레이트 만들기
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-- 역할 NPC 아이콘 (경매인 · 은행원 · 여관주인 · 비행 조련사 · 상인 · 수리 …)
+--  NPC 이름 아래 <직함> 줄을 읽어서 역할을 정한다 (한글 / 영어 클라이언트 모두)
+--  위에서부터 먼저 맞는 것이 이긴다.
+-------------------------------------------------------------------------------
+local ROLES = {
+	{ key = "inn", icon = "NpcInn", color = "F59E6B", words = { "여관주인", "Innkeeper" } },
+	{ key = "mail", icon = "NpcMail", color = "7FB8FF", words = { "우편", "우체", "편지", "Mail", "Postmaster", "Postal", "Courier" } },
+	{ key = "bank", icon = "NpcBank", color = "6FD39A", words = { "은행", "Banker", "Bank" } },
+	{ key = "auction", icon = "NpcAuction", color = "F2C14E", words = { "경매", "Auctioneer" } },
+	{ key = "stable", icon = "NpcStable", color = "A9D88B", words = { "야수 조련사", "Stable Master" } },
+	{ key = "flight", icon = "NpcFlight", color = "86DDF2", words = { "비행", "그리폰", "와이번", "히포그리프", "비룡", "박쥐 조련사",
+		"Flight Master", "Gryphon Master", "Wind Rider", "Hippogryph Master", "Bat Handler" } },
+	{ key = "transmog", icon = "NpcTransmog", color = "F4A3C8", words = { "형상변환", "공허 보관", "Transmogrifier", "Void Storage" } },
+	{ key = "upgrade", icon = "NpcUpgrade", color = "FF9547", words = { "강화", "업그레이드", "촉매", "재구성", "Upgrade", "Catalyst", "Reforge" } },
+	{ key = "barber", icon = "NpcBarber", color = "E4E8F2", words = { "미용", "Barber" } },
+	{ key = "quartermaster", icon = "NpcQuartermaster", color = "86E06C", words = { "병참", "보급관", "명예", "정복", "용맹", "평판",
+		"Quartermaster", "Honor", "Conquest", "Valor", "Renown" } },
+	{ key = "trainer", icon = "NpcTrainer", color = "B9A4FF", words = { "지도자", "교관", "전문기술자", "Trainer" } },
+	{ key = "repair", icon = "NpcRepair", color = "C9CED6", words = { "대장장이", "방어구", "갑옷", "무기", "수리", "정비",
+		"Armorer", "Weaponsmith", "Blacksmith", "Repair" } },
+	{ key = "vendor", icon = "NpcVendor", color = "FFF468", words = { "상인", "용품", "음식", "음료", "판매", "공급", "잡화", "상점",
+		"무역", "행상", "여행 중인", "교환", "환전", "주화", "물물", "재료", "보석", "골동품", "수집", "기념품", "장신구", "의상", "탈것", "애완",
+		"Vendor", "Merchant", "Supplies", "Goods", "Food", "Drink", "Trade", "Trader", "Peddler", "Traveling", "Exchange", "Curator", "Collector", "Outfitter" } },
+}
+for _, r in ipairs(ROLES) do r.rgb = Ink.hex(r.color); r.tex = Ink.icon(r.icon) end
+
+local roleCache = {} -- 이름 → 역할 (같은 NPC를 다시 읽지 않게)
+
+-- 툴팁 둘째 줄이 직함 (예전엔 "<은행원>", 지금은 괄호 없이 "은행원")
+--  직함이 없는 NPC는 둘째 줄이 "90 레벨" 같은 레벨 줄이라 건너뛴다.
+local function Subtitle(unit)
+	if not (C_TooltipInfo and C_TooltipInfo.GetUnit) then return end
+	local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
+	if not ok or not data or not data.lines then return end
+	local line = data.lines[2]
+	local t = line and plain(line.leftText)
+	if type(t) ~= "string" or t == "" then return end
+	t = t:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+	t = t:match("^<(.+)>$") or t
+	if t:find("레벨") or t:find("Level") or t:find("^%d") then return end
+	return t
+end
+
+local function NpcRole(unit)
+	if Ink.db.npcIcons == false then return end
+	if plain(UnitIsPlayer(unit)) then return end
+	local name = plain(UnitName(unit))
+	if type(name) == "string" and roleCache[name] ~= nil then return roleCache[name] or nil end
+	local sub = Subtitle(unit)
+	local found = false
+	if sub then
+		for _, r in ipairs(ROLES) do
+			for _, w in ipairs(r.words) do
+				if sub:find(w, 1, true) then found = r break end
+			end
+			if found then break end
+		end
+	end
+	-- 직함을 못 읽었으면(아직 정보가 안 왔을 때 등) 저장하지 않고 다음에 다시 본다
+	if type(name) == "string" and sub then roleCache[name] = found end
+	return found or nil
+end
+
+local function Build(plate)
+	local f = CreateFrame("Frame", nil, plate)
+	f:SetSize(W, 40)
+	f:SetPoint("CENTER", plate, "CENTER", 0, 0)
+	f:SetFrameStrata("LOW")
+
+	-- 체력바: 어두운 받침 + 얇은 바
+	f.back = CreateFrame("Frame", nil, f)
+	f.back:SetPoint("CENTER", f, "CENTER", 0, 0)
+	f.back:SetSize(W + 4, BAR_H + 4)
+	f.back.bg = Ink:Round(f.back, "BACKGROUND", true, false)
+	f.back.bg:SetAllPoints()
+	f.back.bg:SetVertexColor(0.02, 0.025, 0.035, 0.72)
+	f.back.bd = Ink:Round(f.back, "BORDER", true, true)
+	f.back.bd:SetAllPoints()
+	f.back.bd:SetVertexColor(1, 1, 1, 0.08)
+	f.glow = f.back:CreateTexture(nil, "BACKGROUND", nil, -8)
+	f.glow:SetTexture(Ink.tex.glow)
+	f.glow:SetPoint("TOPLEFT", -14, 12)
+	f.glow:SetPoint("BOTTOMRIGHT", 14, -12)
+	f.glow:SetAlpha(0)
+
+	f.hp = Ink:Bar(f.back, W, BAR_H, C.red, { 1, 1, 1, 0.06 })
+	f.hp:SetPoint("CENTER")
+
+	-- 대상 표시용 양쪽 꺾쇠
+	f.markL = f.back:CreateTexture(nil, "OVERLAY")
+	f.markL:SetSize(5, 5)
+	f.markL:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+	f.markL:SetRotation(math.rad(45))
+	f.markL:SetPoint("RIGHT", f.back, "LEFT", -5, 0)
+	f.markR = f.back:CreateTexture(nil, "OVERLAY")
+	f.markR:SetSize(5, 5)
+	f.markR:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+	f.markR:SetRotation(math.rad(45))
+	f.markR:SetPoint("LEFT", f.back, "RIGHT", 5, 0)
+
+	-- 이름 / 체력% / 징표 / 정예 표시
+	f.name = Ink:Text(f, F.semi, 11, C.text, "LEFT")
+	f.name:SetPoint("BOTTOMLEFT", f.back, "TOPLEFT", 2, 3)
+	f.name:SetWidth(W - 34)
+	f.pct = Ink:Text(f, F.numR, 11, C.soft, "RIGHT")
+	f.pct:SetPoint("BOTTOMRIGHT", f.back, "TOPRIGHT", -2, 3)
+	f.raid = f:CreateTexture(nil, "OVERLAY")
+	f.raid:SetSize(16, 16)
+	f.raid:SetPoint("RIGHT", f.back, "LEFT", -12, 0)
+	f.raid:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+	f.raid:Hide()
+	f.elite = f:CreateTexture(nil, "OVERLAY")
+	f.elite:SetSize(7, 7)
+	f.elite:SetRotation(math.rad(45))
+	f.elite:SetPoint("BOTTOMLEFT", f.back, "TOPLEFT", -7, 6)
+	f.elite:Hide()
+
+	-- 정예(금) / 희귀(은) 테두리: 은은하게 숨쉬는 빛 + 몇 초마다 지나가는 반짝임
+	local rk = CreateFrame("Frame", nil, f.back)
+	rk:SetPoint("TOPLEFT", -2, 2)
+	rk:SetPoint("BOTTOMRIGHT", 2, -2)
+	rk:SetFrameLevel(f.back:GetFrameLevel() + 4)
+	rk.glow = rk:CreateTexture(nil, "BACKGROUND")
+	rk.glow:SetTexture(Ink.tex.glow)
+	rk.glow:SetBlendMode("ADD")
+	rk.glow:SetPoint("TOPLEFT", -12, 10)
+	rk.glow:SetPoint("BOTTOMRIGHT", 12, -10)
+	rk.bd = Ink:Round(rk, "OVERLAY", true, true)
+	rk.bd:SetAllPoints()
+	local pulse = rk.glow:CreateAnimationGroup()
+	pulse:SetLooping("BOUNCE")
+	local pa = pulse:CreateAnimation("Alpha")
+	pa:SetFromAlpha(0.12)
+	pa:SetToAlpha(0.5)
+	pa:SetDuration(1.2)
+	pa:SetSmoothing("IN_OUT")
+	rk.pulse = pulse
+	-- 반짝임: 테두리 안쪽을 왼쪽에서 오른쪽으로 훑고 지나간다 (테두리 밖으로는 안 나간다)
+	rk.clip = CreateFrame("Frame", nil, rk)
+	rk.clip:SetAllPoints()
+	rk.clip:SetClipsChildren(true)
+	rk.sheen = rk.clip:CreateTexture(nil, "OVERLAY")
+	rk.sheen:SetTexture(Ink.tex.glow)
+	rk.sheen:SetBlendMode("ADD")
+	rk.sheen:SetSize(28, 22)
+	rk.sheen:SetPoint("CENTER", rk.clip, "LEFT", -20, 0)
+	local sw = rk.sheen:CreateAnimationGroup()
+	sw:SetLooping("REPEAT")
+	local mv = sw:CreateAnimation("Translation")
+	mv:SetOffset(W + 44, 0)
+	mv:SetDuration(0.9)
+	mv:SetStartDelay(2.6)
+	mv:SetSmoothing("IN_OUT")
+	rk.sweep = sw
+	rk:Hide()
+	f.rank = rk
+
+	-- 역할 NPC 배지 (이름 위)
+	local rb = CreateFrame("Frame", nil, f)
+	rb:SetSize(24, 24)
+	rb:SetPoint("BOTTOM", f.name, "TOP", 0, 3)
+	rb.disc = rb:CreateTexture(nil, "BACKGROUND")
+	rb.disc:SetTexture(Ink.tex.disc)
+	rb.disc:SetAllPoints()
+	rb.disc:SetVertexColor(0.035, 0.04, 0.052, 0.92)
+	rb.ring = rb:CreateTexture(nil, "BORDER")
+	rb.ring:SetTexture(Ink.tex.ring)
+	rb.ring:SetAllPoints()
+	rb.icon = rb:CreateTexture(nil, "ARTWORK")
+	rb.icon:SetSize(14, 14)
+	rb.icon:SetPoint("CENTER")
+	rb:Hide()
+	f.role = rb
+
+	-- 내 디버프 (이름 위)
+	f.auras = ns.AuraBox(f, 20, 6, { growUp = true, noMouse = true,
+		groups = { { key = "mine", filter = "HARMFUL|PLAYER" } } })
+	f.auras:SetPoint("BOTTOMLEFT", f.name, "TOPLEFT", -2, 14)
+
+	-- 시전바 (체력바 아래)
+	local cb = CreateFrame("Frame", nil, f)
+	cb:SetSize(W, 20)
+	cb:SetPoint("TOPLEFT", f.back, "BOTTOMLEFT", 2, -3)
+	cb.bar = Ink:Bar(cb, W, 4, C.orange, { 1, 1, 1, 0.08 })
+	cb.bar:SetPoint("TOPLEFT")
+	-- 차단 불가면 회색 덮개가 보인다 (secret 값도 안전하게)
+	cb.lock = cb.bar:CreateTexture(nil, "OVERLAY")
+	cb.lock:SetAllPoints(cb.bar:GetStatusBarTexture())
+	cb.lock:SetColorTexture(C.muted[1], C.muted[2], C.muted[3], 1)
+	cb.lock:SetAlpha(0)
+	cb.icon = cb:CreateTexture(nil, "ARTWORK")
+	cb.icon:SetSize(16, 16)
+	cb.icon:SetPoint("TOPRIGHT", cb.bar, "TOPLEFT", -5, 2)
+	cb.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	cb.name = Ink:Text(cb, F.sans, 10, C.orange, "LEFT")
+	cb.name:SetPoint("TOPLEFT", cb.bar, "BOTTOMLEFT", 0, -3)
+	cb.name:SetWidth(W - 30)
+	cb.lockName = Ink:Text(cb, F.sans, 10, C.muted, "LEFT")
+	cb.lockName:SetPoint("TOPLEFT", cb.bar, "BOTTOMLEFT", 0, -3)
+	cb.lockName:SetWidth(W - 30)
+	cb.lockName:SetAlpha(0)
+	cb.time = Ink:Text(cb, F.latin, 10, C.muted, "RIGHT")
+	cb.time:SetPoint("TOPRIGHT", cb.bar, "BOTTOMRIGHT", 0, -3)
+	cb:Hide()
+	cb:SetScript("OnUpdate", function(self)
+		if self.flash then
+			if GetTime() > self.flash then self.flash = nil; self:Hide() end
+			return
+		end
+		if self.dur then
+			safe(function() self.time:SetFormattedText("%.1f", self.dur:GetRemainingDuration()) end)
+		elseif self.endTime then
+			local now = GetTime() * 1000
+			self.bar:SetValue(now)
+			self.time:SetFormattedText("%.1f", math.max(0, (self.endTime - now) / 1000))
+		end
+	end)
+	f.cast = cb
+
+	f:Hide()
+	plate.ink = f
+	return f
+end
+
+-------------------------------------------------------------------------------
+-- 갱신
+-------------------------------------------------------------------------------
+local function ReactionColor(u)
+	if plain(UnitIsPlayer(u)) then return ns.ClassColor(u) end
+	if plain(UnitIsTapDenied(u)) then return 0.55, 0.57, 0.6 end
+	local r = plain(UnitReaction(u, "player"))
+	if r then
+		if r <= 3 then return C.red[1], C.red[2], C.red[3] end
+		if r == 4 then return C.orange[1], C.orange[2], C.orange[3] end
+		return C.green[1], C.green[2], C.green[3]
+	end
+	return C.red[1], C.red[2], C.red[3]
+end
+
+function M:UpdateHealth(f)
+	local u = f.unit
+	safe(function()
+		f.hp:SetMinMaxValues(0, UnitHealthMax(u))
+		f.hp:SetValue(UnitHealth(u))
+	end)
+	f.pct:SetText(ns.HealthPercentText(u) .. "%")
+end
+
+function M:UpdateLook(f)
+	local u = f.unit
+	local isTarget = UnitIsUnit(u, "target")
+	local a = C.accent
+	-- 어그로: 내가 위협 1순위면 붉은 테두리
+	local threat = plain(UnitThreatSituation("player", u))
+	if isTarget then
+		f.back.bd:SetVertexColor(a[1], a[2], a[3], 1)
+		f.glow:SetVertexColor(a[1], a[2], a[3])
+		f.glow:SetAlpha(0.45)
+		f.name:SetTextColor(a[1], a[2], a[3])
+		f.markL:Show(); f.markR:Show()
+		f:SetScale(1.12)
+		f:SetFrameLevel(20)
+	else
+		if threat and threat >= 2 then
+			f.back.bd:SetVertexColor(C.red[1], C.red[2], C.red[3], 0.9)
+		else
+			f.back.bd:SetVertexColor(1, 1, 1, 0.08)
+		end
+		f.glow:SetAlpha(0)
+		f.name:SetTextColor(C.text[1], C.text[2], C.text[3])
+		f.markL:Hide(); f.markR:Hide()
+		f:SetScale(1)
+		f:SetFrameLevel(5)
+	end
+	-- 대상이 있을 때 나머지는 살짝 흐리게
+	f:SetAlpha((UnitExists("target") and not isTarget) and 0.6 or 1)
+end
+
+-- 정예·희귀 테두리 켜기/끄기 (color = 테두리·빛, shine = 지나가는 반짝임 색)
+local GOLD = { 1, 0.80, 0.30 }
+local SILVER = { 0.84, 0.88, 0.95 }
+SetRank = function(f, color, shine)
+	local rk = f.rank
+	if not color then
+		if rk:IsShown() then rk.pulse:Stop(); rk.sweep:Stop(); rk:Hide() end
+		return
+	end
+	rk.bd:SetVertexColor(color[1], color[2], color[3], 0.95)
+	rk.glow:SetVertexColor(color[1], color[2], color[3])
+	rk.sheen:SetVertexColor(shine[1], shine[2], shine[3], 0.9)
+	if not rk:IsShown() then
+		rk:Show()
+		rk.pulse:Play()
+		rk.sweep:Play()
+	end
+end
+
+function M:UpdateInfo(f)
+	local u = f.unit
+	f.name:SetText((UnitName(u)))
+	local r, g, b = ReactionColor(u)
+	f.hp:SetStatusBarColor(r, g, b)
+	local cls = plain(UnitClassification(u))
+	if f.friendly then cls = nil end
+	if cls == "elite" or cls == "worldboss" or cls == "rareelite" then
+		f.elite:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], 1)
+		f.elite:Show()
+		SetRank(f, GOLD, cls == "rareelite" and SILVER or GOLD)
+	elseif cls == "rare" then
+		f.elite:SetColorTexture(SILVER[1], SILVER[2], SILVER[3], 1)
+		f.elite:Show()
+		SetRank(f, SILVER, SILVER)
+	else
+		f.elite:Hide()
+		SetRank(f, nil)
+	end
+	local idx = GetRaidTargetIndex(u)
+	if idx then
+		SetRaidTargetIconTexture(f.raid, idx)
+		f.raid:Show()
+	else
+		f.raid:Hide()
+	end
+end
+
+function M:UpdateAuras(f)
+	-- 내가 건 디버프 전부 (독처럼 "플레이트 표시" 표시가 없는 것도 포함)
+	f.auras:SetUnit((f.unit and not f.friendly) and f.unit or "none")
+end
+
+function M:UpdateCast(f, event)
+	local cb, u = f.cast, f.unit
+	if event == "UNIT_SPELLCAST_INTERRUPTED" then
+		cb.dur, cb.endTime = nil, nil
+		cb.bar:SetMinMaxValues(0, 1)
+		cb.bar:SetValue(1)
+		cb.bar:SetStatusBarColor(C.red[1], C.red[2], C.red[3])
+		cb.lock:SetAlpha(0)
+		cb.name:SetText("차단됨")
+		cb.name:SetTextColor(C.red[1], C.red[2], C.red[3])
+		cb.lockName:SetAlpha(0)
+		cb.time:SetText("")
+		cb.flash = GetTime() + 0.6
+		cb:Show()
+		return
+	end
+	local name, text, texture, startTime, endTime, _, _, notInterruptible = UnitCastingInfo(u)
+	local dur, dir
+	local E = Enum.StatusBarTimerDirection
+	if name then
+		dur = UnitCastingDuration and UnitCastingDuration(u)
+		dir = E and E.ElapsedTime
+	else
+		name, text, texture, startTime, endTime, _, notInterruptible = UnitChannelInfo(u)
+		if name then
+			dur = UnitChannelDuration and UnitChannelDuration(u)
+			dir = E and E.RemainingTime
+		end
+	end
+	if not name then
+		if not cb.flash then cb:Hide() end
+		return
+	end
+	cb.flash = nil
+	cb.bar:SetStatusBarColor(C.orange[1], C.orange[2], C.orange[3])
+	cb.name:SetTextColor(C.orange[1], C.orange[2], C.orange[3])
+	cb.name:SetText(text or name)
+	cb.lockName:SetText(text or name)
+	cb.icon:SetTexture(texture)
+	cb.dur, cb.endTime = nil, nil
+	if dur and cb.bar.SetTimerDuration then
+		local interp = Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.Immediate or 0
+		if not pcall(cb.bar.SetTimerDuration, cb.bar, dur, interp, dir) then pcall(cb.bar.SetTimerDuration, cb.bar, dur) end
+		cb.dur = dur
+	else
+		local s, e = plain(startTime), plain(endTime)
+		if s and e then
+			cb.bar:SetMinMaxValues(s, e)
+			cb.endTime = e
+		end
+	end
+	-- 차단 불가: 회색 바 + 회색 이름 (값이 비공개여도 SetAlphaFromBoolean 으로 처리)
+	if cb.lock.SetAlphaFromBoolean then
+		safe(cb.lock.SetAlphaFromBoolean, cb.lock, notInterruptible, 1, 0)
+		safe(cb.lockName.SetAlphaFromBoolean, cb.lockName, notInterruptible, 1, 0)
+		safe(cb.name.SetAlphaFromBoolean, cb.name, notInterruptible, 0, 1)
+	else
+		local ni = plain(notInterruptible)
+		cb.lock:SetAlpha(ni and 1 or 0)
+		cb.lockName:SetAlpha(ni and 1 or 0)
+		cb.name:SetAlpha(ni and 0 or 1)
+	end
+	cb:Show()
+end
+
+function M:UpdateAll(f)
+	self:UpdateInfo(f)
+	self:UpdateHealth(f)
+	self:UpdateLook(f)
+	self:UpdateAuras(f)
+	self:UpdateCast(f)
+end
+
+local function Plain(fn, ...)
+	local ok, v = pcall(fn, ...)
+	if ok then return plain(v) end
+end
+
+-- 거리 확인은 전투 중이나 인스턴스 안에서 "공격할 수 없는 대상"에게 쓰면
+-- 보호된 동작으로 막힌다(ADDON_ACTION_BLOCKED). 그때는 부르지 않고 마지막으로 잰 값을 쓴다.
+local function RangeAllowed()
+	if InCombatLockdown() then return false end
+	local inInstance, kind = IsInInstance()
+	return not (inInstance and kind ~= "none")
+end
+
+function M:NearFriendly(u, f)
+	if Plain(UnitIsUnit, u, "target") or Plain(UnitIsUnit, u, "mouseover") then return true end
+	-- 플레이어 이름은 항상 보인다 (거리 숨김은 멀리 있는 NPC 이름용)
+	if Plain(UnitIsPlayer, u) then return true end
+	if not RangeAllowed() then return f and f.near or false end
+	-- 4 = 따라가기 거리(약 28미터)
+	local near = Plain(CheckInteractDistance, u, 4) and true or false
+	if f then f.near = near end
+	return near
+end
+
+-- 아군: 이름만
+function M:SetFriendly(f, friendly)
+	f.friendly = friendly
+	f.back:SetShown(not friendly)
+	f.pct:SetShown(not friendly)
+	f.auras:SetShown(not friendly)
+	if friendly then f.auras:SetUnit("none") end
+	if friendly then
+		f.cast:Hide()
+		f.name:ClearAllPoints()
+		f.name:SetPoint("CENTER", f, "CENTER", 0, 0)
+		f.name:SetJustifyH("CENTER")
+		f.name:SetWidth(W + 40)
+		f.name:SetTextColor(ReactionColor(f.unit))
+		f.near = nil
+		-- 역할 NPC는 멀리서도 아이콘과 이름이 보이게
+		local role = f.unit and NpcRole(f.unit)
+		f.roleInfo = role
+		if role then
+			f.role.icon:SetTexture(role.tex)
+			f.role.icon:SetVertexColor(role.rgb[1], role.rgb[2], role.rgb[3])
+			f.role.ring:SetVertexColor(role.rgb[1], role.rgb[2], role.rgb[3], 0.7)
+			f.role:Show()
+		else
+			f.role:Hide()
+		end
+		f.nameAlpha = (role or self:NearFriendly(f.unit, f)) and 0.9 or 0
+		f.name:SetAlpha(f.nameAlpha)
+		f.markL:Hide(); f.markR:Hide(); f.elite:Hide()
+		SetRank(f, nil)
+	else
+		f.roleInfo = nil
+		f.role:Hide()
+		f.name:ClearAllPoints()
+		f.name:SetPoint("BOTTOMLEFT", f.back, "TOPLEFT", 2, 3)
+		f.name:SetJustifyH("LEFT")
+		f.name:SetWidth(W - 34)
+		f.name:SetAlpha(1)
+		f.nameAlpha = nil
+	end
+end
+
+-------------------------------------------------------------------------------
+-- 이벤트
+-------------------------------------------------------------------------------
+-- 진단용: 플레이어 이름표가 어떻게 들어오는지 마지막 30개를 저장 (/reload 후 SavedVariables 에서 확인)
+local function Diag(unit, plate)
+	if not plain(UnitIsPlayer(unit)) then return end
+	Ink.db.plateDiag = Ink.db.plateDiag or {}
+	local d = Ink.db.plateDiag
+	local ok, nm = pcall(UnitName, unit)
+	table.insert(d, string.format("%s %s plate=%s forbidden=%s attack=%s reaction=%s",
+		date("%H:%M:%S"), tostring(ok and plain(nm) or "?"), tostring(plate ~= nil),
+		tostring(plate and plate:IsForbidden()), tostring(plain(UnitCanAttack("player", unit))),
+		tostring(plain(UnitReaction(unit, "player")))))
+	while #d > 30 do table.remove(d, 1) end
+end
+
+function M:OnAdded(unit)
+	local plate = C_NamePlate.GetNamePlateForUnit(unit)
+	if not plate or plate:IsForbidden() then return end
+	local f = plate.ink or Build(plate)
+	f.unit = unit
+	plates[unit] = f
+	HideBlizzard(plate, unit)
+	local friendly = not plain(UnitCanAttack("player", unit))
+	self:SetFriendly(f, friendly)
+	self:UpdateInfo(f)
+	if friendly then
+		f:SetScale(1)
+		f:SetAlpha(1)
+		f.name:SetTextColor(ReactionColor(unit))
+	else
+		self:UpdateAll(f)
+	end
+	f:Show()
+	-- 첫 프레임에 공격 가능 여부가 틀리게 나올 수 있어 한 번 더 확인
+	C_Timer.After(0.1, function()
+		if plates[unit] ~= f then return end
+		local fr = not plain(UnitCanAttack("player", unit))
+		if fr ~= f.friendly then
+			M:SetFriendly(f, fr)
+			if not fr then M:UpdateAll(f) end
+		end
+	end)
+end
+
+function M:OnRemoved(unit)
+	local f = plates[unit]
+	plates[unit] = nil
+	if f then
+		f:Hide()
+		f.cast:Hide()
+		f.cast.flash = nil
+		f.unit = nil
+		SetRank(f, nil)
+		f.roleInfo = nil
+		f.role:Hide()
+		f.auras:SetUnit("none")
+	end
+	local plate = C_NamePlate.GetNamePlateForUnit(unit)
+	if plate then RestoreBlizzard(plate) end
+end
+
+-------------------------------------------------------------------------------
+-- 기본 이름표(머리 위 3D 이름) 끄기
+--  블리자드 이름표는 화면 해상도와 상관없이 크게 그려져서(특히 맥) 거슬린다.
+--  이름은 Ink 아군 네임플레이트가 대신 보여주도록 아군 플레이트를 켜고, 기본 이름표만 끈다.
+--  원래 값은 저장해 두었다가 Ink 네임플레이트를 끄면 되돌린다.
+-------------------------------------------------------------------------------
+local NAME_CVARS = {
+	UnitNameNPC = "0",
+	UnitNameFriendlySpecialNPCName = "0",
+	UnitNameHostleNPC = "0",
+	UnitNameInteractiveNPC = "0",
+	UnitNameNonCombatCreatureName = "0",
+	UnitNameFriendlyPlayerName = "0",
+	-- 적 진영 플레이어(성역 도시의 호드/얼라 등) 머리 위 3D 이름도 끈다
+	UnitNameEnemyPlayerName = "0",
+	UnitNameEnemyPetName = "0",
+	UnitNameEnemyGuardianName = "0",
+	UnitNameEnemyTotemName = "0",
+	UnitNameEnemyMinionName = "0",
+	UnitNameFriendlyPetName = "0",
+	UnitNameFriendlyGuardianName = "0",
+	UnitNameFriendlyTotemName = "0",
+	UnitNameFriendlyMinionName = "0",
+	nameplateShowFriends = "1",
+	nameplateShowFriendlyPlayers = "1", -- 성역의 적 진영 플레이어도 여기에 들어간다
+	nameplateShowFriendlyNPCs = "1",
+	nameplateShowOnlyNames = "1", -- 던전 안처럼 Ink가 못 꾸미는 아군 플레이트는 이름만
+}
+
+local function GetCV(k)
+	return (C_CVar and C_CVar.GetCVar and C_CVar.GetCVar(k)) or (GetCVar and GetCVar(k))
+end
+local function SetCV(k, v)
+	if C_CVar and C_CVar.SetCVar then return pcall(C_CVar.SetCVar, k, v) end
+	return pcall(SetCVar, k, v)
+end
+
+function M:ApplyNameCVars()
+	if InCombatLockdown() then
+		self.cvarPending = true
+		return
+	end
+	self.cvarPending = nil
+	Ink.db.cvarBackup = Ink.db.cvarBackup or {}
+	for k, v in pairs(NAME_CVARS) do
+		local cur = GetCV(k)
+		if cur ~= nil then
+			if Ink.db.cvarBackup[k] == nil then Ink.db.cvarBackup[k] = cur end
+			if cur ~= v then SetCV(k, v) end
+		end
+	end
+end
+
+function M:RestoreNameCVars()
+	local b = Ink.db.cvarBackup
+	if not b or InCombatLockdown() then return end
+	for k, v in pairs(b) do SetCV(k, v) end
+	Ink.db.cvarBackup = nil
+end
+
+function M:CombatEnd()
+	if self.cvarPending then self:ApplyNameCVars() end
+end
+
+function M:Init()
+	Ink.db.plateCVars, Ink.db.plateDiag = nil, nil
+	if Ink.db.plates == false then
+		self:RestoreNameCVars()
+		return
+	end
+	self:ApplyNameCVars()
+	local e = CreateFrame("Frame")
+	for _, ev in ipairs({
+		"NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED", "RAID_TARGET_UPDATE",
+		"UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_AURA",
+		"UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE", "UNIT_CLASSIFICATION_CHANGED",
+		"UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
+		"UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
+		"UNIT_SPELLCAST_CHANNEL_UPDATE", "UNIT_SPELLCAST_INTERRUPTIBLE", "UNIT_SPELLCAST_NOT_INTERRUPTIBLE",
+		"UNIT_SPELLCAST_EMPOWER_START", "UNIT_SPELLCAST_EMPOWER_STOP",
+	}) do
+		e:RegisterEvent(ev)
+	end
+	e:SetScript("OnEvent", function(_, event, unit)
+		if event == "NAME_PLATE_UNIT_ADDED" then
+			M:OnAdded(unit)
+			return
+		elseif event == "NAME_PLATE_UNIT_REMOVED" then
+			M:OnRemoved(unit)
+			return
+		elseif event == "PLAYER_TARGET_CHANGED" then
+			for _, f in pairs(plates) do if not f.friendly then M:UpdateLook(f) end end
+			return
+		elseif event == "RAID_TARGET_UPDATE" then
+			for _, f in pairs(plates) do M:UpdateInfo(f) end
+			return
+		end
+		local f = unit and plates[unit]
+		if not f then return end
+		if f.friendly then
+			if event == "UNIT_NAME_UPDATE" or event == "UNIT_FACTION" then
+				local fr = not plain(UnitCanAttack("player", unit))
+				M:SetFriendly(f, fr)
+				M:UpdateInfo(f)
+				if not fr then M:UpdateAll(f) end
+			end
+			return
+		end
+		if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
+			M:UpdateHealth(f)
+		elseif event == "UNIT_AURA" then
+			if not f.auras:IsLive() then M:UpdateAuras(f) end
+		elseif event:find("^UNIT_THREAT") then
+			M:UpdateLook(f)
+		elseif event:find("^UNIT_SPELLCAST") then
+			M:UpdateCast(f, event)
+		else
+			M:UpdateInfo(f)
+			if event == "UNIT_FACTION" then
+				local fr = not plain(UnitCanAttack("player", unit))
+				if fr ~= f.friendly then M:SetFriendly(f, fr) end
+			end
+		end
+	end)
+	-- 아군 이름은 가까울 때(약 28미터)나 대상/마우스오버일 때만 보인다.
+	-- 네임플레이트는 거리와 상관없이 같은 크기로 그려져서, 멀리 있는 NPC 이름이 크게 겹쳐 보이기 때문.
+	local t = 0
+	e:SetScript("OnUpdate", function(_, el)
+		t = t + el
+		if t < 0.2 then return end
+		t = 0
+		for u, f in pairs(plates) do
+			if f.friendly then
+				local a = (f.roleInfo or M:NearFriendly(u, f)) and 0.9 or 0
+				if f.nameAlpha ~= a then
+					f.nameAlpha = a
+					f.name:SetAlpha(a)
+				end
+			end
+		end
+	end)
+
+	-- 이미 떠 있는 플레이트 처리 (/reload 직후)
+	C_Timer.After(0.5, function()
+		for _, plate in ipairs(C_NamePlate.GetNamePlates() or {}) do
+			local u = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+			if u and not plates[u] then M:OnAdded(u) end
+		end
+	end)
+end
