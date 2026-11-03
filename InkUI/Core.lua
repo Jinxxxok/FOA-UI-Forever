@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.17.3"
+Ink.version = "0.17.4"
 
 local MEDIA = "Interface\\AddOns\\InkUI\\Media\\"
 
@@ -455,7 +455,8 @@ end
 local hideHooked = {}
 function Ink:KeepHidden(frame)
 	if type(frame) == "string" then frame = _G[frame] end
-	if not frame then return end
+	-- 진짜 화면 프레임만 (같은 이름의 일반 테이블도 있다)
+	if type(frame) ~= "table" or not frame.GetObjectType or not frame.IsProtected or not frame.Hide then return end
 	if frame:IsProtected() then
 		Ink:Fade(frame)
 		return

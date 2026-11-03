@@ -1130,7 +1130,9 @@ function M:DisableTutorials()
 	for _, n in ipairs({ "NPE_TutorialPointerFrame", "NPE_TutorialMainFrame", "NPE_TutorialKeyboardMouseFrame",
 		"TutorialPointerFrame", "TutorialMainFrame_Frame", "NPE_TutorialWalk_Frame", "NPE_TutorialSingleKey_Frame" }) do
 		local f = _G[n]
-		if type(f) == "table" and f.Hide and not (f.IsProtected and f:IsProtected()) then Ink:KeepHidden(f) end
+		if type(f) == "table" and f.GetObjectType and f.IsProtected and not f:IsProtected() then
+			pcall(Ink.KeepHidden, Ink, f)
+		end
 	end
 end
 
@@ -1243,25 +1245,25 @@ end
 
 -------------------------------------------------------------------------------
 function M:Init()
+	-- 기본 배치(미니맵 / 채팅 / 메뉴 / 바)를 먼저
 	self:BuildMinimap()
-	self:BuildAddonList()
-	self:SetupQueue()
-	self:HookKeybindMode()
-	self:SetupAutoPush()
-	self:HideVehicleSeats()
-	self:DisableTutorials()
-	-- 초보자 튜토리얼은 늦게 불러와지기도 해서 한 번 더
-	C_Timer.After(5, function() pcall(M.DisableTutorials, M) end)
-	-- 늦게 만들어지는 미니맵 버튼까지 숨기려고 몇 번 더 모은다
-	for _, d in ipairs({ 2, 6, 15 }) do
-		C_Timer.After(d, function() pcall(M.CollectAddonButtons, M) end)
-	end
 	self:BuildAnchors()
 	if Ink.db.xp then self:BuildXP() end
 	self:SkinActionBars()
 	self:SkinChat()
 	self:SkinQuest()
 	self:SkinBuffs()
+	-- 부가 기능은 하나가 실패해도 나머지에 영향이 없게 따로따로
+	for _, fn in ipairs({ "BuildAddonList", "SetupQueue", "HookKeybindMode", "SetupAutoPush", "HideVehicleSeats", "DisableTutorials" }) do
+		local ok, err = pcall(self[fn], self)
+		if not ok then Ink:LogError("Blizzard." .. fn .. ": " .. tostring(err)) end
+	end
+	-- 초보자 튜토리얼은 늦게 불러와지기도 해서 한 번 더
+	C_Timer.After(5, function() pcall(M.DisableTutorials, M) end)
+	-- 늦게 만들어지는 미니맵 버튼까지 숨기려고 몇 번 더 모은다
+	for _, d in ipairs({ 2, 6, 15 }) do
+		C_Timer.After(d, function() pcall(M.CollectAddonButtons, M) end)
+	end
 end
 
 function M:SetTest(on)
