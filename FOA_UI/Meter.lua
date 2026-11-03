@@ -104,6 +104,7 @@ local function Row(parent, i)
 	r.name:SetWidth(118)
 	r.value = Ink:Text(r.over, F.latin, 11, C.text, "RIGHT", "OVERLAY")
 	r.value:SetPoint("RIGHT", -8, 0)
+	if ns.FX then pcall(ns.FX.AttachMeterRow, r, ROW - 2) end
 	r:Hide()
 	return r
 end
@@ -241,6 +242,22 @@ local function Paint(r, src, maxAmount, mode, rank)
 	r.value:SetText(text)
 	r:SetAlpha(1)
 	r:Show()
+	-- 효과: 순위가 바뀐 줄은 미끄러져 들어오고, 1등 줄엔 은은한 빛
+	local fx = ns.FX
+	if fx then
+		local nm = plain(src.name)
+		local ok = not M.testing or fx.demoOn("meterSlide")
+		if ok and nm and r.fxName and r.fxName ~= nm and M.prevRank then
+			local from = M.prevRank[nm]
+			if from and from ~= rank then
+				local dy = math.max(-2, math.min(2, rank - from)) * ROW
+				r.fxSlide(dy)
+			end
+		end
+		r.fxName = nm
+		if nm and M.curRank then M.curRank[nm] = rank end
+		fx.MeterTop(r, rank == 1 and (not M.testing or fx.demoOn("meterGlow")), cr, cg, cb)
+	end
 end
 
 -- 사람 수에 맞춰 창 높이 (최소 3줄)
@@ -268,6 +285,7 @@ function M:Refresh()
 	local list = session and session.combatSources or {}
 	local maxAmount = session and session.maxAmount or 0
 	local shown = 0
+	self.curRank = {}
 	for i = 1, ROWS do
 		local src = list[i]
 		if src then
@@ -277,6 +295,7 @@ function M:Refresh()
 			f.rows[i]:Hide()
 		end
 	end
+	self.prevRank = self.curRank
 	f.empty:SetShown(shown == 0)
 	self:FitHeight(shown)
 	local dur = C_DamageMeter and C_DamageMeter.GetSessionDurationSeconds and C_DamageMeter.GetSessionDurationSeconds(sesType)
@@ -439,6 +458,7 @@ function M:PaintTest(mode)
 	local key = mode.rate and "amountPerSecond" or "totalAmount"
 	table.sort(list, function(a, b) return a[key] > b[key] end)
 	local top = list[1] and list[1][key] or 1
+	self.curRank = {}
 	for i = 1, ROWS do
 		if list[i] then
 			pcall(Paint, f.rows[i], list[i], top, mode, i)
@@ -446,6 +466,7 @@ function M:PaintTest(mode)
 			f.rows[i]:Hide()
 		end
 	end
+	self.prevRank = self.curRank
 	f.empty:Hide()
 	self:FitHeight(#FAKE)
 	f.time:SetText(Clock(t))

@@ -357,6 +357,29 @@ end
 -------------------------------------------------------------------------------
 -- 테스트 모드: 파티 / 레이드 / 대상 프레임 등을 예시 데이터로 띄운다
 -------------------------------------------------------------------------------
+-- 테스트 항목 (체크 해제한 것은 테스트에서 빠진다. 처음엔 전부 켜짐)
+local TEST_MODS = {
+	{ "Units", "유닛 프레임" }, { "Group", "파티 · 레이드" }, { "Center", "자원 · 쿨다운 · 시전바" },
+	{ "Plates", "네임플레이트" }, { "Meter", "미터기 · 위협" }, { "Boss", "보스 알림" },
+	{ "Quest", "퀘스트 목록" }, { "Blizzard", "경험치 · 대사" },
+}
+local function TestSel(key)
+	local t = Ink.db.testSel
+	return not (t and t[key] == false)
+end
+local function SetTestSel(key, on)
+	Ink.db.testSel = Ink.db.testSel or {}
+	Ink.db.testSel[key] = (not on) and false or nil
+end
+
+local function ModTest(mod, on)
+	local ok, err = pcall(mod.SetTest, mod, on)
+	if not ok then
+		print("|cffFF6B5EFOA|r " .. mod.name .. ".SetTest: " .. tostring(err))
+		Ink:LogError(mod.name .. ".SetTest: " .. tostring(err))
+	end
+end
+
 function M:SetTest(on)
 	if InCombatLockdown() then
 		print("|cffFFF468FOA|r 전투 중에는 테스트 모드를 바꿀 수 없어요.")
@@ -365,15 +388,206 @@ function M:SetTest(on)
 	self.testing = on
 	self.testFromEdit = on and self.editing or nil
 	for _, mod in ipairs(Ink.modules) do
-		if mod ~= self and mod.SetTest then
-			local ok, err = pcall(mod.SetTest, mod, on)
-			if not ok then
-				print("|cffFF6B5EFOA|r " .. mod.name .. ".SetTest: " .. tostring(err))
-				Ink:LogError(mod.name .. ".SetTest: " .. tostring(err))
-			end
+		if mod ~= self and mod.SetTest then ModTest(mod, on and TestSel(mod.name)) end
+	end
+	-- 효과 예시는 테스트 모드에서만 (편집 모드에서 켠 예시는 화면 요소만)
+	local fxOn = on and not self.testFromEdit
+	if ns.FX then
+		for _, d in ipairs(ns.FX.LIST) do ns.FX.Demo(d[1], fxOn and TestSel("fx:" .. d[1])) end
+	end
+	self:ShowTestPicker(fxOn)
+	self:SyncButtons()
+end
+
+function M:ToggleTestItem(key, on)
+	SetTestSel(key, on)
+	if self.testing then
+		if key:sub(1, 3) == "fx:" then
+			if ns.FX then ns.FX.Demo(key:sub(4), on) end
+		elseif not InCombatLockdown() then
+			local mod = Ink.modules[key]
+			if mod and mod.SetTest then ModTest(mod, on) end
 		end
 	end
-	self:SyncButtons()
+	self:UpdatePickerCount()
+end
+
+-------------------------------------------------------------------------------
+-- 테스트 항목 고르기 창 (테스트 모드를 켜면 화면 위에 뜬다 · 끌어서 옮기기 · 접기)
+-------------------------------------------------------------------------------
+local PK_COLS, PK_COLW, PK_ROW = 6, 150, 22
+
+local function PickCheck(parent, label, key, desc)
+	local b = CreateFrame("Button", nil, parent)
+	b:SetSize(PK_COLW - 6, PK_ROW - 2)
+	b.box = CreateFrame("Frame", nil, b)
+	b.box:SetSize(12, 12)
+	b.box:SetPoint("LEFT", 0, 0)
+	b.box.bd = Ink:Round(b.box, "BORDER", true, true)
+	b.box.bd:SetAllPoints()
+	b.box.bd:SetVertexColor(1, 1, 1, 0.3)
+	b.box.fill = Ink:Round(b.box, "ARTWORK", true, false)
+	b.box.fill:SetPoint("TOPLEFT", 2.5, -2.5)
+	b.box.fill:SetPoint("BOTTOMRIGHT", -2.5, 2.5)
+	b.box.fill:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
+	b.label = Ink:Text(b, F.sans, 11, C.text, "LEFT")
+	b.label:SetPoint("LEFT", b.box, "RIGHT", 7, 0)
+	b.label:SetWidth(PK_COLW - 26)
+	b.label:SetText(label)
+	function b:Refresh()
+		local on = TestSel(key)
+		self.box.fill:SetShown(on)
+		self.label:SetTextColor(on and C.text[1] or C.muted[1], on and C.text[2] or C.muted[2], on and C.text[3] or C.muted[3])
+	end
+	b:SetScript("OnClick", function(self)
+		M:ToggleTestItem(key, not TestSel(key))
+		self:Refresh()
+	end)
+	b:SetScript("OnEnter", function(self)
+		self.box.bd:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.8)
+		if desc then
+			GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT", 0, -2)
+			GameTooltip:AddLine(label, 1, 1, 1)
+			GameTooltip:AddLine(desc, 0.56, 0.58, 0.61, true)
+			GameTooltip:Show()
+		end
+	end)
+	b:SetScript("OnLeave", function(self)
+		self.box.bd:SetVertexColor(1, 1, 1, 0.3)
+		GameTooltip:Hide()
+	end)
+	b.key = key
+	b:Refresh()
+	return b
+end
+
+function M:BuildTestPicker()
+	if self.picker then return self.picker end
+	local f = CreateFrame("Frame", "FOATestPicker", Ink.root)
+	f:SetFrameStrata("DIALOG")
+	f:SetToplevel(true)
+	f:SetWidth(PK_COLS * PK_COLW + 28)
+	f:SetMovable(true)
+	f:EnableMouse(true)
+	f:SetClampedToScreen(true)
+	f:RegisterForDrag("LeftButton")
+	f:SetScript("OnDragStart", f.StartMoving)
+	f:SetScript("OnDragStop", function(self)
+		self:StopMovingOrSizing()
+		local x, y = self:GetCenter()
+		local rx = Ink.root:GetCenter()
+		local top = Ink.root:GetTop()
+		if x and rx and top then Ink.db.testPickerPos = { x - rx, self:GetTop() - top } end
+	end)
+	f.bg = Ink:Round(f, "BACKGROUND", false, false)
+	f.bg:SetAllPoints()
+	f.bg:SetVertexColor(0.035, 0.04, 0.052, 0.95)
+	f.bd = Ink:Round(f, "BORDER", false, true)
+	f.bd:SetAllPoints()
+	f.bd:SetVertexColor(1, 1, 1, 0.1)
+	f.accent = f:CreateTexture(nil, "ARTWORK")
+	f.accent:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.95)
+	f.accent:SetSize(24, 2)
+	f.accent:SetPoint("TOPLEFT", 16, -1)
+	f.title = Ink:Text(f, F.bold, 13, C.text, "LEFT")
+	f.title:SetPoint("TOPLEFT", 16, -13)
+	f.title:SetText("FOA 테스트")
+	f.count = Ink:Text(f, F.latin, 11, C.muted, "LEFT")
+	f.count:SetPoint("LEFT", f.title, "RIGHT", 10, -1)
+	f.hint = Ink:Text(f, F.sans, 10, C.dim, "LEFT")
+	f.hint:SetPoint("LEFT", f.count, "RIGHT", 12, 0)
+	f.hint:SetText("체크를 빼면 바로 빠져요 · 끌어서 옮기기")
+
+	local function small(text, w, fn, primary)
+		local b = Button(f, text, w, fn, primary)
+		b:SetHeight(24)
+		b.text:SetFont(F.semi, 11, "")
+		return b
+	end
+	f.close = small("끝내기", 64, function() M:SetTest(false) end, true)
+	f.close:SetPoint("TOPRIGHT", -12, -8)
+	f.fold = small("접기", 52, function() M:FoldPicker(not Ink.db.testPickerFold) end)
+	f.fold:SetPoint("RIGHT", f.close, "LEFT", -6, 0)
+	f.none = small("모두 끄기", 72, function() M:PickAll(false) end)
+	f.none:SetPoint("RIGHT", f.fold, "LEFT", -6, 0)
+	f.all = small("모두 켜기", 72, function() M:PickAll(true) end)
+	f.all:SetPoint("RIGHT", f.none, "LEFT", -6, 0)
+
+	local body = CreateFrame("Frame", nil, f)
+	body:SetPoint("TOPLEFT", 0, -40)
+	body:SetPoint("BOTTOMRIGHT")
+	f.body = body
+	f.checks = {}
+	local y = 0
+	local function section(title, items)
+		local h = Ink:Text(body, F.semi, 10, C.muted, "LEFT")
+		h:SetPoint("TOPLEFT", 16, -y)
+		h:SetText(title)
+		y = y + 18
+		for i, it in ipairs(items) do
+			local col = (i - 1) % PK_COLS
+			local row = math.floor((i - 1) / PK_COLS)
+			local c = PickCheck(body, it[2], it[1], it[3])
+			c:SetPoint("TOPLEFT", 16 + col * PK_COLW, -(y + row * PK_ROW))
+			f.checks[#f.checks + 1] = c
+		end
+		y = y + math.ceil(#items / PK_COLS) * PK_ROW + 10
+	end
+	local mods = {}
+	for _, m in ipairs(TEST_MODS) do mods[#mods + 1] = { m[1], m[2] } end
+	section("화면 요소", mods)
+	if ns.FX then
+		local fx = {}
+		for _, d in ipairs(ns.FX.LIST) do fx[#fx + 1] = { "fx:" .. d[1], d[2], d[3] } end
+		section("효과", fx)
+	end
+	f.fullH = 40 + y + 4
+	f:Hide()
+	self.picker = f
+	return f
+end
+
+function M:UpdatePickerCount()
+	local f = self.picker
+	if not f then return end
+	local on = 0
+	for _, c in ipairs(f.checks) do if TestSel(c.key) then on = on + 1 end end
+	f.count:SetText(on .. " / " .. #f.checks)
+end
+
+function M:FoldPicker(fold)
+	Ink.db.testPickerFold = fold and true or nil
+	local f = self.picker
+	if not f then return end
+	f.body:SetShown(not fold)
+	f:SetHeight(fold and 40 or f.fullH)
+	f.fold.text:SetText(fold and "펼치기" or "접기")
+end
+
+function M:PickAll(on)
+	for _, c in ipairs(self.picker.checks) do
+		if TestSel(c.key) ~= on then M:ToggleTestItem(c.key, on) end
+		c:Refresh()
+	end
+end
+
+function M:ShowTestPicker(show)
+	if not show then
+		if self.picker then self.picker:Hide() end
+		return
+	end
+	local f = self:BuildTestPicker()
+	f:ClearAllPoints()
+	local pos = Ink.db.testPickerPos
+	if pos then
+		f:SetPoint("TOP", Ink.root, "TOP", pos[1], pos[2])
+	else
+		f:SetPoint("TOP", Ink.root, "TOP", 0, -84)
+	end
+	for _, c in ipairs(f.checks) do c:Refresh() end
+	self:FoldPicker(Ink.db.testPickerFold)
+	self:UpdatePickerCount()
+	f:Show()
 end
 
 -------------------------------------------------------------------------------
@@ -838,8 +1052,53 @@ function M:BuildPanel()
 	p.reload:SetPoint("TOPLEFT", left, "BOTTOMLEFT", 0, -16)
 	p.reload:Hide()
 
+	-- 효과 (애니메이션) 켜고 끄기: 바로 적용 (몇 개는 /reload)
+	local hfx = Ink:Text(p, F.semi, 11, C.muted, "LEFT")
+	hfx:SetPoint("TOPLEFT", left, "BOTTOMLEFT", 0, -62)
+	hfx:SetText("효과 (테스트 모드에서 미리 볼 수 있어요)")
+	local lastFx = hfx
+	if ns.FX then
+		for i, d in ipairs(ns.FX.LIST) do
+			local key, label, desc, needReload = d[1], d[2], d[3], d[4]
+			local c = CreateFrame("Button", nil, p)
+			c:SetSize(200, 22)
+			local col, row = (i - 1) % 3, math.floor((i - 1) / 3)
+			c:SetPoint("TOPLEFT", hfx, "BOTTOMLEFT", col * 215, -10 - row * 26)
+			c.box = CreateFrame("Frame", nil, c)
+			c.box:SetSize(14, 14)
+			c.box:SetPoint("LEFT")
+			c.box.bd = Ink:Round(c.box, "BORDER", true, true)
+			c.box.bd:SetAllPoints()
+			c.box.bd:SetVertexColor(1, 1, 1, 0.3)
+			c.box.fill = Ink:Round(c.box, "ARTWORK", true, false)
+			c.box.fill:SetPoint("TOPLEFT", 3, -3)
+			c.box.fill:SetPoint("BOTTOMRIGHT", -3, 3)
+			c.box.fill:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
+			c.label = Ink:Text(c, F.semi, 12, C.text, "LEFT")
+			c.label:SetPoint("LEFT", c.box, "RIGHT", 8, 0)
+			c.label:SetWidth(176)
+			c.label:SetText(label)
+			local function refresh() c.box.fill:SetShown(ns.FX.on(key)) end
+			c:SetScript("OnShow", refresh)
+			c:SetScript("OnClick", function()
+				ns.FX.set(key, not ns.FX.on(key))
+				refresh()
+				if needReload then M:NeedReload() end
+			end)
+			c:SetScript("OnEnter", function(self)
+				GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
+				GameTooltip:AddLine(label, 1, 1, 1)
+				GameTooltip:AddLine(desc .. (needReload and "\n(바꾸면 /reload 필요)" or ""), 0.56, 0.58, 0.61, true)
+				GameTooltip:Show()
+			end)
+			c:SetScript("OnLeave", GameTooltip_Hide)
+			refresh()
+			if col == 0 then lastFx = c end
+		end
+	end
+
 	local h3 = Ink:Text(p, F.semi, 11, C.muted, "LEFT")
-	h3:SetPoint("TOPLEFT", right, "BOTTOMLEFT", 0, -22)
+	h3:SetPoint("TOPLEFT", lastFx, "BOTTOMLEFT", 0, -22)
 	h3:SetText("명령어")
 	local cmds = Ink:Text(p, F.sans, 11, C.soft, "LEFT")
 	cmds:SetPoint("TOPLEFT", h3, "BOTTOMLEFT", 0, -8)

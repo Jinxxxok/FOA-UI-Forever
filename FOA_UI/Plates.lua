@@ -290,6 +290,15 @@ local function Build(plate)
 	cb:HookScript("OnShow", function() f.qtext:SetAlpha(0) end)
 	cb:HookScript("OnHide", function() f.qtext:SetAlpha(1) end)
 
+	-- 효과: 체력 잔상 · 대상 괄호 · 어그로 맥박 · 차단 알림 · 퀘스트 톡 · 차단 흔들림
+	if ns.FX then
+		pcall(function()
+			ns.FX.Trail(f.hp, 0.4)
+			ns.FX.AttachPlate(f)
+			cb.fxShakeP = ns.FX.Shake(cb, 4)
+		end)
+	end
+
 	f:Hide()
 	plate.ink = f
 	return f
@@ -317,6 +326,7 @@ function M:UpdateHealth(f)
 		f.hp:SetValue(UnitHealth(u))
 	end)
 	f.pct:SetText(ns.HealthPercentText(u) .. "%")
+	if ns.FX then ns.FX.TrailSet(f.hp, u) end
 end
 
 function M:UpdateLook(f)
@@ -327,6 +337,10 @@ function M:UpdateLook(f)
 	local a = C.accent
 	-- 어그로: 내가 위협 1순위면 붉은 테두리
 	local threat = plain(UnitThreatSituation("player", u))
+	if ns.FX then
+		ns.FX.PlateTarget(f, isTarget)
+		ns.FX.PlateAggro(f, threat and threat >= 2 and not isTarget)
+	end
 	if isTarget then
 		f.back.bd:SetVertexColor(a[1], a[2], a[3], 1)
 		f.glow:SetVertexColor(a[1], a[2], a[3])
@@ -519,6 +533,8 @@ end
 
 function M:ApplyQuest(f)
 	local info = (not f.friendly and f.unit) and QuestInfo(f.unit) or nil
+	if ns.FX and f.questUnit == f.unit then ns.FX.PlateQuest(f, f.questInfo, info) end
+	f.questUnit = f.unit
 	f.questInfo = info
 	if info then
 		f.qicon:SetTexture(Ink.icon(info.kind == "kill" and "QuestKill" or "QuestLoot"))
@@ -581,6 +597,7 @@ function M:UpdateCast(f, event)
 		cb.time:SetText("")
 		cb.flash = GetTime() + 0.6
 		cb:Show()
+		if cb.fxShakeP and ns.FX.on("castFinish") then cb.fxShakeP() end
 		return
 	end
 	local name, text, texture, startTime, endTime, _, _, notInterruptible = UnitCastingInfo(u)
@@ -617,6 +634,9 @@ function M:UpdateCast(f, event)
 			cb.bar:SetMinMaxValues(s, e)
 			cb.endTime = e
 		end
+	end
+	if ns.FX and (event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START") then
+		ns.FX.PlatePing(f, notInterruptible)
 	end
 	-- 차단 불가: 회색 바 + 회색 이름 (값이 비공개여도 SetAlphaFromBoolean 으로 처리)
 	if cb.lock.SetAlphaFromBoolean then
@@ -784,6 +804,7 @@ function M:OnAdded(unit)
 	end
 	f.unit = unit
 	f.failAt = nil
+	f.questUnit, f.questInfo, f.fxWasTarget = nil, nil, nil
 	plates[unit] = f
 	f:Show()
 	local ok, err = pcall(self.Draw, self, f, unit)
@@ -798,6 +819,7 @@ function M:OnAdded(unit)
 		return
 	end
 	HideBlizzard(plate, unit)
+	if ns.FX and not f.friendly then ns.FX.TrailSnap(f.hp, unit) end
 	-- 첫 프레임에 공격 가능 여부가 틀리게 나올 수 있어 한 번 더 확인
 	C_Timer.After(0.1, function()
 		if plates[unit] ~= f or f.object then return end
@@ -1078,6 +1100,231 @@ function M:Init()
 		for _, plate in ipairs(C_NamePlate.GetNamePlates() or {}) do
 			local u = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
 			if u and not plates[u] then M:OnAdded(u) end
+		end
+	end)
+end
+
+-------------------------------------------------------------------------------
+-- 테스트 모드: 앞에 몹이 없어도 이름표를 볼 수 있게 화면 가운데에 가짜 이름표를 띄운다
+--  대상(정예 · 시전) / 퀘스트 몹 / 희귀 / 어그로 / 상인(역할 아이콘) / 퀘스트 물체
+-------------------------------------------------------------------------------
+local FAKE = {
+	{ key = "target", name = "수정 골렘 파수꾼", hp = 72, rank = "elite", x = 960, y = 430, cast = "대지 분쇄" },
+	{ key = "quest", name = "굶주린 오우거", hp = 100, neutral = true, x = 690, y = 430, quest = { "kill", 3, 8 } },
+	{ key = "rare", name = "은빛 날개 와이번", hp = 45, rank = "rare", x = 1230, y = 430 },
+	{ key = "aggro", name = "분노한 흙덩이", hp = 58, x = 820, y = 540, aggro = true },
+	{ key = "vendor", name = "상인 토르발", friendly = true, role = "vendor", x = 1100, y = 540 },
+	{ key = "object", name = "보급품 상자", object = true, x = 1360, y = 540, quest = { "loot", 2, 6 } },
+}
+
+function M:BuildPreview()
+	if self.pv then return end
+	local pv = CreateFrame("Frame", nil, Ink.root)
+	pv:SetAllPoints()
+	pv:SetFrameStrata("LOW")
+	pv:Hide()
+	pv.list = {}
+	for _, d in ipairs(FAKE) do
+		local holder = CreateFrame("Frame", nil, pv)
+		holder:SetSize(W, 40)
+		holder:SetPoint("CENTER", Ink.root, "TOPLEFT", 0, 0)
+		local f = Build(holder)
+		f:SetParent(holder)
+		f.fake = d
+		holder.f = f
+		holder.d = d
+		pv.list[#pv.list + 1] = holder
+	end
+	self.pv = pv
+end
+
+-- 가짜 이름표 하나 그리기 (유닛 없이 값만)
+function M:PaintFake(holder, isTarget)
+	local f, d = holder.f, holder.d
+	holder:ClearAllPoints()
+	holder:SetPoint("CENTER", Ink.root, "TOP", d.x - 960, -d.y)
+	f:Show()
+	if d.friendly or d.object then
+		f.friendly = true
+		f.back:Hide(); f.pct:Hide(); f.auras:Hide(); f.cast:Hide()
+		f.name:ClearAllPoints()
+		f.name:SetPoint("CENTER", f, "CENTER", 0, 0)
+		f.name:SetJustifyH("CENTER")
+		f.name:SetWidth(W + 40)
+		f.name:SetText(d.name)
+		f.name:SetAlpha(1)
+		f.markL:Hide(); f.markR:Hide(); f.elite:Hide(); f.qicon:Hide(); f.qtext:Hide()
+		SetRank(f, nil)
+		local col, icon
+		if d.role then
+			for _, r in ipairs(ROLES) do if r.key == d.role then col, icon = r.rgb, r.tex end end
+			col = col or C.green
+			icon = icon or Ink.icon("NpcVendor")
+			f.name:SetTextColor(C.green[1], C.green[2], C.green[3])
+		else
+			col = QUEST_COLOR
+			icon = Ink.icon(d.quest and d.quest[1] == "kill" and "QuestKill" or "QuestLoot")
+			f.name:SetTextColor(col[1], col[2], col[3])
+			if not f.otext then
+				f.otext = Ink:Text(f, F.latinB, 11, QUEST_COLOR, "CENTER")
+				f.otext:SetPoint("TOP", f.name, "BOTTOM", 0, -2)
+				f.otext:SetShadowColor(0, 0, 0, 1)
+			end
+			f.otext:SetText(d.quest[2] .. "/" .. d.quest[3])
+			f.otext:Show()
+		end
+		f.role.icon:SetTexture(icon)
+		f.role.icon:SetVertexColor(col[1], col[2], col[3])
+		f.role.ring:SetVertexColor(col[1], col[2], col[3], d.object and 0.95 or 0.7)
+		f.role:Show()
+		f:SetScale(1)
+		return
+	end
+	self:SetFriendly(f, false)
+	f.name:SetText(d.name)
+	local col = d.neutral and C.orange or C.red
+	f.hp:SetStatusBarColor(col[1], col[2], col[3])
+	if not holder.hpSet then
+		holder.hpSet = true
+		f.hp:SetMinMaxValues(0, 100)
+		f.hp:SetValue(d.hp)
+		if f.hp.inkTrail then f.hp.inkTrail:SetMinMaxValues(0, 100); f.hp.inkTrail:SetValue(d.hp) end
+	end
+	f.pct:SetText((holder.curHP or d.hp) .. "%")
+	if d.rank == "elite" then
+		f.elite:SetColorTexture(1, 0.8, 0.3, 1); f.elite:Show()
+		SetRank(f, { 1, 0.80, 0.30 }, { 1, 0.80, 0.30 })
+	elseif d.rank == "rare" then
+		f.elite:SetColorTexture(0.84, 0.88, 0.95, 1); f.elite:Show()
+		SetRank(f, { 0.84, 0.88, 0.95 }, { 0.84, 0.88, 0.95 })
+	else
+		f.elite:Hide(); SetRank(f, nil)
+	end
+	if d.quest then
+		f.questInfo = { kind = d.quest[1], text = (holder.qcur or d.quest[2]) .. "/" .. d.quest[3] }
+		f.qicon:SetTexture(Ink.icon(d.quest[1] == "kill" and "QuestKill" or "QuestLoot"))
+		f.qicon:SetVertexColor(QUEST_COLOR[1], QUEST_COLOR[2], QUEST_COLOR[3])
+		f.qicon:Show()
+		f.qtext:SetText(f.questInfo.text)
+		f.qtext:Show()
+	else
+		f.questInfo = nil
+		f.qicon:Hide(); f.qtext:Hide()
+	end
+	local a = C.accent
+	if ns.FX then
+		ns.FX.PlateTarget(f, isTarget)
+		ns.FX.PlateAggro(f, d.aggro and ns.FX.demoOn("aggroPulse"))
+	end
+	if isTarget then
+		f.back.bd:SetVertexColor(a[1], a[2], a[3], 1)
+		f.glow:SetVertexColor(a[1], a[2], a[3]); f.glow:SetAlpha(0.45)
+		f.name:SetTextColor(a[1], a[2], a[3])
+		f.markL:Show(); f.markR:Show()
+		f:SetScale(1.12)
+	else
+		if d.aggro then
+			f.back.bd:SetVertexColor(C.red[1], C.red[2], C.red[3], 0.9)
+		elseif d.quest then
+			f.back.bd:SetVertexColor(QUEST_COLOR[1], QUEST_COLOR[2], QUEST_COLOR[3], 1)
+		else
+			f.back.bd:SetVertexColor(1, 1, 1, 0.08)
+		end
+		if d.quest then f.glow:SetVertexColor(QUEST_COLOR[1], QUEST_COLOR[2], QUEST_COLOR[3]); f.glow:SetAlpha(0.3) else f.glow:SetAlpha(0) end
+		f.name:SetTextColor(C.text[1], C.text[2], C.text[3])
+		f.markL:Hide(); f.markR:Hide()
+		f:SetScale(1)
+	end
+end
+
+function M:SetTest(on)
+	self.testing = on
+	if not on then
+		Ink:Loop("platesTest", nil)
+		if self.pv then self.pv:Hide() end
+		return
+	end
+	self:BuildPreview()
+	local pv = self.pv
+	pv:Show()
+	local list = pv.list
+	local byKey = {}
+	for _, h in ipairs(list) do byKey[h.d.key] = h end
+	local target = "target"
+	for _, h in ipairs(list) do self:PaintFake(h, h.d.key == target) end
+	local t0 = GetTime()
+	local lastSwap, lastHit, lastQuest, lastCast = 0, 0, 0, -99
+	local castN = 0
+	Ink:Loop("platesTest", function()
+		local now = GetTime()
+		local fx = ns.FX
+		-- 대상 바꾸기 (괄호 조임)
+		if fx and fx.demoOn("targetBracket") and now - lastSwap > 3 then
+			lastSwap = now
+			target = (target == "target") and "rare" or "target"
+			for _, h in ipairs(list) do self:PaintFake(h, h.d.key == target) end
+		end
+		-- 어그로
+		local ag = byKey.aggro
+		if ag and fx then fx.PlateAggro(ag.f, fx.demoOn("aggroPulse")) end
+		-- 잔상
+		if fx and fx.demoOn("trail") and now - lastHit > 2.2 then
+			lastHit = now
+			for _, k in ipairs({ "target", "rare", "aggro" }) do
+				local h = byKey[k]
+				local v = math.random(15, 90)
+				h.curHP = v
+				fx.TrailFake(h.f.hp, v)
+				h.f.pct:SetText(v .. "%")
+			end
+		end
+		-- 퀘스트 수치 톡
+		if fx and fx.demoOn("questPop") and now - lastQuest > 2.6 then
+			lastQuest = now
+			local h = byKey.quest
+			h.qcur = ((h.qcur or h.d.quest[2]) % (h.d.quest[3] - 1)) + 1
+			local prev = h.f.questInfo
+			self:PaintFake(h, target == "quest")
+			fx.PlateQuest(h.f, prev, h.f.questInfo)
+		end
+		-- 시전 (대상 몹): 2.4초 시전, 홀수 번째는 차단 불가(회색) / 끝나면 결과
+		local tg = byKey.target
+		local cb = tg.f.cast
+		local e = now - lastCast
+		if e > 3.4 then
+			lastCast = now
+			castN = castN + 1
+			e = 0
+			cb.flash = nil
+			local locked = castN % 3 == 0
+			cb.bar:SetStatusBarColor(C.orange[1], C.orange[2], C.orange[3])
+			cb.name:SetTextColor(C.orange[1], C.orange[2], C.orange[3])
+			cb.name:SetText(tg.d.cast)
+			cb.lockName:SetText(tg.d.cast)
+			cb.lock:SetAlpha(locked and 1 or 0)
+			cb.lockName:SetAlpha(locked and 1 or 0)
+			cb.name:SetAlpha(locked and 0 or 1)
+			cb.icon:SetTexture(136025)
+			cb.bar:SetMinMaxValues(0, 2.4)
+			cb.dur, cb.endTime = nil, nil
+			cb:Show()
+			if fx and fx.demoOn("interruptPing") then fx.PlatePing(tg.f, locked) end
+		end
+		if e <= 2.4 then
+			cb.bar:SetValue(e)
+			cb.time:SetFormattedText("%.1f", 2.4 - e)
+		elseif not cb.flash and cb:IsShown() then
+			if fx and fx.demoOn("castFinish") and castN % 2 == 0 then
+				cb.bar:SetStatusBarColor(C.red[1], C.red[2], C.red[3])
+				cb.lock:SetAlpha(0); cb.lockName:SetAlpha(0); cb.name:SetAlpha(1)
+				cb.name:SetText("차단됨")
+				cb.name:SetTextColor(C.red[1], C.red[2], C.red[3])
+				cb.time:SetText("")
+				cb.flash = GetTime() + 0.6
+				if cb.fxShakeP then cb.fxShakeP() end
+			else
+				cb:Hide()
+			end
 		end
 	end)
 end

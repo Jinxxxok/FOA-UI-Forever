@@ -620,7 +620,7 @@ end
 
 local function CastUpdate(cb, unit)
 	if not cb or cb.preview then return end
-	local channelTicks
+	local channelTicks, isChannel
 	local name, text, _, startTime, endTime, _, _, notInterruptible = UnitCastingInfo(unit)
 	local dur, dir
 	local E = Enum.StatusBarTimerDirection
@@ -631,16 +631,27 @@ local function CastUpdate(cb, unit)
 		local spellID
 		name, text, _, startTime, endTime, _, notInterruptible, spellID = UnitChannelInfo(unit)
 		if name then
+			isChannel = true
 			dur = UnitChannelDuration and UnitChannelDuration(unit)
 			dir = E and E.RemainingTime
 			channelTicks = plain(spellID) and CHANNEL_TICKS[plain(spellID)] or nil
 		end
 	end
-	SetTicks(cb, channelTicks)
 	if not name then
+		-- 시전 결과(성공 섬광 · 차단 흔들림)를 보여 주는 중이면 그대로 둔다
+		if cb.hold and GetTime() < cb.hold then return end
+		if cb.fxState then return end
+		SetTicks(cb, nil)
 		cb.dur, cb.endTime = nil, nil
 		cb:Hide()
 		return
+	end
+	SetTicks(cb, channelTicks)
+	cb.fxSeq = (cb.fxSeq or 0) + 1
+	cb.channel = isChannel
+	if cb.fxState or cb.hold then
+		cb.hold = nil
+		if ns.FX then ns.FX.CastReset(cb) end
 	end
 	cb.name:SetText(text or name)
 	cb.dur, cb.endTime = nil, nil
@@ -807,7 +818,7 @@ end
 -- 소환수: 플레이어 프레임 아래, 왼쪽 줄에 맞춰서
 --  사냥꾼(포에버)은 옆에 기분 얼굴: 행복(초록 · 살랑살랑) / 보통 / 불만(빨강 · 두근두근 + "배고파요")
 -------------------------------------------------------------------------------
-local PET_W = 258
+local PET_W = 130 -- 플레이어 체력바의 절반쯤
 
 local MOOD = {
 	[1] = { icon = "PetUnhappy", color = "red", label = "불만", hint = "배고파요" },
@@ -817,12 +828,15 @@ local MOOD = {
 
 function M:BuildPet()
 	local f = UnitButton("InkUIPet", "pet", PET_W, 34)
-	f.label = Ink:Text(f, F.sans, 11, C.muted, "LEFT")
-	f.label:SetPoint("TOPLEFT", 0, -3)
-	f.label:SetText("소환수")
+	-- 이름 앞 작은 발자국 (소환수 표시)
+	f.paw = f:CreateTexture(nil, "ARTWORK")
+	f.paw:SetSize(11, 11)
+	f.paw:SetPoint("TOPLEFT", 0, -4)
+	f.paw:SetTexture(Ink.icon("Paw"))
+	f.paw:SetVertexColor(C.muted[1], C.muted[2], C.muted[3])
 	f.name = Ink:Text(f, F.semi, 12, C.text, "LEFT")
-	f.name:SetPoint("LEFT", f.label, "RIGHT", 5, 0)
-	f.name:SetWidth(PET_W - 100)
+	f.name:SetPoint("LEFT", f.paw, "RIGHT", 4, 0)
+	f.name:SetWidth(PET_W - 58)
 	f.pct = Ink:Text(f, F.num, 18, C.text, "RIGHT")
 	f.pct:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 1)
 	f.hp = Ink:Bar(f, PET_W, 3, C.text)
@@ -932,6 +946,7 @@ function M:UpdateHealth(f)
 		f.hp:SetMinMaxValues(0, UnitHealthMax(u))
 		f.hp:SetValue(UnitHealth(u))
 	end)
+	if ns.FX and f.hp.inkTrail and not (M.testing and ns.FX.demoOn("trail")) then ns.FX.TrailSet(f.hp, u) end
 	local dead = plain(UnitIsDeadOrGhost(u))
 	if f.pct then
 		if dead then
@@ -1193,10 +1208,36 @@ function M:SetTest(on)
 			cb.bar:SetMinMaxValues(0, 3)
 			cb:Show()
 			local t0 = GetTime()
+			local lastHit = 0
 			Ink:Loop("targetCast", function()
-				local e = (GetTime() - t0) % 4
-				if e > 3 then cb:SetAlpha(0) return end
+				local now = GetTime()
+				-- 체력 잔상 예시: 2.6초마다 맞은 것처럼
+				if ns.FX and ns.FX.demoOn("trail") and now - lastHit > 2.6 then
+					lastHit = now
+					local v = math.random(30, 85)
+					for _, uf in ipairs({ self.target, self.focus, self.player }) do ns.FX.TrailFake(uf.hp, uf == self.player and v + 10 or v) end
+					C_Timer.After(1.6, function()
+						if not M.testing then return end
+						for _, uf in ipairs({ self.target, self.focus, self.player }) do ns.FX.TrailFake(uf.hp, 100) end
+					end)
+				end
+				local e = (now - t0) % 4
+				local cyc = math.floor((now - t0) / 4)
+				if e > 3 then
+					if ns.FX and ns.FX.demoOn("castFinish") and cb.fxDemoCycle ~= cyc then
+						cb.fxDemoCycle = cyc
+						ns.FX.CastResult(cb, (cyc % 2 == 1) and "ok" or "fail", function() cb:Show() end)
+					elseif not cb.fxState then
+						cb:SetAlpha(0)
+					end
+					return
+				end
+				if cb.fxState then ns.FX.CastReset(cb) end
+				cb:Show()
+				cb.name:SetText("화염구")
+				cb.name:SetTextColor(C.orange[1], C.orange[2], C.orange[3])
 				cb:SetAlpha(1)
+				cb.bar:SetMinMaxValues(0, 3)
 				cb.bar:SetValue(e)
 				cb.time:SetFormattedText("%.1f", 3 - e)
 			end)
@@ -1219,8 +1260,13 @@ function M:Init()
 	self:BuildToT()
 	self:BuildFocus()
 	self:BuildPet()
-	self.pet:SetPoint("TOPLEFT", self.player, "BOTTOMLEFT", 0, -4)
+	self.pet:SetPoint("TOPLEFT", self.player, "BOTTOMLEFT", 0, 6)
 	self:UpdateMood()
+	-- 효과: 체력 잔상 / 대상 시전 결과
+	if ns.FX then
+		for _, f in ipairs({ self.player, self.target, self.focus, self.pet }) do pcall(ns.FX.Trail, f.hp) end
+		pcall(ns.FX.AttachCast, self.target.cast, C.orange)
+	end
 
 	Ink:Movable("player", "플레이어", self.player, "center", 388, 790)
 	Ink:Movable("target", "대상", self.target, "center", 1150, 790)
@@ -1253,7 +1299,7 @@ function M:Init()
 		"UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
 		"UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
 		"UNIT_SPELLCAST_CHANNEL_UPDATE", "UNIT_SPELLCAST_INTERRUPTIBLE", "UNIT_SPELLCAST_NOT_INTERRUPTIBLE",
-		"UNIT_PET", "PET_UI_UPDATE", "UNIT_HAPPINESS", "PET_BAR_UPDATE",
+		"UNIT_PET", "PET_UI_UPDATE", "UNIT_HAPPINESS", "PET_BAR_UPDATE", "UNIT_SPELLCAST_SUCCEEDED",
 	}) do
 		pcall(e.RegisterEvent, e, ev) -- 클라이언트마다 없는 이벤트가 있다 (기분은 포에버만)
 	end
@@ -1266,16 +1312,20 @@ function M:Init()
 			M:UpdateStatus()
 			return
 		elseif event == "PLAYER_TARGET_CHANGED" then
+			if ns.FX then ns.FX.TrailSnap(M.target.hp, "target") end
+			if M.target.cast.fxState and ns.FX then ns.FX.CastReset(M.target.cast) end
 			M:UpdateUnit(M.target)
 			M:UpdateUnit(M.tot)
 			return
 		elseif event == "PLAYER_FOCUS_CHANGED" then
+			if ns.FX then ns.FX.TrailSnap(M.focus.hp, "focus") end
 			M:UpdateUnit(M.focus)
 			return
 		elseif event == "UNIT_TARGET" then
 			if unit == "target" then M:UpdateUnit(M.tot) end
 			return
 		elseif event == "UNIT_PET" or event == "PET_UI_UPDATE" or event == "UNIT_HAPPINESS" or event == "PET_BAR_UPDATE" then
+			if ns.FX and event == "UNIT_PET" then ns.FX.TrailSnap(M.pet.hp, "pet") end
 			M:UpdateUnit(M.pet)
 			M:UpdateMood()
 			return
@@ -1290,7 +1340,10 @@ function M:Init()
 			-- 컨테이너는 엔진이 알아서 갱신한다
 			if f.auras and not f.auras:IsLive() then M:UpdateDebuffs(f) end
 		elseif event:find("^UNIT_SPELLCAST") then
-			if f.cast then CastUpdate(f.cast, unit) end
+			if f.cast then
+				local refresh = function() CastUpdate(f.cast, f.unit) end
+				if not (ns.FX and ns.FX.CastEvent(f.cast, event, refresh)) then refresh() end
+			end
 		else
 			M:UpdateInfo(f)
 		end

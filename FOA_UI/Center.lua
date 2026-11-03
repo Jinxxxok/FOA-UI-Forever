@@ -166,6 +166,7 @@ function M:UpdateCombo()
 	end
 	local v = plain(cp)
 	local full = v and v >= holder.n * (holder.mod or 1)
+	if ns.FX then ns.FX.Combo(holder, v and math.floor(v / (holder.mod or 1)), a) end
 	for i = 1, holder.n do
 		holder.segs[i].fill:SetStatusBarColor(a[1], a[2], a[3], 1)
 		holder.segs[i].glow:SetStatusBarColor(a[1], a[2], a[3], full and 0.9 or 0.5)
@@ -195,6 +196,7 @@ function M:BuildPower()
 	f.value:SetPoint("TOPLEFT", f, "TOP", -20, -13)
 	f.max = Ink:Text(f, F.numR, 10, C.muted, "LEFT")
 	f.max:SetPoint("BOTTOMLEFT", f.value, "BOTTOMRIGHT", 2, 1)
+	if ns.FX then pcall(ns.FX.AttachPower, f) end
 	self.power = f
 end
 
@@ -221,6 +223,7 @@ function M:UpdatePower()
 		safe(function() f.max:SetText("/ " .. Ink.Num(UnitPowerMax("player", ptype))) end)
 	end
 	safe(M.CenterPowerText, M)
+	if ns.FX then pcall(ns.FX.UpdatePower, f, ptype) end
 end
 
 -- "100 / 100" 묶음을 바 가운데에 맞춘다
@@ -304,6 +307,7 @@ local function SkinItem(item, small)
 	end
 	if not icon then return end
 	local s = StyleSlot(item, icon, cd, small)
+	if ns.FX and cd then pcall(ns.FX.AttachCooldown, item, cd, small and 30 or 40, s.top) end
 	-- 효과(오라) 표시 중인지: 블리자드가 오라 시간 표시로 바꿀 때 알려준다
 	if cd and cd.SetUseAuraDisplayTime and not cd.inkHooked then
 		cd.inkHooked = true
@@ -453,6 +457,8 @@ local function BuildPreviewRow(anchor, list, size, gap, small)
 		f.cd = CreateFrame("Cooldown", nil, f, "CooldownFrameTemplate")
 		f.cd:SetAllPoints(f.icon)
 		f.s = StyleSlot(f, f.icon, f.cd, small)
+		f.fxPreview = true
+		if ns.FX then pcall(ns.FX.AttachCooldown, f, f.cd, size, f.s.top) end
 		f.data = d
 		row.slots[i] = f
 	end
@@ -556,6 +562,7 @@ function M:Init()
 	self:BuildPower()
 	self.cast = ns.CastBar(Ink.root, 280, 2, C.text, C.text)
 	self.cast.bar.bg:SetColorTexture(1, 1, 1, 0.08)
+	if ns.FX then pcall(ns.FX.AttachCast, self.cast, C.text) end
 	self:BuildCooldowns()
 	self:BuildCombatAlert()
 	-- 내 캐릭터 쪽에 뜨는 전투 문자(받은 피해/치유 등)도 같은 글꼴로
@@ -579,6 +586,7 @@ function M:Init()
 		"UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
 		"UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
 		"UNIT_SPELLCAST_CHANNEL_UPDATE", "UNIT_SPELLCAST_EMPOWER_START", "UNIT_SPELLCAST_EMPOWER_STOP",
+		"UNIT_SPELLCAST_SUCCEEDED",
 	}) do
 		e:RegisterUnitEvent(ev, "player")
 	end
@@ -595,7 +603,9 @@ function M:Init()
 			M:UpdatePower()
 			M:LayoutCombo()
 		else
-			ns.CastUpdate(M.cast, "player")
+			-- 시전이 끝나면 성공(섬광) / 차단(흔들림)을 잠깐 보여 준다
+			local refresh = function() ns.CastUpdate(M.cast, "player") end
+			if not (ns.FX and ns.FX.CastEvent(M.cast, event, refresh)) then refresh() end
 		end
 	end)
 end
@@ -627,8 +637,21 @@ function M:SetTest(on)
 			local now = GetTime()
 			-- 플레이어 시전 (3초 시전, 1초 쉬고 반복)
 			local e = (now - t0) % 4
-			if e > 3 then cb:SetAlpha(0) else
+			local cyc = math.floor((now - t0) / 4)
+			if e > 3 then
+				if ns.FX and ns.FX.demoOn("castFinish") and cb.fxDemoCycle ~= cyc then
+					cb.fxDemoCycle = cyc
+					cb:Show()
+					ns.FX.CastResult(cb, (cyc % 2 == 0) and "ok" or "fail", function() cb:Show() end)
+				elseif not cb.fxState then
+					cb:SetAlpha(0)
+				end
+			else
+				if cb.fxState then ns.FX.CastReset(cb) end
+				cb:Show()
+				cb.name:SetText("순간 효과 독")
 				cb:SetAlpha(1)
+				cb.bar:SetMinMaxValues(0, 3)
 				cb.bar:SetValue(e)
 				cb.time:SetFormattedText("%.1f", 3 - e)
 			end

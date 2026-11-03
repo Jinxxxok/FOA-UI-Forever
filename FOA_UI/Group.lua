@@ -111,19 +111,36 @@ local function BuildPartyVisual(f)
 	-- 받은 버프: 오른쪽 끝에 작게 (넣어 줘야 할 버프가 빠졌는지 보기)
 	f.buffRow = ns.AuraRow(f, BUFF_SIZE, BUFF_MAX)
 	f.buffRow:SetPoint("TOPLEFT", BUFF_X, -38)
+	-- 효과: 체력 잔상 · 사망/부활 막 · 전투 준비 확인 표시
+	if ns.FX then
+		pcall(ns.FX.Trail, f.hp)
+		pcall(ns.FX.AttachMember, f)
+	end
+end
+
+local function GlowBreathe(f, on)
+	local fx = ns.FX
+	if not fx then return end
+	if on and not f.hpGlow.fxBreathe then f.hpGlow.fxBreathe = fx.Breathe(f.hpGlow, 0.25, 0.75, 0.7) end
+	local ag = f.hpGlow.fxBreathe
+	if not ag then return end
+	if on then if not ag:IsPlaying() then ag:Play() end else ag:Stop() end
 end
 
 local function ApplyDispelLook(f, col)
+	f.fxDispel = col and true or nil
 	if col then
 		f.hp:SetStatusBarColor(col:GetRGB())
 		local r, g, b = col:GetRGB()
 		f.hp.bg:SetColorTexture(r, g, b, 0.18)
 		f.hpGlow:SetVertexColor(r, g, b)
 		f.hpGlow:SetAlpha(0.55)
+		GlowBreathe(f, not f.isPreview and ns.FX and ns.FX.on("dispelPulse"))
 		return true
 	end
 	f.hp.bg:SetColorTexture(1, 1, 1, 0.08)
 	f.hpGlow:SetAlpha(0)
+	GlowBreathe(f, false)
 	return false
 end
 
@@ -151,6 +168,10 @@ function M:UpdatePartyHealth(f)
 	ns.UpdateHealPredict(f.pred, u)
 	local dead = plain(UnitIsDeadOrGhost(u))
 	local off = plain(UnitIsConnected(u)) == false
+	if ns.FX then
+		ns.FX.TrailSet(f.hp, u)
+		ns.FX.MemberDead(f, dead and true or false)
+	end
 	if off then
 		f.pct:SetText("오프")
 		f.pct:SetFont(F.semi, 13, "")
@@ -209,6 +230,7 @@ function M:AttachPartyAuras(f)
 		glow:SetTexture(Ink.tex.glow)
 		glow:SetAllPoints(f.hpGlow)
 		glow:SetAlpha(0.55)
+		if ns.FX then ns.FX.DispelBreathe(glow) end
 		return { fill, track, glow }
 	end, f.hp:GetFrameLevel() + 2)
 end
@@ -545,6 +567,7 @@ function M:BuildPreview()
 		local f = CreateFrame("Frame", nil, pv)
 		f:SetSize(P_W, P_H)
 		f:SetPoint("TOPLEFT", 0, -(i - 1) * (P_H + P_GAP))
+		f.isPreview = true
 		BuildPartyVisual(f)
 		local cc = FAKE_CLASS[d[2]]
 		f.name:SetText(d[1]); f.name:SetTextColor(cc[1], cc[2], cc[3])
@@ -645,6 +668,89 @@ function M:SetTest(on)
 	local which = cfg and cfg.testGroup or "party"
 	self.preview.party:SetShown(on and Ink.db.party and which == "party")
 	self.preview.raid:SetShown(on and Ink.db.raid and which == "raid")
+	self:PreviewFX(on)
+end
+
+-- 파티 예시에서 효과 보여 주기: 잔상 / 사망·부활 / 전투 준비 확인 / 해제 디버프 숨쉬기
+local BASE_HP = { 92, 68, 100, 24 }
+function M:PreviewFX(on)
+	local fx = ns.FX
+	local members = self.preview and self.preview.party.members or {}
+	if not fx then return end
+	if not on then
+		Ink:Loop("groupFX", nil)
+		for i, f in ipairs(members) do
+			GlowBreathe(f, false)
+			fx.MemberReady(f, nil)
+			if f.fxVeil then f.fxVeil:SetAlpha(0) end
+			f.fxWasDead = nil
+			fx.TrailFake(f.hp, BASE_HP[i])
+		end
+		return
+	end
+	local lastHit, lastDeath, lastReady, dead = 0, 0, -99, false
+	Ink:Loop("groupFX", function()
+		local now = GetTime()
+		for _, f in ipairs(members) do
+			if f.fxDispel then GlowBreathe(f, fx.demoOn("dispelPulse")) end
+		end
+		if fx.demoOn("trail") and now - lastHit > 2.4 then
+			lastHit = now
+			for i, f in ipairs(members) do
+				if not (i == 4 and dead) then
+					local v = math.max(5, BASE_HP[i] - math.random(10, 35))
+					fx.TrailFake(f.hp, v)
+					C_Timer.After(1.4, function() if M.testing then fx.TrailFake(f.hp, BASE_HP[i]) end end)
+				end
+			end
+		end
+		local m4 = members[4]
+		if m4 and fx.demoOn("deathFade") and now - lastDeath > 3 then
+			lastDeath = now
+			dead = not dead
+			if m4.fxWasDead == nil then m4.fxWasDead = false end
+			fx.MemberDead(m4, dead)
+			m4.pct:SetFont(dead and F.semi or F.num, dead and 13 or 20, "")
+			m4.pct:SetText(dead and "사망" or tostring(BASE_HP[4]))
+			m4.pctSign:SetShown(not dead)
+			fx.TrailFake(m4.hp, dead and 0 or BASE_HP[4])
+		elseif m4 and not fx.demoOn("deathFade") and dead then
+			dead = false
+			fx.MemberDead(m4, false)
+			m4.pct:SetFont(F.num, 20, "")
+			m4.pct:SetText(tostring(BASE_HP[4]))
+			m4.pctSign:Show()
+		end
+		if fx.demoOn("readyCheck") and now - lastReady > 7 then
+			lastReady = now
+			for i, f in ipairs(members) do fx.MemberReady(f, "waiting", (i - 1) * 0.07) end
+			for i, f in ipairs(members) do
+				C_Timer.After(1 + i * 0.45, function()
+					if fx.demoOn("readyCheck") then fx.MemberReady(f, i == 3 and "notready" or "ready") end
+				end)
+			end
+			C_Timer.After(3.4, function() for _, f in ipairs(members) do fx.MemberReadyEnd(f, 0.8) end end)
+		elseif not fx.demoOn("readyCheck") and lastReady > 0 then
+			lastReady = -99
+			for _, f in ipairs(members) do fx.MemberReady(f, nil) end
+		end
+	end)
+end
+
+function M:ReadyCheck(event, unit)
+	local fx = ns.FX
+	if not fx then return end
+	if event == "READY_CHECK" then
+		for i, f in ipairs(self.party or {}) do
+			if f:IsShown() then fx.MemberReady(f, GetReadyCheckStatus(f.unit) or "waiting", (i - 1) * 0.07) end
+		end
+	elseif event == "READY_CHECK_CONFIRM" then
+		for _, f in ipairs(self.party or {}) do
+			if f:IsShown() and f.unit == unit then fx.MemberReady(f, GetReadyCheckStatus(unit) or "waiting") end
+		end
+	elseif event == "READY_CHECK_FINISHED" then
+		for _, f in ipairs(self.party or {}) do fx.MemberReadyEnd(f, 3) end
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -668,6 +774,7 @@ function M:Init()
 		"UNIT_NAME_UPDATE", "UNIT_CONNECTION", "UNIT_THREAT_SITUATION_UPDATE", "UNIT_FLAGS", "UNIT_IN_RANGE_UPDATE",
 		"GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "INSPECT_READY", "PLAYER_REGEN_ENABLED",
 		"UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED",
+		"READY_CHECK", "READY_CHECK_CONFIRM", "READY_CHECK_FINISHED",
 	}) do
 		pcall(e.RegisterEvent, e, ev)
 	end
@@ -675,7 +782,17 @@ function M:Init()
 		if event == "INSPECT_READY" then
 			M:OnInspectReady(arg)
 			return
+		elseif event:find("^READY_CHECK") then
+			M:ReadyCheck(event, arg)
+			return
 		elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "PLAYER_REGEN_ENABLED" then
+			if event == "GROUP_ROSTER_UPDATE" then
+				-- 자리가 바뀐 파티원은 잔상 · 사망 표시를 새로 시작
+				for _, f in ipairs(M.party or {}) do
+					f.fxWasDead = nil
+					if ns.FX and UnitExists(f.unit) then ns.FX.TrailSnap(f.hp, f.unit) end
+				end
+			end
 			for _, f in ipairs(M.party or {}) do if f:IsShown() then M:UpdateParty(f) end end
 			for _, f in ipairs(M.raidButtons or {}) do if f:IsShown() then M:UpdateRaid(f) end end
 			M:RunInspect()

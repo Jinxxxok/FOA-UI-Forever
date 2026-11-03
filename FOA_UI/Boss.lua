@@ -274,6 +274,7 @@ local function NewWarn(parent)
 	a1:SetToAlpha(1)
 	a1:SetDuration(0.15)
 	w.pop = ag
+	if ns.FX then pcall(ns.FX.AttachBossWarn, w) end
 	w:Hide()
 	return w
 end

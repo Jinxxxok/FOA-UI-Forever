@@ -993,6 +993,8 @@ local function SkinActionButton(b, small)
 	if name then name:SetAlpha(0) end
 	local count = b.Count or (b.TextOverlayContainer and b.TextOverlayContainer.Count) or (b.GetName and _G[b:GetName() .. "Count"])
 	if count then count:SetFont(F.latinB, 11, "OUTLINE") end
+	-- 효과: 쿨 끝 빛 고리 · 눌림 반응 · 사거리 밖 흑백
+	if ns.FX then pcall(ns.FX.AttachActionButton, b, small) end
 end
 
 -- 블리자드 "빠른 단축키 설정" 모드와 맞추기
@@ -1091,7 +1093,14 @@ function M:HookSpellAlerts()
 			if a:GetFrameLevel() < lvl then a:SetFrameLevel(lvl) end
 		end
 	end
-	if mgr.ShowAlert then hooksecurefunc(mgr, "ShowAlert", raise) end
+	if mgr.ShowAlert then
+		hooksecurefunc(mgr, "ShowAlert", raise)
+		-- 효과: 개미줄 반짝임 대신 노란 모서리 괄호
+		hooksecurefunc(mgr, "ShowAlert", function(_, button) if ns.FX then pcall(ns.FX.ProcShow, button) end end)
+	end
+	if mgr.HideAlert then
+		hooksecurefunc(mgr, "HideAlert", function(_, button) if ns.FX then pcall(ns.FX.ProcHide, button) end end)
+	end
 end
 
 -------------------------------------------------------------------------------
