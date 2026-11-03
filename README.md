@@ -10,7 +10,7 @@
 ## 설치
 
 1. [Releases](https://github.com/Jinxxxok/foa-ui-forever/releases) 에서 최신 `FOA_UI_Forever-vX.X.X.zip` 을 받습니다.
-2. 압축을 풀어 나온 `InkUI` 폴더를 `World of Warcraft/_forever_/Interface/AddOns/` 에 넣습니다.
+2. 압축을 풀어 나온 `FOA_UI` 폴더를 `World of Warcraft/_forever_/Interface/AddOns/` 에 넣습니다.
    (본섭의 `_retail_` 폴더가 아니라 **`_forever_`** 폴더입니다.)
 3. 캐릭터 선택 화면의 **애드온** 목록에서 드롭다운을 **모든 캐릭터** 로 두고 FOA UI 를 켭니다.
 

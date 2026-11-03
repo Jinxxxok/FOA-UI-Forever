@@ -5,9 +5,9 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.17.4"
+Ink.version = "0.18.0"
 
-local MEDIA = "Interface\\AddOns\\InkUI\\Media\\"
+local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
 Ink.font = {
 	sans = MEDIA .. "Fonts\\PlexSansKR-Regular.ttf",

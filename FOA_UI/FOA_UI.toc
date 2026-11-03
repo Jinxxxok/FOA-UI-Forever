@@ -2,10 +2,10 @@
 ## Title: |cffFFF468FOA|r UI
 ## Notes: FOA (First of All) 통합 UI
 ## Author: hyeokjiny
-## Version: 0.17.4
+## Version: 0.18.0
 ## SavedVariables: InkUIDB
 ## SavedVariablesPerCharacter: InkUICharDB
-## IconTexture: Interface\AddOns\InkUI\Media\Textures\Logo
+## IconTexture: Interface\AddOns\FOA_UI\Media\Textures\Logo
 
 Core.lua
 Units.lua
