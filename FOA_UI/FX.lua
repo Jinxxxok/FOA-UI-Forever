@@ -1376,6 +1376,10 @@ function FX.Demo(key, on)
 			end
 		end
 		if key == "procBracket" then for _, b in ipairs(actionButtons) do FX.ProcHide(b) end end
+		if key == "trail" then
+			local U = Ink.modules.Units
+			if U and U.RestoreBars then pcall(U.RestoreBars, U) end
+		end
 	elseif DEMOS[key] then
 		DEMOS[key].last = -999
 	end

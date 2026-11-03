@@ -1202,6 +1202,8 @@ function M:SetTest(on)
 		end
 	end
 	if on then self:UpdateMood(3, 125, 1) else self:UpdateMood() end
+	-- 테스트를 끄면 예시로 깎아 둔 체력바를 실제 값으로 되돌린다 (플레이어 포함)
+	if not on then self:RestoreBars() end
 	if self.target.cast then
 		local cb = self.target.cast
 		if on then
@@ -1354,6 +1356,16 @@ end
 
 function M:Refresh()
 	self:UpdateAll()
+end
+
+-- 예시(체력 잔상 등)로 바꿔 둔 막대를 실제 값으로 (잔상도 바로 맞춘다)
+function M:RestoreBars()
+	for _, f in ipairs({ self.player, self.target, self.focus, self.pet, self.tot }) do
+		if f and UnitExists(f.unit) then
+			self:UpdateUnit(f)
+			if ns.FX and f.hp then ns.FX.TrailSnap(f.hp, f.unit) end
+		end
+	end
 end
 
 -- 디버프 이벤트를 놓치는 경우가 있어(대상을 다시 잡아야 보이던 문제) 0.25초마다 한 번씩 확인
