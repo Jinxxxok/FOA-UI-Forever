@@ -1686,13 +1686,71 @@ function M:BuildClock()
 		GameTooltip:Hide()
 	end)
 
+	-- 시계 오른쪽: 키보드 아이콘 → FOA 빠른 단축키 설정
+	local kb = CreateFrame("Button", nil, f)
+	kb:SetSize(24, 24)
+	kb:SetPoint("LEFT", f.time, "RIGHT", 10, -1)
+	kb.bg = Ink:Round(kb, "BACKGROUND", true, false)
+	kb.bg:SetAllPoints()
+	kb.bg:SetVertexColor(1, 1, 1, 0)
+	kb.bd = Ink:Round(kb, "BORDER", true, true)
+	kb.bd:SetAllPoints()
+	kb.bd:SetVertexColor(1, 1, 1, 0.14)
+	kb.icon = kb:CreateTexture(nil, "ARTWORK")
+	kb.icon:SetSize(14, 14)
+	kb.icon:SetPoint("CENTER")
+	kb.icon:SetTexture(Ink.icon("Keyboard"))
+	kb.icon:SetVertexColor(C.soft[1], C.soft[2], C.soft[3], 0.85)
+	kb:SetScript("OnEnter", function(self)
+		self.bg:SetVertexColor(1, 1, 1, 0.07)
+		self.bd:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.8)
+		self.icon:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 1)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM", 0, -6)
+		GameTooltip:AddLine("빠른 단축키 설정", 1, 1, 1)
+		GameTooltip:AddLine("행동 단축바 칸에 마우스를 올리고 키를 누르면 바로 지정돼요", 0.56, 0.58, 0.61, true)
+		GameTooltip:Show()
+	end)
+	kb:SetScript("OnLeave", function(self)
+		self.bg:SetVertexColor(1, 1, 1, 0)
+		self.bd:SetVertexColor(1, 1, 1, 0.14)
+		self.icon:SetVertexColor(C.soft[1], C.soft[2], C.soft[3], 0.85)
+		GameTooltip:Hide()
+	end)
+	kb:SetScript("OnClick", function()
+		GameTooltip:Hide()
+		if InCombatLockdown() then return end
+		if Ink.OpenQuickKeybind then Ink:OpenQuickKeybind() end
+	end)
+	f.kb = kb
+
 	local t = 1
 	f:SetScript("OnUpdate", function(_, e)
 		t = t + e
+		-- 전투 중에는 사라졌다가 전투가 끝나면 스르륵
+		if f.fadeTo then
+			local a = f:GetAlpha()
+			local step = e / 0.3
+			a = (f.fadeTo > a) and math.min(f.fadeTo, a + step) or math.max(f.fadeTo, a - step)
+			f:SetAlpha(a)
+			if a == f.fadeTo then f.fadeTo = nil end
+		end
 		if t < 1 then return end
 		t = 0
 		M:UpdateClock()
 	end)
+	if Ink.db.combatHide ~= false then
+		local ev = CreateFrame("Frame")
+		ev:RegisterEvent("PLAYER_REGEN_DISABLED")
+		ev:RegisterEvent("PLAYER_REGEN_ENABLED")
+		ev:SetScript("OnEvent", function(_, event)
+			local fight = event == "PLAYER_REGEN_DISABLED"
+			f.fadeTo = fight and 0 or 1
+			f:EnableMouse(not fight)
+			kb:EnableMouse(not fight)
+			if fight and GameTooltip:IsOwned(f) then GameTooltip:Hide() end
+		end)
+		if InCombatLockdown() then f:SetAlpha(0); f:EnableMouse(false); kb:EnableMouse(false) end
+	end
 	self.clock = f
 	Ink:Movable("clock", "시계", f, "center", 870, 10, 180, 58)
 	self:UpdateClock()

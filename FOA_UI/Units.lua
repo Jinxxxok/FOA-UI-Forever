@@ -752,6 +752,10 @@ function M:BuildTarget()
 	} })
 	f.auras:SetPoint("TOPLEFT", f, "TOPLEFT", T_COL, -82)
 	f.auraFilter = "HARMFUL|PLAYER"
+	-- 아군을 잡으면 받은 버프 (디버프 줄 위에)
+	f.buffs = ns.AuraBox(f, 18, 12, { groups = { { key = "buff", filter = "HELPFUL" } }, dispel = false })
+	f.buffs:SetPoint("TOPLEFT", f, "TOPLEFT", T_COL, -82)
+	f.buffs:Hide()
 	self.target = f
 end
 
@@ -790,7 +794,132 @@ function M:BuildFocus()
 	f.pct:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
 	f.hp = Ink:Bar(f, 166, 3, C.red)
 	f.hp:SetPoint("TOPLEFT", 0, -24)
+	-- 아래에 디버프: 적이면 내가 건 것(변이 · 속박 같은 군중 제어 남은 시간), 아군이면 전부
+	f.auras = ns.AuraBox(f, 20, 6, { groups = {
+		{ key = "mine", filter = "HARMFUL|PLAYER" },
+		{ key = "all", filter = "HARMFUL" },
+	} })
+	f.auras:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -32)
 	self.focus = f
+end
+
+-------------------------------------------------------------------------------
+-- 소환수: 플레이어 프레임 아래, 왼쪽 줄에 맞춰서
+--  사냥꾼(포에버)은 옆에 기분 얼굴: 행복(초록 · 살랑살랑) / 보통 / 불만(빨강 · 두근두근 + "배고파요")
+-------------------------------------------------------------------------------
+local PET_W = 258
+
+local MOOD = {
+	[1] = { icon = "PetUnhappy", color = "red", label = "불만", hint = "배고파요" },
+	[2] = { icon = "PetContent", color = "gold", label = "보통" },
+	[3] = { icon = "PetHappy", color = "green", label = "행복" },
+}
+
+function M:BuildPet()
+	local f = UnitButton("InkUIPet", "pet", PET_W, 34)
+	f.label = Ink:Text(f, F.sans, 11, C.muted, "LEFT")
+	f.label:SetPoint("TOPLEFT", 0, -3)
+	f.label:SetText("소환수")
+	f.name = Ink:Text(f, F.semi, 12, C.text, "LEFT")
+	f.name:SetPoint("LEFT", f.label, "RIGHT", 5, 0)
+	f.name:SetWidth(PET_W - 100)
+	f.pct = Ink:Text(f, F.num, 18, C.text, "RIGHT")
+	f.pct:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 1)
+	f.hp = Ink:Bar(f, PET_W, 3, C.text)
+	f.hp:SetPoint("TOPLEFT", 0, -23)
+	f.power = Ink:Bar(f, PET_W, 2, C.mana, C.trackSoft)
+	f.power:SetPoint("TOPLEFT", 0, -29)
+	f.powerText = Ink:Text(f, F.sans, 9, C.muted, "RIGHT")
+	f.powerText:Hide()
+
+	-- 기분 (사냥꾼 소환수)
+	local m = CreateFrame("Frame", nil, f)
+	m:SetSize(26, 26)
+	m:SetPoint("LEFT", f, "RIGHT", 10, -2)
+	m:EnableMouse(true)
+	m.glow = m:CreateTexture(nil, "BACKGROUND", nil, -8)
+	m.glow:SetTexture(Ink.tex.glow)
+	m.glow:SetPoint("TOPLEFT", -10, 10)
+	m.glow:SetPoint("BOTTOMRIGHT", 10, -10)
+	m.glow:SetAlpha(0)
+	m.disc = m:CreateTexture(nil, "BACKGROUND")
+	m.disc:SetTexture(Ink.tex.disc)
+	m.disc:SetAllPoints()
+	m.disc:SetVertexColor(0.035, 0.04, 0.052, 0.92)
+	m.ring = m:CreateTexture(nil, "BORDER")
+	m.ring:SetTexture(Ink.tex.ring)
+	m.ring:SetAllPoints()
+	m.face = CreateFrame("Frame", nil, m)
+	m.face:SetAllPoints()
+	m.icon = m.face:CreateTexture(nil, "ARTWORK")
+	m.icon:SetSize(16, 16)
+	m.icon:SetPoint("CENTER")
+	m.hint = Ink:Text(m, F.semi, 10, C.red, "LEFT")
+	m.hint:SetPoint("LEFT", m, "RIGHT", 6, 0)
+	-- 행복: 위아래로 살랑
+	local bob = m.face:CreateAnimationGroup()
+	bob:SetLooping("BOUNCE")
+	local tr = bob:CreateAnimation("Translation")
+	tr:SetOffset(0, 2)
+	tr:SetDuration(0.9)
+	tr:SetSmoothing("IN_OUT")
+	m.bob = bob
+	-- 불만: 빛이 두근두근
+	local beat = m.glow:CreateAnimationGroup()
+	beat:SetLooping("BOUNCE")
+	local ba = beat:CreateAnimation("Alpha")
+	ba:SetFromAlpha(0.1)
+	ba:SetToAlpha(0.6)
+	ba:SetDuration(0.55)
+	ba:SetSmoothing("IN_OUT")
+	m.beat = beat
+	m:SetScript("OnEnter", function(self)
+		if not self.mood then return end
+		local d = MOOD[self.mood]
+		local col = C[d.color]
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:AddLine("소환수 기분: " .. d.label, col[1], col[2], col[3])
+		if self.damage then GameTooltip:AddLine("공격력 " .. self.damage .. "%", 1, 1, 1) end
+		if self.loyalty then
+			GameTooltip:AddLine(self.loyalty > 0 and "충성도가 오르는 중" or (self.loyalty < 0 and "충성도가 떨어지는 중" or "충성도 그대로"), 0.7, 0.72, 0.75)
+		end
+		if self.mood < 3 then GameTooltip:AddLine("먹이 주기로 기분을 올릴 수 있어요", 0.56, 0.58, 0.61) end
+		GameTooltip:Show()
+	end)
+	m:SetScript("OnLeave", GameTooltip_Hide)
+	m:Hide()
+	f.mood = m
+	self.pet = f
+end
+
+function M:UpdateMood(happiness, damage, loyalty)
+	local f = self.pet
+	if not f then return end
+	local m = f.mood
+	if not happiness then
+		local _, class = UnitClass("player")
+		if class == "HUNTER" and GetPetHappiness and UnitExists("pet") then
+			happiness, damage, loyalty = GetPetHappiness()
+		end
+	end
+	happiness = plain(happiness)
+	local d = happiness and MOOD[happiness]
+	if not d then
+		m.mood = nil
+		m.bob:Stop(); m.beat:Stop()
+		m:Hide()
+		return
+	end
+	m.mood, m.damage, m.loyalty = happiness, plain(damage), plain(loyalty)
+	local col = C[d.color]
+	m.icon:SetTexture(Ink.icon(d.icon))
+	m.icon:SetVertexColor(col[1], col[2], col[3])
+	m.ring:SetVertexColor(col[1], col[2], col[3], 0.85)
+	m.glow:SetVertexColor(col[1], col[2], col[3])
+	m.hint:SetText(d.hint or "")
+	if happiness == 3 then m.bob:Play() else m.bob:Stop() end
+	if happiness == 1 then m.beat:Play() else m.beat:Stop(); m.glow:SetAlpha(0) end
+	m:Show()
 end
 
 -------------------------------------------------------------------------------
@@ -833,7 +962,7 @@ function M:UpdateHealth(f)
 	if f == self.player then
 		-- 플레이어는 직업별 Ink 색 (자원 색과 겹치지 않게 고른 색). 35% 미만은 빨강.
 		ApplyColor(ns.PlayerTint(u), f.pct, f.hp)
-	elseif f == self.tot then
+	elseif f == self.tot or f == self.pet then
 		ApplyColor(LowColor(u), f.pct, f.hp)
 	end
 end
@@ -1011,10 +1140,24 @@ end
 function M:UpdateDebuffs(f, force)
 	local u = f.unit
 	local box = f.auras
+	local exists = UnitExists(u)
+	local enemy = plain(UnitCanAttack("player", u))
 	if #box.groups > 1 then
-		box:SetGroup(plain(UnitCanAttack("player", u)) and "mine" or "all")
+		box:SetGroup(enemy and "mine" or "all")
 	end
-	box:SetUnit(UnitExists(u) and u or "none", force)
+	box:SetUnit(exists and u or "none", force)
+	if f.buffs then
+		local friendly = exists and not enemy
+		if friendly ~= f.buffMode then
+			f.buffMode = friendly
+			pcall(function()
+				f.buffs:SetShown(friendly)
+				-- 아군: 버프 줄 아래로 디버프를 내린다
+				box:SetPoint("TOPLEFT", f, "TOPLEFT", T_COL, friendly and -116 or -82)
+			end)
+		end
+		f.buffs:SetUnit(friendly and u or "none", force)
+	end
 end
 
 function M:UpdateAll()
@@ -1027,7 +1170,7 @@ end
 function M:SetTest(on)
 	if InCombatLockdown() then return end
 	self.testing = on
-	for _, f in ipairs({ self.target, self.tot, self.focus }) do
+	for _, f in ipairs({ self.target, self.tot, self.focus, self.pet }) do
 		if on then
 			UnregisterUnitWatch(f)
 			f.unit = "player"
@@ -1041,6 +1184,7 @@ function M:SetTest(on)
 			self:UpdateUnit(f)
 		end
 	end
+	if on then self:UpdateMood(3, 125, 1) else self:UpdateMood() end
 	if self.target.cast then
 		local cb = self.target.cast
 		if on then
@@ -1074,6 +1218,9 @@ function M:Init()
 	self:BuildTarget()
 	self:BuildToT()
 	self:BuildFocus()
+	self:BuildPet()
+	self.pet:SetPoint("TOPLEFT", self.player, "BOTTOMLEFT", 0, -4)
+	self:UpdateMood()
 
 	Ink:Movable("player", "플레이어", self.player, "center", 388, 790)
 	Ink:Movable("target", "대상", self.target, "center", 1150, 790)
@@ -1081,7 +1228,7 @@ function M:Init()
 	Ink:Movable("focus", "주시 대상", self.focus, "center", 180, 776)
 
 	-- 기본 유닛프레임 끄기 (숨김 부모로 이동 → 보이지도, 클릭되지도 않음)
-	for _, n in ipairs({ "PlayerFrame", "TargetFrame", "FocusFrame" }) do
+	for _, n in ipairs({ "PlayerFrame", "TargetFrame", "FocusFrame", "PetFrame" }) do
 		local fr = _G[n]
 		if fr then
 			Ink:Disable(fr)
@@ -1106,8 +1253,9 @@ function M:Init()
 		"UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
 		"UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
 		"UNIT_SPELLCAST_CHANNEL_UPDATE", "UNIT_SPELLCAST_INTERRUPTIBLE", "UNIT_SPELLCAST_NOT_INTERRUPTIBLE",
+		"UNIT_PET", "PET_UI_UPDATE", "UNIT_HAPPINESS", "PET_BAR_UPDATE",
 	}) do
-		e:RegisterEvent(ev)
+		pcall(e.RegisterEvent, e, ev) -- 클라이언트마다 없는 이벤트가 있다 (기분은 포에버만)
 	end
 	e:SetScript("OnEvent", function(_, event, unit)
 		if M.testing then
@@ -1126,6 +1274,10 @@ function M:Init()
 			return
 		elseif event == "UNIT_TARGET" then
 			if unit == "target" then M:UpdateUnit(M.tot) end
+			return
+		elseif event == "UNIT_PET" or event == "PET_UI_UPDATE" or event == "UNIT_HAPPINESS" or event == "PET_BAR_UPDATE" then
+			M:UpdateUnit(M.pet)
+			M:UpdateMood()
 			return
 		end
 		local f = unit and M.frames[unit]
@@ -1159,7 +1311,7 @@ do
 		t = 0
 		if M.testing or not M.target then return end
 		for _, f in ipairs({ M.player, M.target, M.focus }) do
-			if f and f.auras and not f.auras:IsLive() and UnitExists(f.unit) then M:UpdateDebuffs(f) end
+			if f and f.auras and (not f.auras:IsLive() or (f.buffs and not f.buffs:IsLive())) and UnitExists(f.unit) then M:UpdateDebuffs(f) end
 		end
 	end)
 end

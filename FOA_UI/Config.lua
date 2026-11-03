@@ -678,16 +678,72 @@ function M:SyncButtons()
 end
 
 function M:NeedReload()
-	if self.panel then self.panel.reload:Show() end
+	if self.panel then
+		self.panel.reload:Show()
+		if self.panel.FitHeight then self.panel.FitHeight() end
+	end
 end
 
 -------------------------------------------------------------------------------
 -- 설정 창 (게임 메뉴 > 설정 > 애드온 > InkUI)
 -------------------------------------------------------------------------------
 function M:BuildPanel()
-	local p = CreateFrame("Frame")
-	p.name = "FOA UI"
-	p:Hide()
+	-- 바깥 틀(블리자드 설정 칸에 등록) 안에 스크롤 영역 → 내용이 길어도 칸 밖으로 넘치지 않는다
+	local outer = CreateFrame("Frame")
+	outer.name = "FOA UI"
+	outer:Hide()
+	local sf = CreateFrame("ScrollFrame", nil, outer)
+	sf:SetPoint("TOPLEFT", 0, -4)
+	sf:SetPoint("BOTTOMRIGHT", -12, 4)
+	local p = CreateFrame("Frame", nil, sf)
+	p:SetSize(660, 900)
+	sf:SetScrollChild(p)
+	sf:SetScript("OnSizeChanged", function(_, w) if w and w > 0 then p:SetWidth(w) end end)
+	-- 얇은 스크롤 막대 (오른쪽)
+	local track = outer:CreateTexture(nil, "ARTWORK")
+	track:SetColorTexture(1, 1, 1, 0.05)
+	track:SetWidth(3)
+	track:SetPoint("TOPRIGHT", -4, -8)
+	track:SetPoint("BOTTOMRIGHT", -4, 8)
+	local thumb = outer:CreateTexture(nil, "OVERLAY")
+	thumb:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.7)
+	thumb:SetWidth(3)
+	local function UpdateThumb()
+		local range = sf:GetVerticalScrollRange() or 0
+		local h = track:GetHeight() or 0
+		if range <= 1 or h <= 0 then track:Hide(); thumb:Hide(); return end
+		track:Show(); thumb:Show()
+		local view = sf:GetHeight()
+		local th = math.max(24, h * view / (view + range))
+		thumb:SetHeight(th)
+		thumb:ClearAllPoints()
+		thumb:SetPoint("TOP", track, "TOP", 0, -(h - th) * (sf:GetVerticalScroll() / range))
+	end
+	sf:EnableMouseWheel(true)
+	sf:SetScript("OnMouseWheel", function(self, d)
+		local range = self:GetVerticalScrollRange() or 0
+		self:SetVerticalScroll(math.max(0, math.min(range, self:GetVerticalScroll() - d * 48)))
+		UpdateThumb()
+	end)
+	sf:SetScript("OnScrollRangeChanged", function() UpdateThumb() end)
+	-- 내용 높이: 가장 아래 요소까지 (글꼴이 늦게 불러와져도 맞게 열 때마다 다시 잰다)
+	local function FitHeight()
+		local top = p:GetTop()
+		if not top then return end
+		local bottom = top
+		for _, r in ipairs({ p:GetRegions() }) do
+			local b = r:IsShown() and r:GetBottom()
+			if b and b < bottom then bottom = b end
+		end
+		for _, c in ipairs({ p:GetChildren() }) do
+			local b = c:IsShown() and c:GetBottom()
+			if b and b < bottom then bottom = b end
+		end
+		p:SetHeight(math.max(10, top - bottom + 24))
+		UpdateThumb()
+	end
+	outer:SetScript("OnShow", function() C_Timer.After(0, FitHeight) end)
+	p.FitHeight = FitHeight
 
 	-- 제목: 기하 모노그램 마크 + FOA 도형 글자
 	local brand, ui = Ink:Brand(p, 20)
@@ -775,6 +831,7 @@ function M:BuildPanel()
 		{ "NPC 역할 아이콘", "상인 · 수리 · 경매장 · 은행 · 여관 등 NPC 머리 위에 아이콘.", "npcIcons" },
 		{ "퀘스트 오브젝트 표시", "앞에 있는 줍기 · 부수기 퀘스트 물체 위에 노란 배지.", "questObjects" },
 		{ "새 주문 자동 배치", "새로 배운 주문을 행동단축바 빈 칸에 넣습니다.", "autoPush" },
+		{ "전투 중 시계 · 메뉴 숨기기", "전투가 시작되면 위 시계와 진영 문양을 숨깁니다.", "combatHide" },
 	})
 
 	p.reload = Button(p, "지금 다시 불러오기 (/reload)", 220, function() ReloadUI() end, true)
@@ -794,20 +851,21 @@ function M:BuildPanel()
 	p:SetScript("OnShow", function() M:SyncButtons() end)
 
 	if Settings and Settings.RegisterCanvasLayoutCategory then
-		local cat = Settings.RegisterCanvasLayoutCategory(p, "FOA UI")
+		local cat = Settings.RegisterCanvasLayoutCategory(outer, "FOA UI")
 		Settings.RegisterAddOnCategory(cat)
 		self.category = cat
 	elseif InterfaceOptions_AddCategory then
-		InterfaceOptions_AddCategory(p)
+		InterfaceOptions_AddCategory(outer)
 	end
 	self.panel = p
+	self.panelOuter = outer
 end
 
 function M:OpenPanel()
 	if self.category and Settings and Settings.OpenToCategory then
 		Settings.OpenToCategory(self.category:GetID())
 	elseif InterfaceOptionsFrame_OpenToCategory then
-		InterfaceOptionsFrame_OpenToCategory(self.panel)
+		InterfaceOptionsFrame_OpenToCategory(self.panelOuter or self.panel)
 	end
 end
 

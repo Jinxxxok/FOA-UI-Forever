@@ -253,6 +253,7 @@ function M:Build()
 				GameTooltip:Hide()
 			end)
 			self.icons[#self.icons + 1] = b.icon
+			if it.click == "MainMenuMicroButton" then self.menuSlot = b end
 			x = x + BTN + GAP
 		end
 	end
@@ -306,6 +307,9 @@ function M:Build()
 		GameTooltip:Hide()
 	end)
 
+	self:SetupGameMenuSlot()
+	self:SetupCombatHide()
+
 	if Ink.db.launcherOpen then
 		tray:Show()
 		self.p = 0
@@ -314,6 +318,69 @@ function M:Build()
 		tray:Hide()
 	end
 	Ink:Movable("launcher", "메뉴", anchor, "left", 14, 10)
+end
+
+-------------------------------------------------------------------------------
+-- "게임 메뉴" 칸
+--  블리자드 게임 메뉴 버튼은 "마우스가 실제로 그 버튼 위에 있을 때만" 열린다.
+--  그래서 대신 눌러 주는 방식이 안 먹힌다 → 진짜 버튼을 투명하게 만들어 이 칸 위에 그대로 얹는다.
+--  (클릭은 진짜 버튼이 받으니 접속 종료 · 게임 종료도 오염 없이 정상 동작)
+-------------------------------------------------------------------------------
+function M:PlaceGameMenuButton()
+	local mb, slot = MainMenuMicroButton, self.menuSlot
+	if not (mb and slot) or mb.inkPlacing then return end
+	if mb:IsProtected() and InCombatLockdown() then return end
+	mb.inkPlacing = true
+	pcall(function()
+		if mb:GetParent() ~= slot then mb:SetParent(slot) end
+		mb:ClearAllPoints()
+		mb:SetAllPoints(slot)
+		mb:SetFrameLevel(slot:GetFrameLevel() + 5)
+		mb:SetAlpha(0)
+		mb:Show()
+	end)
+	mb.inkPlacing = nil
+end
+
+function M:SetupGameMenuSlot()
+	local mb, slot = MainMenuMicroButton, self.menuSlot
+	if not (mb and slot) then return end
+	-- 진짜 버튼에 마우스가 올라가면 FOA 칸이 반응하게
+	mb:HookScript("OnEnter", function()
+		slot.hl:SetVertexColor(1, 1, 1, 0.08)
+		slot.icon:SetVertexColor(C.text[1], C.text[2], C.text[3], 1)
+		slot.dot:Show()
+	end)
+	mb:HookScript("OnLeave", function()
+		slot.hl:SetVertexColor(1, 1, 1, 0)
+		slot.icon:SetVertexColor(C.soft[1], C.soft[2], C.soft[3], 1)
+		slot.dot:Hide()
+	end)
+	-- 메뉴 줄 배치가 다시 잡혀도 이 칸으로 되돌린다
+	hooksecurefunc(mb, "SetPoint", function() M:PlaceGameMenuButton() end)
+	hooksecurefunc(mb, "SetParent", function() M:PlaceGameMenuButton() end)
+	if mb.SetAlpha then hooksecurefunc(mb, "SetAlpha", function(self, a) if a ~= 0 and not self.inkPlacing then M:PlaceGameMenuButton() end end) end
+	self:PlaceGameMenuButton()
+end
+
+-------------------------------------------------------------------------------
+-- 전투 중 숨기기: 전투가 시작되면 문양 · 특성 문장이 사라지고, 끝나면 스르륵 다시
+--  (보안 숨김이라 전투 중에도 클릭이 엉뚱하게 먹지 않는다)
+-------------------------------------------------------------------------------
+function M:SetupCombatHide()
+	local e = self.emblem
+	if Ink.db.combatHide == false then return end
+	RegisterStateDriver(e, "visibility", "[combat] hide; show")
+	e:HookScript("OnShow", function(self)
+		self:SetAlpha(0)
+		local t = 0
+		Ink:Loop("launcherFadeIn", function()
+			t = t + 0.05
+			local a = math.min(1, t / 0.35)
+			self:SetAlpha(a)
+			if a >= 1 then Ink:Loop("launcherFadeIn", nil) end
+		end)
+	end)
 end
 
 function M:Init()

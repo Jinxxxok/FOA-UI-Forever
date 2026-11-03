@@ -9,6 +9,8 @@ local safe, plain = Ink.safe, Ink.plain
 Ink.dispel[0] = { 1, 1, 1, 0.16 } -- 종류 없는 디버프 테두리
 
 local P_W, P_H, P_GAP = 240, 66, 12
+local BUFF_SIZE, BUFF_MAX = 15, 6
+local BUFF_X = P_W - BUFF_MAX * (BUFF_SIZE + 3) + 3
 local R_W, R_H, R_GAP, R_COLGAP = 66, 38, 3, 4
 
 -------------------------------------------------------------------------------
@@ -104,8 +106,11 @@ local function BuildPartyVisual(f)
 	-- 들어올 치유량(초록) + 보호막(흰색)
 	f.pred = ns.AttachHealPredict(f.hp)
 
-	f.auras = ns.AuraRow(f, 18, 7)
+	f.auras = ns.AuraRow(f, 18, 6)
 	f.auras:SetPoint("TOPLEFT", 0, -38)
+	-- 받은 버프: 오른쪽 끝에 작게 (넣어 줘야 할 버프가 빠졌는지 보기)
+	f.buffRow = ns.AuraRow(f, BUFF_SIZE, BUFF_MAX)
+	f.buffRow:SetPoint("TOPLEFT", BUFF_X, -38)
 end
 
 local function ApplyDispelLook(f, col)
@@ -179,11 +184,17 @@ end
 
 -- 12.1 오라 컨테이너: 디버프 줄 + 해제 가능한 디버프 색 덮개 (엔진이 그려 준다)
 function M:AttachPartyAuras(f)
-	local box = ns.AuraBox(f, 18, 7)
+	local box = ns.AuraBox(f, 18, 6)
 	if box:IsLive() then
 		f.auras:Hide()
 		box:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -38)
 		f.auraBox = box
+	end
+	local bb = ns.AuraBox(f, BUFF_SIZE, BUFF_MAX, { groups = { { key = "buff", filter = "HELPFUL" } }, dispel = false, noTimer = true })
+	if bb:IsLive() then
+		f.buffRow:Hide()
+		bb:SetPoint("TOPLEFT", f, "TOPLEFT", BUFF_X, -38)
+		f.buffBox = bb
 	end
 	f.dispelWatch = ns.DispelWatch(f, function(btn)
 		local fill = btn:CreateTexture(nil, "OVERLAY", nil, 2)
@@ -207,6 +218,15 @@ function M:UpdatePartyAuras(f)
 		f.auraBox:SetUnit(UnitExists(f.unit) and f.unit or "none", true)
 	else
 		ns.UpdateAuras(f.auras, f.unit, "HARMFUL", true)
+	end
+	if f.buffBox then
+		f.buffBox:SetUnit(UnitExists(f.unit) and f.unit or "none", true)
+	elseif f.buffRow then
+		if UnitExists(f.unit) then
+			ns.UpdateAuras(f.buffRow, f.unit, "HELPFUL", false)
+		else
+			for _, b in ipairs(f.buffRow.buttons) do b:Hide() end
+		end
 	end
 	if f.dispelWatch then f.dispelWatch:SetUnit(UnitExists(f.unit) and f.unit or "none", true) end
 	self:UpdatePartyHealth(f)
@@ -547,6 +567,13 @@ function M:BuildPreview()
 			b.skin.border:SetVertexColor(col[1], col[2], col[3], col[4] or 1)
 			b.cd:SetCooldown(GetTime() - 6, 20 + j * 6)
 			b:Show()
+		end
+		for j, icon in ipairs({ 135987, 135932, 136078, 132333 }) do
+			if j <= (i == 4 and 2 or 4) then
+				local b = ns.AuraButton(f.buffRow, j)
+				b.icon:SetTexture(icon)
+				b:Show()
+			end
 		end
 		if d[11] then f:SetAlpha(0.45) end
 		pv.members[i] = f
