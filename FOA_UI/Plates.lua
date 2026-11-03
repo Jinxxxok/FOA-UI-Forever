@@ -11,6 +11,7 @@ local safe, plain = Ink.safe, Ink.plain
 
 local W, BAR_H = 132, 6
 local SetRank -- 아래에서 정의 (정예/희귀 테두리)
+local QUEST_COLOR = C.accent -- 퀘스트 대상 몹 색
 local plates = {}   -- unit → ink 프레임
 M.plates = plates
 
@@ -275,6 +276,20 @@ local function Build(plate)
 	end)
 	f.cast = cb
 
+	-- 퀘스트 대상 표시: 바 오른쪽 작은 아이콘(처치 = 칼 / 수집 = 꾸러미) + 바 아래 진행 수치
+	f.qicon = f.back:CreateTexture(nil, "OVERLAY")
+	f.qicon:SetSize(13, 13)
+	f.qicon:SetPoint("LEFT", f.back, "RIGHT", 14, 0)
+	f.qicon:Hide()
+	f.qtext = Ink:Text(f, F.latinB, 10, C.accent, "RIGHT")
+	f.qtext:SetPoint("TOPRIGHT", f.back, "BOTTOMRIGHT", -2, -3)
+	f.qtext:SetShadowOffset(1, -1)
+	f.qtext:SetShadowColor(0, 0, 0, 1)
+	f.qtext:Hide()
+	-- 시전바가 뜨면 진행 수치와 겹치니 잠시 숨긴다
+	cb:HookScript("OnShow", function() f.qtext:SetAlpha(0) end)
+	cb:HookScript("OnHide", function() f.qtext:SetAlpha(1) end)
+
 	f:Hide()
 	plate.ink = f
 	return f
@@ -323,10 +338,18 @@ function M:UpdateLook(f)
 	else
 		if threat and threat >= 2 then
 			f.back.bd:SetVertexColor(C.red[1], C.red[2], C.red[3], 0.9)
+		elseif f.questInfo then
+			f.back.bd:SetVertexColor(QUEST_COLOR[1], QUEST_COLOR[2], QUEST_COLOR[3], 0.45)
 		else
 			f.back.bd:SetVertexColor(1, 1, 1, 0.08)
 		end
-		f.glow:SetAlpha(0)
+		-- 퀘스트 대상은 은은한 노란 빛
+		if f.questInfo then
+			f.glow:SetVertexColor(QUEST_COLOR[1], QUEST_COLOR[2], QUEST_COLOR[3])
+			f.glow:SetAlpha(0.22)
+		else
+			f.glow:SetAlpha(0)
+		end
 		f.name:SetTextColor(C.text[1], C.text[2], C.text[3])
 		f.markL:Hide(); f.markR:Hide()
 		f:SetScale(1)
@@ -352,6 +375,61 @@ SetRank = function(f, color, shine)
 		rk:Show()
 		rk.pulse:Play()
 		rk.sweep:Play()
+	end
+end
+
+-------------------------------------------------------------------------------
+-- 퀘스트 대상 찾기: 몹 툴팁의 퀘스트 목표 줄("- 6/8 오우거 처치")을 읽는다
+-------------------------------------------------------------------------------
+local LINE_OBJ = Enum.TooltipDataLineType and Enum.TooltipDataLineType.QuestObjective or 8
+local KILL_WORDS = { "처치", "죽이", "물리치", "쓰러뜨", "사냥", "제거", "격파", "slain", "kill", "defeat", "destroy" }
+
+local function IsKill(t)
+	local low = t:lower()
+	for _, w in ipairs(KILL_WORDS) do if low:find(w, 1, true) then return true end end
+	return false
+end
+
+local function QuestInfo(unit)
+	if Ink.db.questPlates == false then return end
+	if C_QuestLog and C_QuestLog.UnitIsRelatedToActiveQuest then
+		local ok, rel = pcall(C_QuestLog.UnitIsRelatedToActiveQuest, unit)
+		if ok and plain(rel) == false then return end
+	end
+	if not (C_TooltipInfo and C_TooltipInfo.GetUnit) then return end
+	local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
+	if not ok or not data or not data.lines then return end
+	for i = 2, #data.lines do
+		local line = data.lines[i]
+		local t = line and plain(line.leftText)
+		if type(t) == "string" and (line.type == LINE_OBJ or (line.type == nil and t:find("^%s*%-"))) and not plain(line.completed) then
+			t = t:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+			local cur, max = t:match("(%d+)%s*/%s*(%d+)")
+			local pct = t:match("(%d+)%%")
+			local done = (cur and tonumber(cur) >= tonumber(max)) or (pct and tonumber(pct) >= 100)
+			if (cur or pct) and not done then
+				return {
+					kind = (pct or IsKill(t)) and "kill" or "loot",
+					text = cur and (cur .. "/" .. max) or (pct .. "%"),
+				}
+			end
+		end
+	end
+end
+
+function M:ApplyQuest(f)
+	local info = (not f.friendly and f.unit) and QuestInfo(f.unit) or nil
+	f.questInfo = info
+	if info then
+		f.qicon:SetTexture(Ink.icon(info.kind == "kill" and "QuestKill" or "QuestLoot"))
+		f.qicon:SetVertexColor(QUEST_COLOR[1], QUEST_COLOR[2], QUEST_COLOR[3])
+		f.qicon:Show()
+		f.qtext:SetText(info.text)
+		f.qtext:Show()
+		f.hp:SetStatusBarColor(QUEST_COLOR[1], QUEST_COLOR[2], QUEST_COLOR[3])
+	else
+		f.qicon:Hide()
+		f.qtext:Hide()
 	end
 end
 
@@ -382,6 +460,7 @@ function M:UpdateInfo(f)
 	else
 		f.raid:Hide()
 	end
+	self:ApplyQuest(f)
 end
 
 function M:UpdateAuras(f)
@@ -516,6 +595,8 @@ function M:SetFriendly(f, friendly)
 		f.name:SetAlpha(f.nameAlpha)
 		f.markL:Hide(); f.markR:Hide(); f.elite:Hide()
 		SetRank(f, nil)
+		f.questInfo = nil
+		f.qicon:Hide(); f.qtext:Hide()
 	else
 		f.roleInfo = nil
 		f.role:Hide()
@@ -750,7 +831,7 @@ function M:Init()
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({
 		"NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED", "RAID_TARGET_UPDATE",
-		"PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA",
+		"PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "QUEST_LOG_UPDATE", "UNIT_QUEST_LOG_CHANGED",
 		"UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_AURA",
 		"UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE", "UNIT_CLASSIFICATION_CHANGED",
 		"UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
@@ -766,6 +847,21 @@ function M:Init()
 			return
 		elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
 			M:UpdateFriendlyNPCs()
+			return
+		elseif event == "QUEST_LOG_UPDATE" or event == "UNIT_QUEST_LOG_CHANGED" then
+			-- 퀘스트 진행이 바뀌면 (한 번에 여러 번 와서) 잠깐 모아서 다시 그린다
+			if not M.questPending then
+				M.questPending = true
+				C_Timer.After(0.3, function()
+					M.questPending = nil
+					for _, pf in pairs(plates) do
+						if not pf.friendly and pf.unit then
+							pcall(M.UpdateInfo, M, pf)
+							pcall(M.UpdateLook, M, pf)
+						end
+					end
+				end)
+			end
 			return
 		elseif event == "NAME_PLATE_UNIT_REMOVED" then
 			M:OnRemoved(unit)
