@@ -1254,7 +1254,7 @@ function M:Init()
 	self:SkinQuest()
 	self:SkinBuffs()
 	-- 부가 기능은 하나가 실패해도 나머지에 영향이 없게 따로따로
-	for _, fn in ipairs({ "BuildAddonList", "SetupQueue", "HookKeybindMode", "SetupAutoPush", "HideVehicleSeats", "DisableTutorials" }) do
+	for _, fn in ipairs({ "BuildAddonList", "SetupQueue", "HookKeybindMode", "SetupAutoPush", "HideVehicleSeats", "DisableTutorials", "SetupTalk" }) do
 		local ok, err = pcall(self[fn], self)
 		if not ok then Ink:LogError("Blizzard." .. fn .. ": " .. tostring(err)) end
 	end
@@ -1269,6 +1269,172 @@ end
 function M:SetTest(on)
 	self.testing = on
 	self:UpdateXP()
+	pcall(M.TestTalk, M, on)
+end
+
+-------------------------------------------------------------------------------
+-- NPC 대사 창 (토킹 헤드): 배경 · 초상화 없이 이름 + 대사가 한 글자씩 써지듯
+--  블리자드 대사 창은 숨기되(음성은 그대로 나온다) 같은 대사를 FOA 글자로 보여 준다.
+--  위치는 FOA 편집 모드에서 "대사"로 옮긴다.
+-------------------------------------------------------------------------------
+local TYPE_SPEED = 42 -- 초당 글자 수
+
+local function Utf8Len(t)
+	if strlenutf8 then return strlenutf8(t) end
+	local _, n = t:gsub("[^\128-\191]", "")
+	return n
+end
+
+function M:BuildTalk()
+	local f = CreateFrame("Button", "FOATalkingHead", Ink.root)
+	f:SetSize(640, 96)
+	f:SetFrameStrata("MEDIUM")
+	f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	-- 글자가 배경에 묻히지 않게 아주 옅은 그림자만 (상자는 없음)
+	f.shade = f:CreateTexture(nil, "BACKGROUND")
+	f.shade:SetTexture(Ink.tex.glow)
+	f.shade:SetPoint("TOPLEFT", -60, 34)
+	f.shade:SetPoint("BOTTOMRIGHT", 60, -34)
+	f.shade:SetVertexColor(0, 0, 0, 0.55)
+	f.bar = f:CreateTexture(nil, "ARTWORK")
+	f.bar:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.95)
+	f.bar:SetSize(18, 2)
+	f.bar:SetPoint("TOPLEFT", 0, 0)
+	f.name = Ink:Text(f, F.bold, 16, C.accent, "LEFT")
+	f.name:SetPoint("TOPLEFT", f.bar, "BOTTOMLEFT", 0, -7)
+	f.name:SetShadowOffset(1, -1)
+	f.name:SetShadowColor(0, 0, 0, 1)
+	f.count = Ink:Text(f, F.latin, 10, C.muted, "LEFT")
+	f.count:SetPoint("LEFT", f.name, "RIGHT", 8, -1)
+	f.text = Ink:Text(f, F.semi, 15, C.text, "LEFT")
+	f.text:SetPoint("TOPLEFT", f.name, "BOTTOMLEFT", 0, -8)
+	f.text:SetWidth(640)
+	f.text:SetSpacing(4)
+	f.text:SetWordWrap(true)
+	f.text:SetShadowOffset(1, -1)
+	f.text:SetShadowColor(0, 0, 0, 1)
+	f:SetAlpha(0)
+	f:Hide()
+
+	local ag = f:CreateAnimationGroup()
+	local a = ag:CreateAnimation("Alpha")
+	a:SetFromAlpha(0)
+	a:SetToAlpha(1)
+	a:SetDuration(0.25)
+	local t = ag:CreateAnimation("Translation")
+	t:SetOffset(0, 6)
+	t:SetDuration(0.25)
+	t:SetSmoothing("OUT")
+	ag:SetScript("OnFinished", function() f:SetAlpha(1) end)
+	f.intro = ag
+
+	f:SetScript("OnUpdate", function(self, el)
+		if self.fading then
+			local a2 = self:GetAlpha() - el / 0.4
+			if a2 <= 0 then self.fading = nil; self:SetAlpha(0); self:Hide() else self:SetAlpha(a2) end
+			return
+		end
+		if self.len and self.pos < self.len then
+			self.pos = math.min(self.len, self.pos + el * TYPE_SPEED)
+			self.text:SetAlphaGradient(math.floor(self.pos), 18)
+		end
+		if self.untilT and GetTime() > self.untilT then M:CloseTalk() end
+	end)
+	-- 클릭: 쓰는 중이면 끝까지 보여 주고, 다 보였으면 닫기
+	f:SetScript("OnClick", function(self, btn)
+		if btn == "LeftButton" and self.len and self.pos < self.len then
+			self.pos = self.len
+			self.text:SetAlphaGradient(self.len, 1)
+			return
+		end
+		if TalkingHeadFrame and TalkingHeadFrame.CloseImmediately then pcall(TalkingHeadFrame.CloseImmediately, TalkingHeadFrame) end
+		M:CloseTalk(true)
+	end)
+	self.talk = f
+	Ink:Movable("talk", "대사", f, "center", 640, 640, 640, 96)
+end
+
+function M:ShowTalk(name, text, idx, total, duration)
+	local f = self.talk
+	if not f or not text or text == "" then return end
+	f.name:SetText(name or "")
+	f.count:SetText((total and total > 1) and string.format("%d / %d", idx or 1, total) or "")
+	f.text:SetText(text)
+	f.len = Utf8Len(text)
+	f.pos = 0
+	f.text:SetAlphaGradient(0, 18)
+	local readT = f.len / TYPE_SPEED + 2.5 + f.len * 0.03
+	f.untilT = GetTime() + math.max(duration or 0, readT)
+	f.fading = nil
+	local wasShown = f:IsShown() and f:GetAlpha() > 0.5
+	f:Show()
+	if not wasShown then
+		f:SetAlpha(0)
+		f.intro:Stop()
+		f.intro:Play()
+	end
+end
+
+function M:CloseTalk(now)
+	local f = self.talk
+	if not f or not f:IsShown() then return end
+	f.untilT, f.len = nil, nil
+	if now then f.fading = nil; f:SetAlpha(0); f:Hide() else f.fading = true end
+end
+
+function M:OnTalkingHead(event)
+	if event == "TALKINGHEAD_CLOSE" then
+		if not self.testing then self:CloseTalk() end
+		return
+	end
+	if not (C_TalkingHead and C_TalkingHead.GetCurrentLineInfo) then return end
+	local _, _, _, duration, line, numLines, name, text = C_TalkingHead.GetCurrentLineInfo()
+	text, name = plain(text), plain(name)
+	if type(text) ~= "string" then return end
+	self:ShowTalk(name, text, line, numLines, plain(duration))
+end
+
+function M:HideBlizzardTalk()
+	local th = TalkingHeadFrame
+	if not th or self.talkHidden then return end
+	self.talkHidden = true
+	-- 이벤트는 그대로 받게(음성 재생) 두고 화면에서만 뺀다
+	Ink:Disable(th, true)
+end
+
+function M:SetupTalk()
+	self:BuildTalk()
+	self:HideBlizzardTalk()
+	local e = CreateFrame("Frame")
+	for _, ev in ipairs({ "TALKINGHEAD_REQUESTED", "TALKINGHEAD_CLOSE", "ADDON_LOADED" }) do pcall(e.RegisterEvent, e, ev) end
+	e:SetScript("OnEvent", function(_, event, arg1)
+		if event == "ADDON_LOADED" then
+			if arg1 == "Blizzard_TalkingHeadUI" then M:HideBlizzardTalk() end
+			return
+		end
+		-- 블리자드 쪽이 먼저 정보를 채우도록 한 프레임 뒤에
+		C_Timer.After(0, function() pcall(M.OnTalkingHead, M, event) end)
+	end)
+end
+
+-- 테스트 모드: 예시 대사
+local TALK_SAMPLES = {
+	{ "여군주 제이나 프라우드무어", "서두르세요. 래시온과 칼렉고스를 모두 구하려면 시간이 없어요." },
+	{ "린디 스프링스톡", "아니면... 과학의 힘을 빌리죠! 크기 조정기로 주변 멧돼지를 크게 키워서 괴물들을 납작하게 짓밟는 거예요!" },
+}
+function M:TestTalk(on)
+	if not self.talk then return end
+	if self.talkTicker then self.talkTicker:Cancel(); self.talkTicker = nil end
+	if not on then self:CloseTalk(true) return end
+	local i = 0
+	local function nextLine()
+		i = i % #TALK_SAMPLES + 1
+		local d = TALK_SAMPLES[i]
+		M:ShowTalk(d[1], d[2], i, #TALK_SAMPLES, 6)
+		M.talk.untilT = nil
+	end
+	nextLine()
+	self.talkTicker = C_Timer.NewTicker(7, nextLine)
 end
 
 function M:PostLayout()

@@ -290,7 +290,7 @@ function M:BuildWarnings()
 		self.warns[i] = w
 	end
 	self.warnIdx = 0
-	Ink:Movable("bossWarn", "보스 경고", f, "center", 960, 220)
+	Ink:Movable("bossWarn", "보스 경고", f, "center", 610, 220)
 end
 
 function M:ShowWarning(info, text)
