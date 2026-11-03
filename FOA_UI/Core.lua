@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.19.2"
+Ink.version = "0.20.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -301,20 +301,75 @@ function Ink:UpdateScale()
 	self.pendingScale = nil
 	local h = UIParent:GetHeight()
 	if h and h > 0 then root:SetScale(h / 1080) end
+	self:SelectLayout()
 end
 
-local function placeRaw(f, mode, x, y)
+-------------------------------------------------------------------------------
+-- 화면 비율별 배치
+--  높이는 항상 1080 기준. 가로는 비율에 따라 늘어난다 (16:9 = 1920, 21:9 ≈ 2520 …)
+--  위치는 "왼쪽 가장자리 / 오른쪽 가장자리 / 가운데" 중 가까운 쪽에 붙여 저장하므로
+--  다른 비율에서도 자연스럽게 따라간다. 32:9 는 양옆이 너무 멀어서 가운데 21:9 폭 안에 모은다.
+-------------------------------------------------------------------------------
+Ink.ASPECTS = { "16:10", "16:9", "21:9", "32:9" }
+Ink.ASPECT_NAME = { ["16:10"] = "16:10 (맥북)", ["16:9"] = "16:9", ["21:9"] = "21:9 울트라와이드", ["32:9"] = "32:9 슈퍼 울트라와이드" }
+
+function Ink:DetectAspect()
+	local w, h = UIParent:GetWidth(), UIParent:GetHeight()
+	local r = (w and h and h > 0) and w / h or 16 / 9
+	if r < 1.7 then return "16:10" end
+	if r < 2.05 then return "16:9" end
+	if r < 2.8 then return "21:9" end
+	return "32:9"
+end
+
+-- 지금 쓰는 비율 (설정에서 고른 것, "자동"이면 화면에서 알아낸 것)
+function Ink:ActiveAspect()
+	local mode = self.cdb and self.cdb.aspect
+	if mode and mode ~= "auto" then return mode end
+	return self:DetectAspect()
+end
+
+-- 32:9 처럼 아주 넓은 화면은 가장자리 요소를 가운데 21:9 폭 안으로 모은다
+local SAFE_W = { ["32:9"] = 1080 * 21 / 9 }
+local function EdgeInset()
+	local rw = root:GetWidth()
+	local safe = SAFE_W[Ink.activeAspect or "16:9"]
+	if not (rw and safe) or rw <= safe then return 0 end
+	return (rw - safe) / 2
+end
+Ink.EdgeInset = EdgeInset
+
+function Ink:SelectLayout()
+	if not self.cdb then return end
+	local key = self:ActiveAspect()
+	self.activeAspect = key
+	self.cdb.layouts = self.cdb.layouts or {}
+	self.cdb.layouts[key] = self.cdb.layouts[key] or {}
+	self.pos = self.cdb.layouts[key]
+end
+
+-- 다른 비율에 저장된 위치가 없으면 16:9(기본) 위치를 빌려 쓴다 (가장자리 기준이라 그대로 맞는다)
+function Ink:GetPos(key)
+	local p = self.pos and self.pos[key]
+	if p then return p end
+	local base = self.cdb and self.cdb.layouts and self.cdb.layouts["16:9"]
+	return base and base[key]
+end
+
+local function placeRaw(f, mode, x, y, scale)
 	f:ClearAllPoints()
-	if mode == "left" then
-		f:SetPoint("TOPLEFT", root, "TOPLEFT", x, -y)
-	elseif mode == "right" then
-		f:SetPoint("TOPRIGHT", root, "TOPRIGHT", -x, -y)
+	local s = scale or 1
+	local inset = EdgeInset()
+	if mode == "left" or mode == "l" then
+		f:SetPoint("TOPLEFT", root, "TOPLEFT", (inset + x) / s, -y / s)
+	elseif mode == "right" or mode == "r" then
+		f:SetPoint("TOPRIGHT", root, "TOPRIGHT", -(inset + x) / s, -y / s)
 	elseif mode == "bottomleft" then
-		f:SetPoint("BOTTOMLEFT", root, "BOTTOMLEFT", x, y)
+		f:SetPoint("BOTTOMLEFT", root, "BOTTOMLEFT", (inset + x) / s, y / s)
 	elseif mode == "bottomright" then
-		f:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", -x, y)
+		f:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", -(inset + x) / s, y / s)
 	else
-		f:SetPoint("TOPLEFT", root, "TOP", x - 960, -y)
+		f:SetPoint("TOPLEFT", root, "TOP", (x - 960) / s, -y / s)
 	end
 end
 
@@ -342,48 +397,117 @@ function Ink:Movable(key, label, frame, mode, x, y, w, h)
 	return m
 end
 
+-- 크기 조절이 되는 요소인가 (블리자드 프레임을 붙이는 투명 앵커는 크기 조절 안 함)
+function Ink:CanScale(key)
+	local m = self.movers[key]
+	return m and m.frame and not m.frame.inkAnchor and not m.noScale
+end
+
+-- 예전 형식(가운데 기준 x)을 가장자리 기준으로 바꾼다 (1920 시안 기준 왼쪽/가운데/오른쪽 3등분)
+local function Convert(p, w)
+	if p.a then return p end
+	w = w or 0
+	local cx = p.x + w / 2
+	if cx < 640 then
+		p.a = "l"
+	elseif cx > 1280 then
+		p.a, p.x = "r", math.floor(1920 - (p.x + w) + 0.5)
+	else
+		p.a = "c"
+	end
+	return p
+end
+
 function Ink:ApplyPos(key)
 	local m = self.movers[key]
 	if not m or not m.frame then return end
 	if m.frame:IsProtected() and InCombatLockdown() then return end
-	local p = self.cdb and self.cdb.pos and self.cdb.pos[key]
+	local p = self:GetPos(key)
+	local s = (p and p.s and self:CanScale(key)) and p.s or 1
+	if self:CanScale(key) and math.abs((m.frame:GetScale() or 1) - s) > 0.001 then
+		pcall(m.frame.SetScale, m.frame, s)
+	end
 	if p then
-		placeRaw(m.frame, "center", p.x, p.y)
+		Convert(p, (m.w or m.frame:GetWidth() or 0) * s)
+		placeRaw(m.frame, p.a, p.x, p.y, s)
 	else
-		placeRaw(m.frame, m.mode, m.x, m.y)
+		placeRaw(m.frame, m.mode, m.x, m.y, s)
 	end
 end
 
--- 현재 프레임 위치를 시안 좌표(화면 가운데 기준)로 저장
-function Ink:SavePos(key)
+-- 지금 위치를 화면 기준(시안 좌표)으로: 왼쪽 위 x, y / 너비, 높이
+function Ink:FrameBox(key)
 	local m = self.movers[key]
 	if not m then return end
 	local f = m.frame
-	local l, t = f:GetLeft(), f:GetTop()
-	local rl, rt, rw = root:GetLeft(), root:GetTop(), root:GetWidth()
-	if not (l and t and rl and rt and rw) then return end
+	local l, t, r = f:GetLeft(), f:GetTop(), f:GetRight()
+	local rl, rt = root:GetLeft(), root:GetTop()
+	if not (l and t and r and rl and rt) then return end
 	local k = f:GetEffectiveScale() / root:GetEffectiveScale()
-	local x = l * k - (rl + rw / 2) + 960
-	local y = rt - t * k
-	local v = { x = math.floor(x + 0.5), y = math.floor(y + 0.5) }
-	-- 이 캐릭터 배치에 저장 + "마지막 배치"로도 남겨서 새 캐릭터가 처음 접속할 때 이어받는다
-	self.cdb.pos = self.cdb.pos or {}
-	self.cdb.pos[key] = v
-	self.db.pos = self.db.pos or {}
-	self.db.pos[key] = { x = v.x, y = v.y }
+	local w = m.w and m.w * (f:GetScale() or 1) or (r - l) * k
+	return l * k - rl, rt - t * k, w
 end
 
--- 위치 초기화는 지금 캐릭터만
+-- 현재 프레임 위치를 저장: 화면 3등분 중 어디에 있느냐에 따라 왼쪽 / 가운데 / 오른쪽 기준
+function Ink:SavePos(key)
+	local m = self.movers[key]
+	if not m then return end
+	local lx, y, w = self:FrameBox(key)
+	if not lx then return end
+	local rw = root:GetWidth()
+	local inset = EdgeInset()
+	local refW = rw - inset * 2
+	local cx = lx + w / 2 - inset
+	local old = self.pos and self.pos[key]
+	local v = { y = math.floor(y + 0.5), s = old and old.s or (self:GetPos(key) or {}).s }
+	if cx < refW / 3 then
+		v.a, v.x = "l", math.floor(lx - inset + 0.5)
+	elseif cx > refW * 2 / 3 then
+		v.a, v.x = "r", math.floor(rw - inset - (lx + w) + 0.5)
+	else
+		v.a, v.x = "c", math.floor(lx - rw / 2 + 960 + 0.5)
+	end
+	self.pos[key] = v
+	-- 계정에도 남겨서 새 캐릭터가 처음 접속할 때 이어받는다
+	local aspect = self.activeAspect or "16:9"
+	self.db.layouts = self.db.layouts or {}
+	self.db.layouts[aspect] = self.db.layouts[aspect] or {}
+	self.db.layouts[aspect][key] = CopyTable(v)
+end
+
+-- 크기(배율) 저장
+function Ink:SetMoverScale(key, s)
+	if not self:CanScale(key) then return end
+	s = math.max(0.5, math.min(2, math.floor(s * 100 + 0.5) / 100))
+	local p = self:GetPos(key)
+	if not (self.pos and self.pos[key]) then
+		self:SavePos(key)
+	end
+	p = self.pos[key]
+	if p then p.s = s end
+	self:ApplyPos(key)
+	self:SavePos(key)
+end
+
+-- 위치 초기화는 지금 캐릭터 · 지금 비율만
 function Ink:ResetPos(key)
-	if not self.cdb.pos then return end
-	if key then self.cdb.pos[key] = nil else wipe(self.cdb.pos) end
+	if not self.pos then return end
+	if key then self.pos[key] = nil else wipe(self.pos) end
 	if not key then self.cdb.bagPos = nil end
+end
+
+-- 비율 바꾸기 ("auto" / "16:10" / "16:9" / "21:9" / "32:9")
+function Ink:SetAspect(mode)
+	if InCombatLockdown() then return end
+	self.cdb.aspect = mode
+	self:Relayout()
 end
 
 -- 블리자드 프레임을 붙일 투명 앵커
 function Ink:Anchor(w, h)
 	local a = CreateFrame("Frame", nil, root)
 	a:SetSize(w, h)
+	a.inkAnchor = true
 	return a
 end
 
@@ -590,15 +714,25 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 		Ink:ApplyDamageFont()
 		InkUIDB = InkUIDB or {}
 		Ink.db = InkUIDB
-		Ink.db.pos = Ink.db.pos or {}
-		-- 캐릭터별 배치 (편집 모드 위치 · 가방 위치)
+		-- 캐릭터별 배치 (편집 모드 위치 · 가방 위치), 화면 비율마다 따로
 		--  처음 접속한 캐릭터는 마지막으로 편집한 배치를 복사해서 시작한다
 		InkUICharDB = InkUICharDB or {}
 		Ink.cdb = InkUICharDB
-		if not Ink.cdb.pos then
-			Ink.cdb.pos = CopyTable(Ink.db.pos)
-			if Ink.db.bagPos then Ink.cdb.bagPos = CopyTable(Ink.db.bagPos) end
+		if not Ink.cdb.layouts then
+			if Ink.cdb.pos then
+				-- 예전 저장(한 벌) → 16:9 배치로
+				Ink.cdb.layouts = { ["16:9"] = Ink.cdb.pos }
+			elseif Ink.db.layouts then
+				Ink.cdb.layouts = CopyTable(Ink.db.layouts)
+			else
+				Ink.cdb.layouts = { ["16:9"] = CopyTable(Ink.db.pos or {}) }
+			end
+			if not Ink.cdb.bagPos and Ink.db.bagPos then Ink.cdb.bagPos = CopyTable(Ink.db.bagPos) end
 		end
+		Ink.cdb.pos = nil
+		if not Ink.db.layouts and Ink.db.pos then Ink.db.layouts = { ["16:9"] = CopyTable(Ink.db.pos) } end
+		Ink.db.pos = nil
+		Ink:SelectLayout()
 		for k, v in pairs(defaults) do
 			if Ink.db[k] == nil then Ink.db[k] = v end
 		end

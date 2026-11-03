@@ -68,9 +68,16 @@ local function Check(parent, label, desc, key)
 end
 
 -------------------------------------------------------------------------------
--- 편집 모드: 내 프레임마다 이동용 상자를 띄운다
+-- 편집 모드 (엘브UI처럼): 격자 · 요소 선택 · 좌표 입력 · 크기 조절 · 화살표 키 미세 이동
+--  · 드래그로 이동 (격자 맞춤을 켜면 8칸 단위로 붙는다)
+--  · 클릭으로 선택 → 위쪽 막대에서 X / Y 입력, 크기 −/+, 화살표 키(Shift = 10칸)
+--  · 우클릭: 이 요소만 기본 위치로
+--  · 화면 비율마다 배치가 따로 저장된다 (16:10 / 16:9 / 21:9 / 32:9)
 -------------------------------------------------------------------------------
 M.overlays = {}
+local GRID = 32
+local SNAP = 8
+local ASPECT_CYCLE = { "auto", "16:10", "16:9", "21:9", "32:9" }
 
 local function MoverSize(m)
 	local w, h = m.frame:GetSize()
@@ -81,9 +88,93 @@ local function MoverSize(m)
 	return w, h
 end
 
+local function AspectLabel()
+	local mode = Ink.cdb.aspect or "auto"
+	local cur = Ink.activeAspect or Ink:DetectAspect()
+	if mode == "auto" then return "비율: 자동 (" .. cur .. ")" end
+	return "비율: " .. cur
+end
+
+-- 격자
+function M:BuildGrid()
+	local g = CreateFrame("Frame", nil, Ink.root)
+	g:SetAllPoints(Ink.root)
+	g:SetFrameStrata("DIALOG")
+	g:SetFrameLevel(1)
+	g.lines = {}
+	self.grid = g
+end
+
+function M:DrawGrid()
+	local g = self.grid
+	if not g then return end
+	for _, t in ipairs(g.lines) do t:Hide() end
+	local n = 0
+	local function line(vertical, pos, r, gg, b, a, thick)
+		n = n + 1
+		local t = g.lines[n]
+		if not t then
+			t = g:CreateTexture(nil, "BACKGROUND")
+			g.lines[n] = t
+		end
+		t:ClearAllPoints()
+		t:SetColorTexture(r, gg, b, a)
+		if vertical then
+			t:SetPoint("TOPLEFT", g, "TOPLEFT", pos, 0)
+			t:SetPoint("BOTTOMLEFT", g, "BOTTOMLEFT", pos, 0)
+			t:SetWidth(thick or 1)
+		else
+			t:SetPoint("TOPLEFT", g, "TOPLEFT", 0, -pos)
+			t:SetPoint("TOPRIGHT", g, "TOPRIGHT", 0, -pos)
+			t:SetHeight(thick or 1)
+		end
+		t:Show()
+	end
+	local w, h = Ink.root:GetWidth(), Ink.root:GetHeight()
+	local cx, cy = w / 2, h / 2
+	-- 가운데에서 바깥으로 그려서 가운데 선이 정확히 맞게
+	for x = cx % GRID, w, GRID do
+		local major = math.abs((x - cx) % (GRID * 4)) < 0.5
+		line(true, x, 1, 1, 1, major and 0.10 or 0.05)
+	end
+	for y = cy % GRID, h, GRID do
+		local major = math.abs((y - cy) % (GRID * 4)) < 0.5
+		line(false, y, 1, 1, 1, major and 0.10 or 0.05)
+	end
+	local a = C.accent
+	line(true, cx - 1, a[1], a[2], a[3], 0.55, 2)
+	line(false, cy - 1, a[1], a[2], a[3], 0.55, 2)
+	-- 32:9: 요소를 모으는 가운데 21:9 영역 표시
+	local inset = Ink.EdgeInset()
+	if inset > 0 then
+		line(true, inset, a[1], a[2], a[3], 0.35, 2)
+		line(true, w - inset, a[1], a[2], a[3], 0.35, 2)
+	end
+end
+
+function M:ShowGrid(on)
+	if on and not self.grid then self:BuildGrid() end
+	if not self.grid then return end
+	self.grid:SetShown(on)
+	if on then self:DrawGrid() end
+end
+
+-- 격자 맞춤: 왼쪽 위 모서리를 8칸 단위로
+local function Snap(key)
+	if Ink.db.editSnap == false then return end
+	local m = Ink.movers[key]
+	local x, y = Ink:FrameBox(key)
+	if not (m and x) then return end
+	local s = m.frame:GetScale() or 1
+	m.frame:ClearAllPoints()
+	m.frame:SetPoint("TOPLEFT", Ink.root, "TOPLEFT",
+		math.floor(x / SNAP + 0.5) * SNAP / s, -math.floor(y / SNAP + 0.5) * SNAP / s)
+end
+
 local function BuildOverlay(m)
 	local o = CreateFrame("Frame", nil, Ink.root)
 	o:SetFrameStrata("DIALOG")
+	o:SetFrameLevel(20)
 	o:SetMovable(true)
 	o:EnableMouse(true)
 	o:RegisterForDrag("LeftButton")
@@ -91,22 +182,27 @@ local function BuildOverlay(m)
 	o.bg = o:CreateTexture(nil, "BACKGROUND")
 	o.bg:SetAllPoints()
 	o.bg:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.08)
-	Ink:Border(o, { C.accent[1], C.accent[2], C.accent[3], 0.7 })
+	Ink:Border(o, { C.accent[1], C.accent[2], C.accent[3], 0.6 })
 	o.label = Ink:Text(o, F.semi, 11, C.accent, "LEFT")
 	o.label:SetPoint("BOTTOMLEFT", o, "TOPLEFT", 0, 3)
 	o.label:SetText(m.label)
-	o.coords = Ink:Text(o, F.sans, 10, C.muted, "RIGHT")
+	o.coords = Ink:Text(o, F.latin, 10, C.muted, "RIGHT")
 	o.coords:SetPoint("BOTTOMRIGHT", o, "TOPRIGHT", 0, 3)
-	o:SetScript("OnEnter", function(self) self.bg:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.18) end)
-	o:SetScript("OnLeave", function(self) self.bg:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.08) end)
+	o:SetScript("OnEnter", function(self) if M.sel ~= m.key then self.bg:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.18) end end)
+	o:SetScript("OnLeave", function(self) M:PaintOverlay(m.key) end)
+	o:SetScript("OnMouseDown", function(_, btn)
+		if btn == "LeftButton" then M:Select(m.key) end
+	end)
 	o:SetScript("OnDragStart", function(self)
 		if InCombatLockdown() then return end
+		M:Select(m.key)
 		self.dragging = true
 		self:StartMoving()
 		self:SetScript("OnUpdate", function()
 			if InCombatLockdown() then return end
 			m.frame:ClearAllPoints()
 			m.frame:SetPoint("TOPLEFT", self, "TOPLEFT")
+			M:UpdateFields()
 		end)
 	end)
 	o:SetScript("OnDragStop", function(self)
@@ -114,30 +210,119 @@ local function BuildOverlay(m)
 		self:SetScript("OnUpdate", nil)
 		self.dragging = nil
 		if InCombatLockdown() then return end
+		Snap(m.key)
 		Ink:SavePos(m.key)
 		Ink:Relayout()
-		M:SyncOverlay(m)
+		M:SyncAll()
 	end)
 	-- 우클릭: 이 요소만 기본 위치로
 	o:SetScript("OnMouseUp", function(_, btn)
 		if btn == "RightButton" and not InCombatLockdown() then
 			Ink:ResetPos(m.key)
 			Ink:Relayout()
-			M:SyncOverlay(m)
+			M:SyncAll()
 		end
+	end)
+	-- 마우스 휠: 크기 조절
+	o:EnableMouseWheel(true)
+	o:SetScript("OnMouseWheel", function(_, d)
+		if InCombatLockdown() or not Ink:CanScale(m.key) then return end
+		M:Select(m.key)
+		M:Nudge(nil, nil, d > 0 and 0.05 or -0.05)
 	end)
 	return o
 end
 
+function M:PaintOverlay(key)
+	local o = self.overlays[key]
+	if not o then return end
+	local a = C.accent
+	if self.sel == key then
+		o.bg:SetColorTexture(a[1], a[2], a[3], 0.22)
+		Ink:Border(o, { a[1], a[2], a[3], 1 }, 2)
+	else
+		o.bg:SetColorTexture(a[1], a[2], a[3], 0.08)
+		Ink:Border(o, { a[1], a[2], a[3], 0.6 }, 1)
+	end
+end
+
+local SIDE = { l = "왼쪽", r = "오른쪽", c = "가운데" }
 function M:SyncOverlay(m)
 	local o = self.overlays[m.key]
 	if not o then return end
 	local w, h = MoverSize(m)
+	-- 요소의 실제 화면 크기(배율 포함)에 맞춘다
+	local k = m.frame:GetEffectiveScale() / o:GetEffectiveScale()
 	o:ClearAllPoints()
 	o:SetPoint("TOPLEFT", m.frame, "TOPLEFT")
-	o:SetSize(w, h)
-	local p = Ink.cdb.pos[m.key]
-	o.coords:SetText(p and string.format("%d, %d", p.x, p.y) or "기본 위치")
+	o:SetSize(w * k, h * k)
+	local p = Ink:GetPos(m.key)
+	local scaleTxt = (p and p.s and p.s ~= 1) and string.format("  ·  %d%%", p.s * 100) or ""
+	o.coords:SetText(p and (SIDE[p.a or "c"] .. " 기준" .. scaleTxt) or ("기본 위치" .. scaleTxt))
+	self:PaintOverlay(m.key)
+end
+
+function M:SyncAll()
+	for _, key in ipairs(Ink.moverOrder) do self:SyncOverlay(Ink.movers[key]) end
+	self:UpdateFields()
+	if self.grid and self.grid:IsShown() then self:DrawGrid() end
+	if self.bar then self.bar.aspect.text:SetText(AspectLabel()) end
+end
+
+function M:Select(key)
+	local old = self.sel
+	self.sel = key
+	if old then self:PaintOverlay(old) end
+	if key then self:PaintOverlay(key) end
+	self:UpdateFields()
+end
+
+-- 선택한 요소의 좌표 / 크기를 위쪽 막대에 표시
+function M:UpdateFields()
+	local bar = self.bar
+	if not bar then return end
+	local key = self.sel
+	local m = key and Ink.movers[key]
+	if not m then
+		bar.selName:SetText("요소를 클릭해서 고르세요")
+		bar.selName:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
+		for _, w in ipairs({ bar.xBox, bar.yBox }) do w:SetText(""); w:Disable() end
+		bar.scaleTxt:SetText("—")
+		return
+	end
+	bar.selName:SetText(m.label)
+	bar.selName:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
+	local x, y = Ink:FrameBox(key)
+	for _, w in ipairs({ bar.xBox, bar.yBox }) do w:Enable() end
+	if x and not bar.xBox:HasFocus() then bar.xBox:SetText(tostring(math.floor(x + 0.5))) end
+	if y and not bar.yBox:HasFocus() then bar.yBox:SetText(tostring(math.floor(y + 0.5))) end
+	if Ink:CanScale(key) then
+		local p = Ink:GetPos(key)
+		bar.scaleTxt:SetText(string.format("%d%%", ((p and p.s) or 1) * 100))
+	else
+		bar.scaleTxt:SetText("고정")
+	end
+end
+
+-- 선택 요소를 (x, y)로 옮기거나 dx / dy 만큼 밀거나, 크기를 ds 만큼
+function M:Nudge(dx, dy, ds, ax, ay)
+	local key = self.sel
+	local m = key and Ink.movers[key]
+	if not m or InCombatLockdown() then return end
+	if ds then
+		local p = Ink:GetPos(key)
+		Ink:SetMoverScale(key, ((p and p.s) or 1) + ds)
+	else
+		local x, y = Ink:FrameBox(key)
+		if not x then return end
+		x, y = ax or (x + (dx or 0)), ay or (y + (dy or 0))
+		local s = m.frame:GetScale() or 1
+		m.frame:ClearAllPoints()
+		m.frame:SetPoint("TOPLEFT", Ink.root, "TOPLEFT", x / s, -y / s)
+		Ink:SavePos(key)
+	end
+	Ink:Relayout()
+	self:SyncAll()
 end
 
 function M:SetEdit(on)
@@ -160,10 +345,13 @@ function M:SetEdit(on)
 			o:Hide()
 		end
 	end
+	if not on then self.sel = nil end
 	self:ShowBar(on)
+	self:ShowGrid(on and Ink.db.editGrid ~= false)
 	if on and not self.testing then self:SetTest(true) end
 	if not on and self.testFromEdit then self:SetTest(false) end
 	self:SyncButtons()
+	if on then self:SyncAll() end
 end
 
 -------------------------------------------------------------------------------
@@ -189,37 +377,267 @@ function M:SetTest(on)
 end
 
 -------------------------------------------------------------------------------
--- 화면 위쪽 편집 도구 막대
+-- 화면 위쪽 편집 도구 막대 (두 줄: 도구 / 선택한 요소)
 -------------------------------------------------------------------------------
+local function NumBox(parent, w)
+	local b = CreateFrame("EditBox", nil, parent)
+	b:SetSize(w, 24)
+	b:SetAutoFocus(false)
+	b:SetNumeric(false)
+	b:SetFont(F.latin, 12, "")
+	b:SetTextColor(C.text[1], C.text[2], C.text[3])
+	b:SetJustifyH("CENTER")
+	b.bg = Ink:Round(b, "BACKGROUND", true, false)
+	b.bg:SetAllPoints()
+	b.bg:SetVertexColor(1, 1, 1, 0.06)
+	b.bd = Ink:Round(b, "BORDER", true, true)
+	b.bd:SetAllPoints()
+	b.bd:SetVertexColor(1, 1, 1, 0.12)
+	b:SetScript("OnEditFocusGained", function(self) self.bd:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.7); self:HighlightText() end)
+	b:SetScript("OnEditFocusLost", function(self) self.bd:SetVertexColor(1, 1, 1, 0.12); M:UpdateFields() end)
+	b:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+	return b
+end
+
 function M:ShowBar(on)
 	if not self.bar then
 		local bar = CreateFrame("Frame", nil, Ink.root)
 		bar:SetFrameStrata("FULLSCREEN_DIALOG")
-		bar:SetSize(700, 52)
-		bar:SetPoint("TOP", Ink.root, "TOP", 0, -260)
+		bar:SetSize(900, 92)
+		bar:SetPoint("TOP", Ink.root, "TOP", 0, -240)
+		bar:EnableMouse(true)
+		bar:SetMovable(true)
+		bar:RegisterForDrag("LeftButton")
+		bar:SetScript("OnDragStart", bar.StartMoving)
+		bar:SetScript("OnDragStop", bar.StopMovingOrSizing)
 		bar.bg = Ink:Round(bar, "BACKGROUND", false, false)
 		bar.bg:SetAllPoints()
-		bar.bg:SetVertexColor(0.05, 0.06, 0.08, 0.94)
+		bar.bg:SetVertexColor(0.05, 0.06, 0.08, 0.95)
 		bar.bd = Ink:Round(bar, "BORDER", false, true)
 		bar.bd:SetAllPoints()
 		bar.bd:SetVertexColor(1, 1, 1, 0.12)
+		bar.accent = bar:CreateTexture(nil, "ARTWORK")
+		bar.accent:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.95)
+		bar.accent:SetSize(24, 2)
+		bar.accent:SetPoint("TOPLEFT", 16, -1)
 		bar.title = Ink:Text(bar, F.bold, 13, C.text, "LEFT")
-		bar.title:SetPoint("TOPLEFT", 16, -10)
+		bar.title:SetPoint("TOPLEFT", 16, -12)
 		bar.title:SetText("FOA 편집 모드")
 		bar.hint = Ink:Text(bar, F.sans, 10, C.muted, "LEFT")
-		bar.hint:SetPoint("TOPLEFT", bar.title, "BOTTOMLEFT", 0, -3)
-		bar.hint:SetText("드래그로 이동 · 우클릭은 기본 위치로")
-		bar.done = Button(bar, "완료", 70, function() M:SetEdit(false) end, true)
-		bar.done:SetPoint("RIGHT", -12, 0)
-		bar.reset = Button(bar, "전체 초기화", 96, function() M:ResetAll() end)
-		bar.reset:SetPoint("RIGHT", bar.done, "LEFT", -8, 0)
-		bar.test = Button(bar, "예시 표시", 84, function() M:SetTest(not M.testing) end)
-		bar.test:SetPoint("RIGHT", bar.reset, "LEFT", -8, 0)
-		bar.group = Button(bar, "파티 예시", 84, function() M:ToggleGroup() end)
-		bar.group:SetPoint("RIGHT", bar.test, "LEFT", -8, 0)
+		bar.hint:SetPoint("LEFT", bar.title, "RIGHT", 10, -1)
+		bar.hint:SetText("드래그 이동 · 휠 크기 · 우클릭 기본 위치 · 화살표 키 1칸 (Shift 10칸)")
+
+		-- 1줄: 도구 (오른쪽부터)
+		bar.done = Button(bar, "완료", 64, function() M:SetEdit(false) end, true)
+		bar.done:SetPoint("TOPRIGHT", -12, -8)
+		bar.reset = Button(bar, "전체 초기화", 92, function() M:ResetAll() end)
+		bar.reset:SetPoint("RIGHT", bar.done, "LEFT", -6, 0)
+		bar.test = Button(bar, "예시 표시", 80, function() M:SetTest(not M.testing) end)
+		bar.test:SetPoint("RIGHT", bar.reset, "LEFT", -6, 0)
+		bar.group = Button(bar, "파티 예시", 80, function() M:ToggleGroup() end)
+		bar.group:SetPoint("RIGHT", bar.test, "LEFT", -6, 0)
+		bar.snap = Button(bar, "격자 맞춤", 80, function()
+			Ink.db.editSnap = (Ink.db.editSnap == false) and true or false
+			M:SyncButtons()
+		end)
+		bar.snap:SetPoint("RIGHT", bar.group, "LEFT", -6, 0)
+		bar.gridBtn = Button(bar, "격자", 56, function()
+			Ink.db.editGrid = (Ink.db.editGrid == false) and true or false
+			M:ShowGrid(Ink.db.editGrid ~= false)
+			M:SyncButtons()
+		end)
+		bar.gridBtn:SetPoint("RIGHT", bar.snap, "LEFT", -6, 0)
+
+		-- 2줄: 선택한 요소
+		bar.line = bar:CreateTexture(nil, "ARTWORK")
+		bar.line:SetColorTexture(1, 1, 1, 0.06)
+		bar.line:SetHeight(1)
+		bar.line:SetPoint("TOPLEFT", 12, -46)
+		bar.line:SetPoint("TOPRIGHT", -12, -46)
+		bar.selName = Ink:Text(bar, F.semi, 12, C.accent, "LEFT")
+		bar.selName:SetPoint("TOPLEFT", 16, -60)
+		bar.selName:SetWidth(170)
+		bar.selName:SetWordWrap(false)
+
+		local function label(text, anchor, x)
+			local t = Ink:Text(bar, F.latin, 11, C.muted, "LEFT")
+			t:SetPoint("LEFT", anchor, "RIGHT", x or 14, 0)
+			t:SetText(text)
+			return t
+		end
+		local xl = label("X", bar.selName, 6)
+		bar.xBox = NumBox(bar, 64)
+		bar.xBox:SetPoint("LEFT", xl, "RIGHT", 6, 0)
+		local yl = label("Y", bar.xBox, 12)
+		bar.yBox = NumBox(bar, 64)
+		bar.yBox:SetPoint("LEFT", yl, "RIGHT", 6, 0)
+		local function apply()
+			local x, y = tonumber(bar.xBox:GetText()), tonumber(bar.yBox:GetText())
+			bar.xBox:ClearFocus(); bar.yBox:ClearFocus()
+			if x and y then M:Nudge(nil, nil, nil, x, y) end
+		end
+		bar.xBox:SetScript("OnEnterPressed", apply)
+		bar.yBox:SetScript("OnEnterPressed", apply)
+		bar.xBox:SetScript("OnTabPressed", function() bar.yBox:SetFocus() end)
+		bar.yBox:SetScript("OnTabPressed", function() bar.xBox:SetFocus() end)
+
+		local sl = label("크기", bar.yBox, 20)
+		bar.minus = Button(bar, "−", 28, function() M:Nudge(nil, nil, -0.05) end)
+		bar.minus:SetHeight(24)
+		bar.minus:SetPoint("LEFT", sl, "RIGHT", 8, 0)
+		bar.scaleTxt = Ink:Text(bar, F.latinB, 12, C.text, "CENTER")
+		bar.scaleTxt:SetWidth(48)
+		bar.scaleTxt:SetPoint("LEFT", bar.minus, "RIGHT", 2, 0)
+		bar.plus = Button(bar, "+", 28, function() M:Nudge(nil, nil, 0.05) end)
+		bar.plus:SetHeight(24)
+		bar.plus:SetPoint("LEFT", bar.scaleTxt, "RIGHT", 2, 0)
+		bar.one = Button(bar, "100%", 52, function()
+			local p = M.sel and Ink:GetPos(M.sel)
+			if p then M:Nudge(nil, nil, 1 - (p.s or 1)) end
+		end)
+		bar.one:SetHeight(24)
+		bar.one:SetPoint("LEFT", bar.plus, "RIGHT", 6, 0)
+
+		-- 화면 비율 (자동 → 16:10 → 16:9 → 21:9 → 32:9)
+		bar.aspect = Button(bar, "비율", 170, function()
+			local cur = Ink.cdb.aspect or "auto"
+			local i = 1
+			for n, v in ipairs(ASPECT_CYCLE) do if v == cur then i = n end end
+			Ink:SetAspect(ASPECT_CYCLE[i % #ASPECT_CYCLE + 1])
+			M:SyncAll()
+		end)
+		bar.aspect:SetHeight(24)
+		bar.aspect:SetPoint("RIGHT", -12, 0)
+		bar.aspect:SetPoint("TOP", bar.line, "BOTTOM", 0, -9)
+
+		-- 화살표 키로 미세 이동 (입력 칸에 글자를 넣는 중엔 그대로 둔다)
+		bar:EnableKeyboard(true)
+		bar:SetPropagateKeyboardInput(true)
+		bar:SetScript("OnKeyDown", function(self, key)
+			local step = IsShiftKeyDown() and 10 or 1
+			local d = ({ LEFT = { -step, 0 }, RIGHT = { step, 0 }, UP = { 0, -step }, DOWN = { 0, step } })[key]
+			if d and M.sel and not InCombatLockdown() then
+				self:SetPropagateKeyboardInput(false)
+				M:Nudge(d[1], d[2])
+			else
+				self:SetPropagateKeyboardInput(true)
+			end
+		end)
 		self.bar = bar
 	end
 	self.bar:SetShown(on)
+	if on then self:UpdateFields() end
+end
+
+-------------------------------------------------------------------------------
+-- UI 픽셀 맞춤 (엘브UI 자동 크기와 같은 원리)
+--  화면 세로 픽셀 / 768 기준으로 UI 1칸이 실제 화면 픽셀 정수 배가 되는 크기를 고른다
+--  → 블리자드 창과 테두리 선이 번지지 않고 또렷하게. FOA 화면 배치 크기는 그대로.
+-------------------------------------------------------------------------------
+function M:PixelScale()
+	local _, ph = GetPhysicalScreenSize()
+	if not ph or ph <= 0 then return end
+	local base = 768 / ph
+	local n = math.max(1, math.floor(1 / base + 0.0001))
+	return base * n
+end
+
+function M:ApplyPixelPerfect()
+	if not Ink.db.pixelPerfect or InCombatLockdown() then return end
+	local s = self:PixelScale()
+	if not s then return end
+	local changed = false
+	if s >= 0.64 and s <= 1 then
+		if C_CVar.GetCVar("useUiScale") ~= "1" then pcall(C_CVar.SetCVar, "useUiScale", "1") end
+		if math.abs((tonumber(C_CVar.GetCVar("uiScale")) or 0) - s) > 0.001 then
+			pcall(C_CVar.SetCVar, "uiScale", tostring(s))
+			changed = true
+		end
+	end
+	if math.abs((UIParent:GetScale() or 1) - s) > 0.001 then
+		UIParent:SetScale(s)
+		changed = true
+	end
+	if changed then Ink:Relayout() end
+end
+
+function M:SetPixelPerfect(on)
+	if InCombatLockdown() then
+		print("|cffFFF468FOA|r 전투 중에는 UI 크기를 바꿀 수 없어요.")
+		return
+	end
+	Ink.db.pixelPerfect = on
+	if on then
+		self:ApplyPixelPerfect()
+		print(string.format("|cffFFF468FOA|r UI 픽셀 맞춤 켬 (UI 크기 %.3f)", self:PixelScale() or 1))
+	else
+		local cv = tonumber(C_CVar.GetCVar("uiScale")) or 1
+		UIParent:SetScale(C_CVar.GetCVar("useUiScale") == "1" and cv or 1)
+		Ink:Relayout()
+		print("|cffFFF468FOA|r UI 픽셀 맞춤 끔")
+	end
+	self:SyncButtons()
+end
+
+-------------------------------------------------------------------------------
+-- 그래픽 프리셋: 성능 / 균형 / 화질 (처음 바꿀 때 원래 값을 저장해 두고 "되돌리기")
+-------------------------------------------------------------------------------
+local GFX = {
+	perf = {
+		graphicsViewDistance = 3, graphicsEnvironmentDetail = 3, graphicsGroundClutter = 2, graphicsShadowQuality = 2,
+		graphicsLiquidDetail = 1, graphicsParticleDensity = 3, graphicsSSAO = 1, graphicsDepthEffects = 1,
+		graphicsComputeEffects = 1, graphicsOutlineMode = 2, graphicsSpellDensity = 3, graphicsProjectedTextures = 2,
+		maxFPSBk = 30,
+	},
+	balanced = {
+		graphicsViewDistance = 6, graphicsEnvironmentDetail = 6, graphicsGroundClutter = 5, graphicsShadowQuality = 4,
+		graphicsLiquidDetail = 2, graphicsParticleDensity = 4, graphicsSSAO = 3, graphicsDepthEffects = 2,
+		graphicsComputeEffects = 3, graphicsOutlineMode = 3, graphicsSpellDensity = 4, graphicsProjectedTextures = 2,
+		maxFPSBk = 30,
+	},
+	quality = {
+		graphicsViewDistance = 10, graphicsEnvironmentDetail = 10, graphicsGroundClutter = 10, graphicsShadowQuality = 6,
+		graphicsLiquidDetail = 4, graphicsParticleDensity = 6, graphicsSSAO = 5, graphicsDepthEffects = 4,
+		graphicsComputeEffects = 5, graphicsOutlineMode = 3, graphicsSpellDensity = 6, graphicsProjectedTextures = 2,
+		maxFPSBk = 60,
+	},
+}
+local GFX_NAME = { perf = "성능", balanced = "균형", quality = "화질" }
+
+function M:ApplyGraphics(kind)
+	if InCombatLockdown() then
+		print("|cffFFF468FOA|r 전투 중에는 그래픽 설정을 바꿀 수 없어요.")
+		return
+	end
+	if kind == "restore" then
+		local b = Ink.db.gfxBackup
+		if not b then
+			print("|cffFFF468FOA|r 되돌릴 그래픽 설정이 없어요.")
+			return
+		end
+		for k, v in pairs(b) do pcall(C_CVar.SetCVar, k, v) end
+		Ink.db.gfxBackup, Ink.db.gfxPreset = nil, nil
+		print("|cffFFF468FOA|r 그래픽 설정을 원래대로 되돌렸어요.")
+		self:SyncButtons()
+		return
+	end
+	local set = GFX[kind]
+	if not set then return end
+	-- 처음 한 번만 원래 값을 저장
+	if not Ink.db.gfxBackup then
+		Ink.db.gfxBackup = {}
+		for k in pairs(GFX.quality) do
+			local v = C_CVar.GetCVar(k)
+			if v ~= nil then Ink.db.gfxBackup[k] = v end
+		end
+	end
+	local n = 0
+	for k, v in pairs(set) do
+		if C_CVar.GetCVar(k) ~= nil and pcall(C_CVar.SetCVar, k, tostring(v)) then n = n + 1 end
+	end
+	Ink.db.gfxPreset = kind
+	print(string.format("|cffFFF468FOA|r 그래픽 '%s' 프리셋 적용 (%d개 항목)", GFX_NAME[kind], n))
+	self:SyncButtons()
 end
 
 function M:ResetAll()
@@ -228,7 +646,7 @@ function M:ResetAll()
 	Ink:Relayout()
 	local B = Ink.modules.Bags
 	if B and B.frame and B.ApplyPos then B:ApplyPos() end
-	for _, key in ipairs(Ink.moverOrder) do self:SyncOverlay(Ink.movers[key]) end
+	self:SyncAll()
 end
 
 M.testGroup = "party"
@@ -244,10 +662,18 @@ function M:SyncButtons()
 	if self.bar then
 		self.bar.test:SetActive(self.testing)
 		self.bar.group.text:SetText(self.testGroup == "raid" and "레이드 예시" or "파티 예시")
+		self.bar.snap:SetActive(Ink.db.editSnap ~= false)
+		self.bar.gridBtn:SetActive(Ink.db.editGrid ~= false)
+		self.bar.aspect.text:SetText(AspectLabel())
 	end
 	if self.panel then
 		self.panel.edit:SetActive(self.editing)
 		self.panel.test:SetActive(self.testing)
+		if self.panel.aspect then
+			self.panel.aspect.text:SetText(AspectLabel())
+			self.panel.pixel:SetActive(Ink.db.pixelPerfect and true or false)
+			for k, b in pairs(self.panel.gfx) do b:SetActive(Ink.db.gfxPreset == k) end
+		end
 	end
 end
 
@@ -284,6 +710,34 @@ function M:BuildPanel()
 	p.kb = Button(p, "단축키 설정", 130, function() Ink:OpenQuickKeybind() end)
 	p.kb:SetPoint("LEFT", p.reset, "RIGHT", 8, 0)
 
+	-- 2줄: 화면 비율 / UI 픽셀 맞춤 / 그래픽 프리셋
+	local h2 = Ink:Text(p, F.semi, 11, C.muted, "LEFT")
+	h2:SetPoint("TOPLEFT", p.edit, "BOTTOMLEFT", 0, -16)
+	h2:SetText("화면 · 그래픽")
+	p.aspect = Button(p, "비율", 150, function()
+		local cur = Ink.cdb.aspect or "auto"
+		local list = { "auto", "16:10", "16:9", "21:9", "32:9" }
+		local i = 1
+		for n, v in ipairs(list) do if v == cur then i = n end end
+		Ink:SetAspect(list[i % #list + 1])
+		M:SyncButtons()
+		if M.editing then M:SyncAll() end
+	end)
+	p.aspect:SetPoint("TOPLEFT", h2, "BOTTOMLEFT", 0, -8)
+	p.pixel = Button(p, "UI 픽셀 맞춤", 116, function() M:SetPixelPerfect(not Ink.db.pixelPerfect) end)
+	p.pixel:SetPoint("LEFT", p.aspect, "RIGHT", 8, 0)
+	p.gfx = {}
+	local prev = p.pixel
+	for _, g in ipairs({ { "perf", "성능" }, { "balanced", "균형" }, { "quality", "화질" }, { "restore", "되돌리기" } }) do
+		local b = Button(p, g[2], g[1] == "restore" and 74 or 58, function() M:ApplyGraphics(g[1]) end)
+		b:SetPoint("LEFT", prev, "RIGHT", g[1] == "perf" and 16 or 6, 0)
+		p.gfx[g[1]] = b
+		prev = b
+	end
+	p.gfxLabel = Ink:Text(p, F.sans, 10, C.dim, "LEFT")
+	p.gfxLabel:SetPoint("BOTTOMLEFT", p.gfx.perf, "TOPLEFT", 2, 4)
+	p.gfxLabel:SetText("그래픽 프리셋")
+
 	-- 두 칸으로: 왼쪽 = 화면 구성, 오른쪽 = 편의 기능 + 명령어
 	local function Column(anchor, x, header, list)
 		local h = Ink:Text(p, F.semi, 11, C.muted, "LEFT")
@@ -299,7 +753,7 @@ function M:BuildPanel()
 		end
 		return prev
 	end
-	local left = Column(p.edit, 0, "화면 구성 (바꾸면 /reload 필요)", {
+	local left = Column(p.aspect, 0, "화면 구성 (바꾸면 /reload 필요)", {
 		{ "파티 프레임", "FOA 파티 프레임을 씁니다.", "party" },
 		{ "레이드 프레임", "FOA 레이드 프레임을 씁니다.", "raid" },
 		{ "경험치 바", "얇은 FOA 경험치 바를 씁니다.", "xp" },
@@ -310,7 +764,7 @@ function M:BuildPanel()
 		{ "튜토리얼 끄기", "노란 안내 상자 · 화살표 · 도움말 말풍선을 숨깁니다.", "hideTutorials" },
 		{ "기본 창 / 글꼴 (실험)", "기본 창 껍데기와 글꼴 변경. 기본은 꺼짐.", "windows" },
 	})
-	local right = Column(p.edit, 330, "편의 기능", {
+	local right = Column(p.aspect, 330, "편의 기능", {
 		{ "잡동사니 자동 판매", "상인 창을 열면 회색 아이템을 팝니다.", "sellJunk" },
 		{ "자동 수리", "상인 창을 열면 장비를 수리합니다.", "autoRepair" },
 		{ "길드 자금으로 수리", "가능하면 길드 자금을 먼저 씁니다.", "guildRepair" },
@@ -422,6 +876,12 @@ function M:BuildGameMenuButton()
 end
 
 function M:Init()
+	C_Timer.After(0, function() pcall(M.ApplyPixelPerfect, M) end)
+	-- 해상도 / UI 크기가 바뀌면 다시 맞춘다 (값이 같으면 아무것도 안 함)
+	local e = CreateFrame("Frame")
+	e:RegisterEvent("DISPLAY_SIZE_CHANGED")
+	e:RegisterEvent("UI_SCALE_CHANGED")
+	e:SetScript("OnEvent", function() C_Timer.After(0.2, function() pcall(M.ApplyPixelPerfect, M) end) end)
 	self:BuildPanel()
 	self:BuildGameMenuButton()
 end
@@ -430,6 +890,7 @@ function M:CombatStart()
 	if self.editing then
 		for _, o in pairs(self.overlays) do o:Hide() end
 		if self.bar then self.bar:Hide() end
+		if self.grid then self.grid:Hide() end
 		self.pausedEdit = true
 		self.editing = false
 	end
