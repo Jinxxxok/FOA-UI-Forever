@@ -230,7 +230,6 @@ function M:LayoutWin(f)
 	for i = #f.rows + 1, n do f.rows[i] = Row(f, i) end
 	for i = n + 1, #f.rows do f.rows[i]:Hide() end
 	f.nrows = n
-	if f.slot == 1 and self.threat then self.threat:SetHeight(f:GetHeight()) end
 end
 
 function M:ResizeWin(f, w, h)
@@ -400,12 +399,13 @@ end
 --  지금 대상에 대한 내 위협 + 파티원(레이드면 탱커) 위협.
 --  전투 중 값이 비공개일 수 있어 정렬하지 않고, 막대·글자에 그대로 넘긴다.
 -------------------------------------------------------------------------------
-local TW, TROWS = 190, 6
+local TW, TROWS = 190, 10
 
 function M:BuildThreat()
-	local f = CreateFrame("Frame", "FOAThreat", self.frame)
-	f:SetSize(TW, self.frame:GetHeight())
-	f:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMLEFT", -8, 0)
+	-- 미터기와 따로: 자기 위치 · 크기 (편집 모드 "위협")
+	local f = CreateFrame("Frame", "FOAThreat", Ink.root)
+	f:SetSize(Ink:GetSize("threat", TW, DEF_H))
+	f:SetFrameStrata("LOW")
 	self.threat = f
 	f.bg = Ink:Round(f, "BACKGROUND", false, false, -8)
 	f.bg:SetAllPoints()
@@ -421,8 +421,8 @@ function M:BuildThreat()
 	f.title:SetPoint("TOPLEFT", 12, -9)
 	f.title:SetText("위협")
 	f.target = Ink:Text(f, F.sans, 10, C.muted, "RIGHT")
-	f.target:SetPoint("TOPRIGHT", -10, -11)
-	f.target:SetWidth(TW - 60)
+	f.target:SetPoint("RIGHT", f, "TOPRIGHT", -10, -15)
+	f.target:SetPoint("LEFT", f.title, "RIGHT", 10, -1)
 	f.line = f:CreateTexture(nil, "ARTWORK")
 	f.line:SetColorTexture(1, 1, 1, 0.05)
 	f.line:SetHeight(1)
@@ -431,8 +431,9 @@ function M:BuildThreat()
 	f.rows = {}
 	for i = 1, TROWS do
 		local r = CreateFrame("Frame", nil, f)
-		r:SetSize(TW - 12, ROW - 2)
+		r:SetHeight(ROW - 2)
 		r:SetPoint("TOPLEFT", 6, -HEAD - (i - 1) * ROW)
+		r:SetPoint("TOPRIGHT", -6, -HEAD - (i - 1) * ROW)
 		r.bar = CreateFrame("StatusBar", nil, r)
 		r.bar:SetAllPoints()
 		r.bar:SetStatusBarTexture(Ink.tex.white)
@@ -449,17 +450,35 @@ function M:BuildThreat()
 		r.tank:SetSize(11, 11)
 		r.tank:SetPoint("LEFT", 7, 0)
 		r.tank:SetVertexColor(C.red[1], C.red[2], C.red[3])
-		r.name = Ink:Text(r.over, F.semi, 11, C.text, "LEFT", "OVERLAY")
-		r.name:SetPoint("LEFT", 22, 0)
-		r.name:SetWidth(TW - 80)
 		r.value = Ink:Text(r.over, F.latin, 11, C.text, "RIGHT", "OVERLAY")
 		r.value:SetPoint("RIGHT", -8, 0)
+		r.name = Ink:Text(r.over, F.semi, 11, C.text, "LEFT", "OVERLAY")
+		r.name:SetPoint("LEFT", 22, 0)
+		r.name:SetPoint("RIGHT", r.value, "LEFT", -6, 0)
 		r:Hide()
 		f.rows[i] = r
 	end
 	f.empty = Ink:Text(f, F.sans, 11, C.dim, "CENTER")
 	f.empty:SetPoint("CENTER", 0, -HEAD / 2)
 	f.empty:SetText("전투 중인 대상이 없어요")
+	self:LayoutThreat()
+	local m = Ink:Movable("threat", "위협", f, "bottomright", 16 + W + 8, 48)
+	m.resize = function(w, h)
+		f:SetSize(w, h)
+		Ink:SaveSize("threat", w, h)
+		M:LayoutThreat()
+		M:RefreshThreat()
+	end
+	m.minW, m.minH, m.maxW, m.maxH = 150, HEAD + 2 * ROW + 6, 420, HEAD + TROWS * ROW + 6
+	m.defW, m.defH = TW, DEF_H
+end
+
+-- 창 높이에 들어가는 줄 수만 쓴다
+function M:LayoutThreat()
+	local f = self.threat
+	if not f then return end
+	f.nrows = math.max(1, math.min(TROWS, math.floor((f:GetHeight() - HEAD - 6) / ROW)))
+	for i = f.nrows + 1, TROWS do f.rows[i]:Hide() end
 end
 
 local function ThreatUnits()
@@ -501,7 +520,7 @@ function M:RefreshThreat()
 	if not f then return end
 	if self.testing then
 		local fake = { { "방패벽", "WARRIOR", 100, true }, { "디피킹", "ROGUE", 87 }, { "얼음꽃", "MAGE", 64 }, { "빛의서약", "PALADIN", 21 } }
-		for i = 1, TROWS do
+		for i = 1, f.nrows do
 			local d = fake[i]
 			if d then PaintThreat(f.rows[i], d[1], d[2], d[3], d[4] or false) else f.rows[i]:Hide() end
 		end
@@ -514,7 +533,7 @@ function M:RefreshThreat()
 	if has then
 		f.target:SetText(UnitName("target") or "")
 		for _, u in ipairs(ThreatUnits()) do
-			if n >= TROWS then break end
+			if n >= f.nrows then break end
 			local ok, tanking, _, scaled = pcall(UnitDetailedThreatSituation, u, "target")
 			if ok and scaled ~= nil then
 				n = n + 1
@@ -525,7 +544,7 @@ function M:RefreshThreat()
 	else
 		f.target:SetText("")
 	end
-	for i = n + 1, TROWS do f.rows[i]:Hide() end
+	for i = n + 1, f.nrows do f.rows[i]:Hide() end
 	f.empty:SetShown(n == 0)
 end
 
