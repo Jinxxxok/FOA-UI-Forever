@@ -23,7 +23,7 @@ FX.LIST = {
 	{ "trail", "체력 잔상", "맞은 만큼 흰 잔상이 남았다가 따라 줄어듦" },
 	{ "lowHp", "저체력 화면 테두리", "35% 아래에서 화면 가장자리가 붉게 숨 쉼" },
 	{ "powerFull", "자원 가득 빛", "자원이 가득 차면 바 위로 빛이 지나감" },
-	{ "comboPop", "연계 점수 톡", "칸이 찰 때마다 톡, 다 차면 한 번 더" },
+	{ "comboPop", "연계 점수 차오름", "칸이 은은하게 차오르고, 모일수록 색이 진해짐" },
 	{ "manaLow", "마나 부족 깜빡임", "마나 20% 아래에서 바가 은은하게 깜빡" },
 	{ "cdReady", "쿨 끝 빛 고리", "쿨이 끝나는 순간 아이콘에서 고리가 퍼짐" },
 	{ "procBracket", "주문 강화 모서리", "발동 효과를 노란 모서리 괄호로" },
@@ -405,33 +405,31 @@ function FX.UpdatePower(f, ptype)
 end
 
 -------------------------------------------------------------------------------
--- 4. 연계 점수 톡
+-- 4. 연계 점수: 칸이 찰 때 번쩍이지 않고 잉크가 스미듯 은은하게 차오른다
+--  + 모일수록 색이 점점 진해진다 (1칸 = 옅게 ... 가득 = 가장 진하게)
 -------------------------------------------------------------------------------
-local function SegPop(s, strong)
-	if not s.fxPop then
-		local g = s:CreateTexture(nil, "OVERLAY")
-		g:SetTexture(Ink.tex.glow)
-		g:SetBlendMode("ADD")
-		g:SetPoint("TOPLEFT", -10, 10)
-		g:SetPoint("BOTTOMRIGHT", 10, -10)
-		g:SetAlpha(0)
-		local ag = Anim(g)
-		local a = A(ag, "Alpha", 0.06, nil, 1)
-		a:SetFromAlpha(0)
+local function SegFill(s)
+	if not s.fxFill then
+		local ag = Anim(s.fill)
+		local a = A(ag, "Alpha", 0.45, "IN_OUT")
+		a:SetFromAlpha(0.15)
 		a:SetToAlpha(1)
-		local b = A(ag, "Alpha", 0.35, "OUT", 2)
-		b:SetFromAlpha(1)
-		b:SetToAlpha(0)
-		s.fxPopTex, s.fxPop = g, ag
+		s.fxFill = ag
 	end
-	local col = s.fxColor or C.accent
-	s.fxPopTex:SetVertexColor(col[1], col[2], col[3], strong and 1 or 0.7)
-	s.fxPop:Stop()
-	s.fxPop:Play()
+	s.fxFill:Stop()
+	s.fxFill:Play()
+end
+
+-- 채워진 칸의 진하기 (0~1). 값이 비공개면 nil → 원래대로(가장 진하게)
+function FX.ComboIntensity(pts, n)
+	if not pts or not n or n <= 0 or not FX.on("comboPop") then return nil end
+	local center = Ink.modules.Center
+	if center and center.testing and not FX.demo.comboPop then return nil end
+	return 0.5 + 0.5 * math.min(1, pts / n)
 end
 
 -- holder: 연계 점수 묶음, pts: 지금 칸 수(공개 값일 때만)
-function FX.Combo(holder, pts, color)
+function FX.Combo(holder, pts)
 	local center = Ink.modules.Center
 	local blocked = center and center.testing and not FX.demo.comboPop
 	if blocked or not FX.on("comboPop") or not pts then holder.fxLast = pts return end
@@ -440,14 +438,7 @@ function FX.Combo(holder, pts, color)
 	if not last or pts <= last then return end
 	for i = last + 1, math.min(pts, holder.n or 0) do
 		local s = holder.segs[i]
-		if s then s.fxColor = color; SegPop(s) end
-	end
-	if pts >= (holder.n or 99) then
-		-- 다 찼다: 모든 칸이 차례로 한 번 더
-		for i = 1, holder.n do
-			local s = holder.segs[i]
-			C_Timer.After(0.12 + i * 0.035, function() s.fxColor = color; SegPop(s, true) end)
-		end
+		if s then SegFill(s) end
 	end
 end
 

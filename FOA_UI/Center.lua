@@ -166,10 +166,13 @@ function M:UpdateCombo()
 	end
 	local v = plain(cp)
 	local full = v and v >= holder.n * (holder.mod or 1)
-	if ns.FX then ns.FX.Combo(holder, v and math.floor(v / (holder.mod or 1)), a) end
+	local pts = v and math.floor(v / (holder.mod or 1))
+	if ns.FX then ns.FX.Combo(holder, pts) end
+	-- 모일수록 진하게 (효과를 끄거나 값이 비공개면 늘 가장 진하게)
+	local k = ns.FX and ns.FX.ComboIntensity(pts, holder.n) or 1
 	for i = 1, holder.n do
-		holder.segs[i].fill:SetStatusBarColor(a[1], a[2], a[3], 1)
-		holder.segs[i].glow:SetStatusBarColor(a[1], a[2], a[3], full and 0.9 or 0.5)
+		holder.segs[i].fill:SetStatusBarColor(a[1], a[2], a[3], k)
+		holder.segs[i].glow:SetStatusBarColor(a[1], a[2], a[3], (full and 0.9 or 0.5) * k)
 	end
 end
 
