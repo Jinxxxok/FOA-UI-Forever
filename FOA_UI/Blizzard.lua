@@ -531,6 +531,28 @@ local function SkinBagButton(b)
 	if count then count:SetFont(F.latinB, 9, "OUTLINE") end
 end
 
+function M:PlaceDurability()
+	local d = DurabilityFrame
+	if not (d and self.duraAnchor) or d.inkPlacing then return end
+	if d:IsProtected() and InCombatLockdown() then return end
+	d.inkPlacing = true
+	safe(function()
+		d:ClearAllPoints()
+		d:SetPoint("TOPRIGHT", self.duraAnchor, "TOPRIGHT", 0, 0)
+	end)
+	d.inkPlacing = nil
+end
+
+function M:HookDurability()
+	local d = DurabilityFrame
+	if not d or self.duraHooked then return end
+	self.duraHooked = true
+	-- 블리자드가 오른쪽 정렬 묶음 안에서 다시 자리를 잡을 때마다 FOA 위치로 되돌린다
+	hooksecurefunc(d, "SetPoint", function() M:PlaceDurability() end)
+	if d.HookScript then d:HookScript("OnShow", function() M:PlaceDurability() end) end
+	self:PlaceDurability()
+end
+
 function M:BuildAnchors()
 	self.buffAnchor = Ink:Anchor(300, 40)
 	self.questAnchor = Ink:Anchor(240, 400)
@@ -541,6 +563,10 @@ function M:BuildAnchors()
 	Ink:Movable("buffs", "버프", self.buffAnchor, "right", 236, 20)
 	Ink:Movable("quest", "퀘스트 목록", self.questAnchor, "right", 60, 240)
 	Ink:Movable("chat", "채팅", self.chatAnchor, "bottomleft", 16, 48)
+	-- 장비 내구도 경고(노란 갑옷 인형): 퀘스트 목록을 가리지 않게 미니맵 왼쪽 아래 빈 곳으로
+	self.duraAnchor = Ink:Anchor(60, 75)
+	Ink:Movable("durability", "내구도", self.duraAnchor, "right", 236, 140)
+	self:HookDurability()
 	-- 가방 칸 줄은 진영 문양 메뉴(Launcher.lua)로 대신한다
 	if Ink.db.launcher == false then
 		Ink:Movable("bags", "가방", self.bagAnchor, "left", 12, 12)
@@ -1440,6 +1466,7 @@ end
 function M:PostLayout()
 	self:LayoutMinimap()
 	self:AnchorQueue()
+	self:PlaceDurability()
 	self:LayoutAnchors()
 	self:SkinActionBars()
 	self:SkinChat()
