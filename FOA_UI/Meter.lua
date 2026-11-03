@@ -12,6 +12,8 @@ local F, C = Ink.font, Ink.c
 local plain = Ink.plain
 
 local W, HEAD, ROW, ROWS = 300, 30, 20, 8
+local DEF_H = HEAD + ROWS * ROW + 6
+local MAX_ROWS, MAX_WIN = 40, 4
 
 -- 막대가 새 값까지 미끄러지듯 차오르게 (엔진 보간이라 비공개 값도 그대로 된다)
 local SMOOTH = Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
@@ -67,8 +69,9 @@ end
 -------------------------------------------------------------------------------
 local function Row(parent, i)
 	local r = CreateFrame("Frame", nil, parent)
-	r:SetSize(W - 12, ROW - 2)
+	r:SetHeight(ROW - 2)
 	r:SetPoint("TOPLEFT", 6, -HEAD - (i - 1) * ROW)
+	r:SetPoint("TOPRIGHT", -6, -HEAD - (i - 1) * ROW)
 	r.bar = CreateFrame("StatusBar", nil, r)
 	r.bar:SetAllPoints()
 	r.bar:SetStatusBarTexture(Ink.tex.white)
@@ -99,107 +102,200 @@ local function Row(parent, i)
 	m:SetTexture(Ink.tex.mask, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
 	m:SetAllPoints(r.icon)
 	r.icon:AddMaskTexture(m)
-	r.name = Ink:Text(r.over, F.semi, 11, C.text, "LEFT", "OVERLAY")
-	r.name:SetPoint("LEFT", r.icon, "RIGHT", 7, 0)
-	r.name:SetWidth(118)
 	r.value = Ink:Text(r.over, F.latin, 11, C.text, "RIGHT", "OVERLAY")
 	r.value:SetPoint("RIGHT", -8, 0)
+	r.name = Ink:Text(r.over, F.semi, 11, C.text, "LEFT", "OVERLAY")
+	r.name:SetPoint("LEFT", r.icon, "RIGHT", 7, 0)
+	r.name:SetPoint("RIGHT", r.value, "LEFT", -8, 0)
 	if ns.FX then pcall(ns.FX.AttachMeterRow, r, ROW - 2) end
 	r:Hide()
 	return r
 end
 
-function M:Build()
-	local f = CreateFrame("Frame", "FOAMeter", Ink.root)
-	f:SetSize(W, HEAD + ROWS * ROW + 8)
-	f:SetFrameStrata("LOW")
-	self.frame = f
-	f.bg = Ink:Round(f, "BACKGROUND", false, false, -8)
-	f.bg:SetAllPoints()
-	f.bg:SetVertexColor(0.035, 0.04, 0.052, 0.86)
-	f.bd = Ink:Round(f, "BORDER", false, true, -8)
-	f.bd:SetAllPoints()
-	f.bd:SetVertexColor(1, 1, 1, 0.07)
-	f.accent = f:CreateTexture(nil, "ARTWORK")
-	f.accent:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.95)
-	f.accent:SetSize(22, 2)
-	f.accent:SetPoint("TOPLEFT", 12, -1)
-
-	-- 제목 (누르면 메뉴)
-	local head = CreateFrame("Button", nil, f)
-	head:SetPoint("TOPLEFT", 6, -2)
-	head:SetSize(170, HEAD - 4)
-	head:RegisterForClicks("AnyUp")
-	f.title = Ink:Text(head, F.bold, 13, C.text, "LEFT")
-	f.title:SetPoint("LEFT", 6, 0)
-	f.caret = Ink:Text(head, F.sans, 10, C.dim, "LEFT")
-	f.caret:SetPoint("LEFT", f.title, "RIGHT", 5, -1)
-	f.caret:SetText("변경")
-	head:SetScript("OnClick", function(self) M:OpenMenu(self) end)
-	head:SetScript("OnEnter", function() f.caret:SetTextColor(C.accent[1], C.accent[2], C.accent[3]) end)
-	head:SetScript("OnLeave", function() f.caret:SetTextColor(C.dim[1], C.dim[2], C.dim[3]) end)
-
-	-- 현재 / 전체 전환 + 시간
-	local ses = CreateFrame("Button", nil, f)
-	ses:SetSize(44, 20)
-	ses:SetPoint("TOPRIGHT", -8, -5)
-	ses.bg = Ink:Round(ses, "BACKGROUND", true, false)
-	ses.bg:SetAllPoints()
-	ses.bg:SetVertexColor(1, 1, 1, 0.06)
-	ses.text = Ink:Text(ses, F.semi, 10, C.soft, "CENTER")
-	ses.text:SetPoint("CENTER", 0, 0)
-	ses:SetScript("OnClick", function()
-		Ink.db.meterSession = (Ink.db.meterSession == SESSION.Overall) and SESSION.Current or SESSION.Overall
-		M:Refresh()
+-- 작은 글자 버튼 (+ / ×)
+local function TinyButton(parent, glyph, tip)
+	local b = CreateFrame("Button", nil, parent)
+	b:SetSize(20, 20)
+	b.bg = Ink:Round(b, "BACKGROUND", true, false)
+	b.bg:SetAllPoints()
+	b.bg:SetVertexColor(1, 1, 1, 0.04)
+	b.text = Ink:Text(b, F.latin, 14, C.muted, "CENTER")
+	b.text:SetPoint("CENTER", 0, 1)
+	b.text:SetText(glyph)
+	b:SetScript("OnEnter", function(self)
+		self.bg:SetVertexColor(1, 1, 1, 0.1)
+		self.text:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:SetText(tip, 1, 1, 1)
+		GameTooltip:Show()
 	end)
-	f.ses = ses
-	f.time = Ink:Text(f, F.latin, 11, C.muted, "RIGHT")
-	f.time:SetPoint("RIGHT", ses, "LEFT", -8, 0)
+	b:SetScript("OnLeave", function(self)
+		self.bg:SetVertexColor(1, 1, 1, 0.04)
+		self.text:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
+		GameTooltip:Hide()
+	end)
+	return b
+end
 
-	f.line = f:CreateTexture(nil, "ARTWORK")
-	f.line:SetColorTexture(1, 1, 1, 0.05)
-	f.line:SetHeight(1)
-	f.line:SetPoint("TOPLEFT", 10, -HEAD + 2)
-	f.line:SetPoint("TOPRIGHT", -10, -HEAD + 2)
+local function WinKey(slot) return slot == 1 and "meter" or ("meter" .. slot) end
 
-	f.rows = {}
-	for i = 1, ROWS do f.rows[i] = Row(f, i) end
-	f.empty = Ink:Text(f, F.sans, 11, C.dim, "CENTER")
-	f.empty:SetPoint("CENTER", 0, -HEAD / 2)
-	f.empty:SetText("아직 전투 기록이 없어요")
+-- 창 하나 (slot 1 = 기본 창, 2~4 = 새로 연 창). 창마다 보기 종류 · 현재/전체가 따로
+function M:BuildWindow(slot)
+	local f = self.wins[slot]
+	if not f then
+		local key = WinKey(slot)
+		local w, h = Ink:GetSize(key, W, DEF_H)
+		f = CreateFrame("Frame", slot == 1 and "FOAMeter" or ("FOAMeter" .. slot), Ink.root)
+		f:SetSize(w, h)
+		f:SetFrameStrata("LOW")
+		f.slot, f.key = slot, key
+		self.wins[slot] = f
+		f.bg = Ink:Round(f, "BACKGROUND", false, false, -8)
+		f.bg:SetAllPoints()
+		f.bg:SetVertexColor(0.035, 0.04, 0.052, 0.86)
+		f.bd = Ink:Round(f, "BORDER", false, true, -8)
+		f.bd:SetAllPoints()
+		f.bd:SetVertexColor(1, 1, 1, 0.07)
+		f.accent = f:CreateTexture(nil, "ARTWORK")
+		f.accent:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.95)
+		f.accent:SetSize(22, 2)
+		f.accent:SetPoint("TOPLEFT", 12, -1)
 
-	Ink:Movable("meter", "미터기", f, "bottomright", 16, 48)
+		-- 제목 (누르면 메뉴)
+		local head = CreateFrame("Button", nil, f)
+		head:SetPoint("TOPLEFT", 6, -2)
+		head:SetSize(150, HEAD - 4)
+		head:RegisterForClicks("AnyUp")
+		f.title = Ink:Text(head, F.bold, 13, C.text, "LEFT")
+		f.title:SetPoint("LEFT", 6, 0)
+		f.caret = Ink:Text(head, F.sans, 10, C.dim, "LEFT")
+		f.caret:SetPoint("LEFT", f.title, "RIGHT", 5, -1)
+		f.caret:SetText("변경")
+		head:SetScript("OnClick", function(self) M:OpenMenu(self, f) end)
+		head:SetScript("OnEnter", function() f.caret:SetTextColor(C.accent[1], C.accent[2], C.accent[3]) end)
+		head:SetScript("OnLeave", function() f.caret:SetTextColor(C.dim[1], C.dim[2], C.dim[3]) end)
+
+		-- 오른쪽 위: (닫기) · 현재/전체 · 새 창 · 시간
+		local right = -8
+		if slot > 1 then
+			f.close = TinyButton(f, "×", "이 창 닫기")
+			f.close:SetPoint("TOPRIGHT", right, -5)
+			f.close:SetScript("OnClick", function() M:CloseWindow(slot) end)
+			right = right - 24
+		end
+		local ses = CreateFrame("Button", nil, f)
+		ses:SetSize(44, 20)
+		ses:SetPoint("TOPRIGHT", right, -5)
+		ses.bg = Ink:Round(ses, "BACKGROUND", true, false)
+		ses.bg:SetAllPoints()
+		ses.bg:SetVertexColor(1, 1, 1, 0.06)
+		ses.text = Ink:Text(ses, F.semi, 10, C.soft, "CENTER")
+		ses.text:SetPoint("CENTER", 0, 0)
+		ses:SetScript("OnClick", function()
+			f.cfg.session = (f.cfg.session == SESSION.Overall) and SESSION.Current or SESSION.Overall
+			M:RefreshWin(f)
+		end)
+		f.ses = ses
+		f.add = TinyButton(f, "+", "새 미터기 창 열기 (최대 " .. MAX_WIN .. "개)")
+		f.add:SetPoint("RIGHT", ses, "LEFT", -4, 0)
+		f.add:SetScript("OnClick", function() M:OpenWindow() end)
+		f.time = Ink:Text(f, F.latin, 11, C.muted, "RIGHT")
+		f.time:SetPoint("RIGHT", f.add, "LEFT", -6, 0)
+
+		f.line = f:CreateTexture(nil, "ARTWORK")
+		f.line:SetColorTexture(1, 1, 1, 0.05)
+		f.line:SetHeight(1)
+		f.line:SetPoint("TOPLEFT", 10, -HEAD + 2)
+		f.line:SetPoint("TOPRIGHT", -10, -HEAD + 2)
+
+		f.rows = {}
+		f.empty = Ink:Text(f, F.sans, 11, C.dim, "CENTER")
+		f.empty:SetPoint("CENTER", 0, -HEAD / 2)
+		f.empty:SetText("아직 전투 기록이 없어요")
+	end
+	f.cfg = Ink.db.meterWins[slot]
+	f:Show()
+	self:LayoutWin(f)
+	local m = Ink:Movable(f.key, slot == 1 and "미터기" or ("미터기 " .. slot), f, "bottomright", 16, 48 + (slot - 1) * (DEF_H + 12))
+	-- 편집 모드에서 오른쪽 아래 모서리를 끌어 크기 조절
+	m.resize = function(w, h) M:ResizeWin(f, w, h) end
+	m.minW, m.minH, m.maxW, m.maxH = 220, HEAD + 2 * ROW + 6, 640, HEAD + MAX_ROWS * ROW + 6
+	m.defW, m.defH = W, DEF_H
+	return f
+end
+
+-- 창 크기에 맞춰 줄 수를 정한다
+function M:LayoutWin(f)
+	local n = math.max(1, math.min(MAX_ROWS, math.floor((f:GetHeight() - HEAD - 6) / ROW)))
+	for i = #f.rows + 1, n do f.rows[i] = Row(f, i) end
+	for i = n + 1, #f.rows do f.rows[i]:Hide() end
+	f.nrows = n
+	if f.slot == 1 and self.threat then self.threat:SetHeight(f:GetHeight()) end
+end
+
+function M:ResizeWin(f, w, h)
+	f:SetSize(w, h)
+	Ink:SaveSize(f.key, w, h)
+	self:LayoutWin(f)
+	self:RefreshWin(f)
+end
+
+function M:OpenWindow()
+	for slot = 2, MAX_WIN do
+		if not Ink.db.meterWins[slot] then
+			local base = Ink.db.meterWins[1] or {}
+			-- 새 창은 다른 보기로 시작 (기본 창이 피해량이면 치유량)
+			Ink.db.meterWins[slot] = { mode = ((base.mode or 1) == 3) and 1 or 3, session = base.session }
+			local f = self:BuildWindow(slot)
+			self:RefreshWin(f)
+			local cfgM = Ink.modules.Config
+			if cfgM and cfgM.editing then cfgM:SetEdit(false); cfgM:SetEdit(true) end
+			return
+		end
+	end
+	print("|cffFFF468FOA|r 미터기 창은 " .. MAX_WIN .. "개까지 열 수 있어요.")
+end
+
+function M:CloseWindow(slot)
+	if slot == 1 then return end
+	local f = self.wins[slot]
+	Ink.db.meterWins[slot] = nil
+	if f then f:Hide() end
+	Ink:RemoveMovable(WinKey(slot))
 end
 
 -------------------------------------------------------------------------------
 -- 메뉴
 -------------------------------------------------------------------------------
-function M:Mode()
-	local idx = Ink.db.meterMode or 1
+function M:Mode(f)
+	local idx = (f and f.cfg and f.cfg.mode) or 1
 	return MODES[idx] or MODES[1], idx
 end
 
-function M:OpenMenu(owner)
+function M:OpenMenu(owner, f)
+	local cfg = f.cfg
 	if MenuUtil and MenuUtil.CreateContextMenu then
 		local ok = pcall(MenuUtil.CreateContextMenu, owner, function(_, root)
 			root:CreateTitle("보기")
 			for i, m in ipairs(MODES) do
-				root:CreateRadio(m.name, function() return (Ink.db.meterMode or 1) == i end, function()
-					Ink.db.meterMode = i
-					M:Refresh()
+				root:CreateRadio(m.name, function() return (cfg.mode or 1) == i end, function()
+					cfg.mode = i
+					M:RefreshWin(f)
 				end)
 			end
 			root:CreateDivider()
 			root:CreateTitle("전투")
-			root:CreateRadio("현재 전투", function() return Ink.db.meterSession ~= SESSION.Overall end, function()
-				Ink.db.meterSession = SESSION.Current
-				M:Refresh()
+			root:CreateRadio("현재 전투", function() return cfg.session ~= SESSION.Overall end, function()
+				cfg.session = SESSION.Current
+				M:RefreshWin(f)
 			end)
-			root:CreateRadio("전체", function() return Ink.db.meterSession == SESSION.Overall end, function()
-				Ink.db.meterSession = SESSION.Overall
-				M:Refresh()
+			root:CreateRadio("전체", function() return cfg.session == SESSION.Overall end, function()
+				cfg.session = SESSION.Overall
+				M:RefreshWin(f)
 			end)
 			root:CreateDivider()
+			root:CreateButton("새 미터기 창 열기", function() M:OpenWindow() end)
+			if f.slot > 1 then root:CreateButton("이 창 닫기", function() M:CloseWindow(f.slot) end) end
 			root:CreateButton("|cffFF6B5E기록 초기화|r", function()
 				if C_DamageMeter and C_DamageMeter.ResetAllCombatSessions then pcall(C_DamageMeter.ResetAllCombatSessions) end
 				M:Refresh()
@@ -208,15 +304,15 @@ function M:OpenMenu(owner)
 		if ok then return end
 	end
 	-- 메뉴를 못 쓰면 다음 보기로 넘긴다
-	local _, idx = self:Mode()
-	Ink.db.meterMode = idx % #MODES + 1
-	self:Refresh()
+	local _, idx = self:Mode(f)
+	cfg.mode = idx % #MODES + 1
+	self:RefreshWin(f)
 end
 
 -------------------------------------------------------------------------------
 -- 그리기
 -------------------------------------------------------------------------------
-local function Paint(r, src, maxAmount, mode, rank)
+local function Paint(r, src, maxAmount, mode, rank, win)
 	local class = plain(src.classFilename)
 	local cr, cg, cb = ns.ClassColorOf(class)
 	r.bar:SetStatusBarColor(cr, cg, cb, 0.3)
@@ -247,35 +343,33 @@ local function Paint(r, src, maxAmount, mode, rank)
 	if fx then
 		local nm = plain(src.name)
 		local ok = not M.testing or fx.demoOn("meterSlide")
-		if ok and nm and r.fxName and r.fxName ~= nm and M.prevRank then
-			local from = M.prevRank[nm]
+		if ok and nm and r.fxName and r.fxName ~= nm and win and win.prevRank then
+			local from = win.prevRank[nm]
 			if from and from ~= rank then
 				local dy = math.max(-2, math.min(2, rank - from)) * ROW
 				r.fxSlide(dy)
 			end
 		end
 		r.fxName = nm
-		if nm and M.curRank then M.curRank[nm] = rank end
+		if nm and win and win.curRank then win.curRank[nm] = rank end
 		fx.MeterTop(r, rank == 1 and (not M.testing or fx.demoOn("meterGlow")), cr, cg, cb)
 	end
 end
 
--- 창 높이는 늘 8줄 크기로 고정 (혼자일 때도 테스트 때처럼 넉넉하게, 사람 수에 따라 들썩이지 않게)
-function M:FitHeight()
-	local h = HEAD + ROWS * ROW + 6
-	self.frame:SetHeight(h)
-	if self.threat then self.threat:SetHeight(h) end
+function M:Refresh()
+	for slot = 1, MAX_WIN do
+		local f = self.wins and self.wins[slot]
+		if f and f:IsShown() then self:RefreshWin(f) end
+	end
 end
 
-function M:Refresh()
-	local f = self.frame
-	if not f then return end
-	local mode = self:Mode()
+function M:RefreshWin(f)
+	local mode = self:Mode(f)
 	f.title:SetText(mode.name)
-	local sesType = Ink.db.meterSession == SESSION.Overall and SESSION.Overall or SESSION.Current
+	local sesType = f.cfg.session == SESSION.Overall and SESSION.Overall or SESSION.Current
 	f.ses.text:SetText(sesType == SESSION.Overall and "전체" or "현재")
 
-	if self.testing then return self:PaintTest(mode) end
+	if self.testing then return self:PaintTest(f, mode) end
 
 	local session
 	if C_DamageMeter and C_DamageMeter.GetCombatSessionFromType then
@@ -285,19 +379,18 @@ function M:Refresh()
 	local list = session and session.combatSources or {}
 	local maxAmount = session and session.maxAmount or 0
 	local shown = 0
-	self.curRank = {}
-	for i = 1, ROWS do
+	f.curRank = {}
+	for i = 1, f.nrows do
 		local src = list[i]
 		if src then
 			shown = i
-			pcall(Paint, f.rows[i], src, maxAmount, mode, i)
+			pcall(Paint, f.rows[i], src, maxAmount, mode, i, f)
 		else
 			f.rows[i]:Hide()
 		end
 	end
-	self.prevRank = self.curRank
+	f.prevRank = f.curRank
 	f.empty:SetShown(shown == 0)
-	self:FitHeight(shown)
 	local dur = C_DamageMeter and C_DamageMeter.GetSessionDurationSeconds and C_DamageMeter.GetSessionDurationSeconds(sesType)
 	f.time:SetText(Clock(dur))
 end
@@ -443,8 +536,7 @@ local FAKE = {
 	{ "그림자손", "WARLOCK", 136145, 2.9e6, 19300 }, { "빛의서약", "PALADIN", 135920, 1.1e6, 7300 },
 }
 -- 테스트 모드: 시간이 지나며 딜이 쌓이고 순위도 뒤바뀌는 가짜 전투
-function M:PaintTest(mode)
-	local f = self.frame
+function M:PaintTest(f, mode)
 	self.testStart = self.testStart or GetTime()
 	local t = GetTime() - self.testStart + 1
 	local list = {}
@@ -458,17 +550,16 @@ function M:PaintTest(mode)
 	local key = mode.rate and "amountPerSecond" or "totalAmount"
 	table.sort(list, function(a, b) return a[key] > b[key] end)
 	local top = list[1] and list[1][key] or 1
-	self.curRank = {}
-	for i = 1, ROWS do
+	f.curRank = {}
+	for i = 1, f.nrows do
 		if list[i] then
-			pcall(Paint, f.rows[i], list[i], top, mode, i)
+			pcall(Paint, f.rows[i], list[i], top, mode, i, f)
 		else
 			f.rows[i]:Hide()
 		end
 	end
-	self.prevRank = self.curRank
+	f.prevRank = f.curRank
 	f.empty:Hide()
-	self:FitHeight(#FAKE)
 	f.time:SetText(Clock(t))
 end
 
@@ -496,7 +587,16 @@ function M:Init()
 		pcall(C_CVar.SetCVar, "damageMeterEnabled", "1")
 	end
 	if DamageMeter then Ink:Disable(DamageMeter, true) end
-	self:Build()
+	-- 창 설정 (예전 한 창 설정은 1번 창으로)
+	if not Ink.db.meterWins then
+		Ink.db.meterWins = { { mode = Ink.db.meterMode or 1, session = Ink.db.meterSession } }
+	end
+	Ink.db.meterWins[1] = Ink.db.meterWins[1] or { mode = 1 }
+	self.wins = {}
+	self.frame = self:BuildWindow(1)
+	for slot = 2, MAX_WIN do
+		if Ink.db.meterWins[slot] then self:BuildWindow(slot) end
+	end
 	if Ink.db.threat ~= false then self:BuildThreat() end
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({ "DAMAGE_METER_COMBAT_SESSION_UPDATED", "DAMAGE_METER_CURRENT_SESSION_UPDATED",

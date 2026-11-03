@@ -171,6 +171,102 @@ local function Snap(key)
 		math.floor(x / SNAP + 0.5) * SNAP / s, -math.floor(y / SNAP + 0.5) * SNAP / s)
 end
 
+-- 크기 조절 (미터기 · 채팅): 아래쪽 띠 = 높이, 오른쪽 아래 모서리 = 폭과 높이
+--  끄는 동안 왼쪽 위 모서리는 그대로 두고 오른쪽 · 아래로 늘어난다
+local function StartResize(m, o, both)
+	if InCombatLockdown() or not m.resize then return end
+	M:Select(m.key)
+	local f = m.frame
+	local x, y = Ink:FrameBox(m.key)
+	if not x then return end
+	local s = f:GetScale() or 1
+	f:ClearAllPoints()
+	f:SetPoint("TOPLEFT", Ink.root, "TOPLEFT", x / s, -y / s)
+	local cx, cy = GetCursorPosition()
+	local es = f:GetEffectiveScale()
+	local w0, h0 = f:GetSize()
+	o.resizing = true
+	o:SetScript("OnUpdate", function()
+		if InCombatLockdown() then return end
+		local nx, ny = GetCursorPosition()
+		local w = both and (w0 + (nx - cx) / es) or w0
+		local h = h0 + (cy - ny) / es
+		w = math.max(m.minW or 100, math.min(m.maxW or 2000, w))
+		h = math.max(m.minH or 40, math.min(m.maxH or 2000, h))
+		if Ink.db.editSnap ~= false then
+			w = math.floor(w / 4 + 0.5) * 4
+			h = math.floor(h / 4 + 0.5) * 4
+		end
+		local cw, ch = f:GetSize()
+		if math.abs(cw - w) >= 1 or math.abs(ch - h) >= 1 then
+			m.resize(w, h)
+			M:SyncOverlay(m)
+			if o.sizeTxt then o.sizeTxt:SetText(string.format("%d × %d", w, h)) end
+		end
+	end)
+	if o.sizeTxt then o.sizeTxt:SetText(string.format("%d × %d", w0, h0)); o.sizeTxt:Show() end
+end
+
+local function StopResize(m, o)
+	if not o.resizing then return end
+	o.resizing = nil
+	o:SetScript("OnUpdate", nil)
+	if o.sizeTxt then o.sizeTxt:Hide() end
+	if InCombatLockdown() then return end
+	Ink:SavePos(m.key)
+	Ink:Relayout()
+	M:SyncAll()
+end
+
+local function AddResizeGrips(m, o)
+	local a = C.accent
+	-- 아래쪽 띠 (가운데 작은 손잡이)
+	local bottom = CreateFrame("Button", nil, o)
+	bottom:SetPoint("BOTTOMLEFT", 0, 0)
+	bottom:SetPoint("BOTTOMRIGHT", -18, 0)
+	bottom:SetHeight(8)
+	bottom:SetFrameLevel(o:GetFrameLevel() + 4)
+	bottom.pill = bottom:CreateTexture(nil, "OVERLAY")
+	bottom.pill:SetTexture(Ink.tex.round4)
+	if bottom.pill.SetTextureSliceMargins then bottom.pill:SetTextureSliceMargins(3, 3, 3, 3) end
+	bottom.pill:SetSize(34, 4)
+	bottom.pill:SetPoint("CENTER", o, "BOTTOM", 0, 3)
+	bottom.pill:SetVertexColor(a[1], a[2], a[3], 0.8)
+	-- 오른쪽 아래 모서리 (대각선 세 줄)
+	local corner = CreateFrame("Button", nil, o)
+	corner:SetSize(18, 18)
+	corner:SetPoint("BOTTOMRIGHT", 0, 0)
+	corner:SetFrameLevel(o:GetFrameLevel() + 5)
+	for i, len in ipairs({ 5, 10, 15 }) do
+		local t = corner:CreateTexture(nil, "OVERLAY")
+		t:SetColorTexture(a[1], a[2], a[3], 0.95)
+		t:SetSize(len, 1.5)
+		t:SetRotation(math.rad(45))
+		t:SetPoint("CENTER", corner, "BOTTOMRIGHT", -len * 0.38 - 2, len * 0.38 + 2)
+	end
+	for _, g in ipairs({ bottom, corner }) do
+		g:SetScript("OnMouseDown", function(_, btn) if btn == "LeftButton" then StartResize(m, o, g == corner) end end)
+		g:SetScript("OnMouseUp", function() StopResize(m, o) end)
+		g:SetScript("OnHide", function() StopResize(m, o) end)
+		g:SetScript("OnEnter", function()
+			GameTooltip:SetOwner(g, "ANCHOR_RIGHT")
+			GameTooltip:SetText(g == corner and "끌어서 폭 · 높이 조절" or "끌어서 높이 조절", 1, 1, 1)
+			GameTooltip:Show()
+		end)
+		g:SetScript("OnLeave", GameTooltip_Hide)
+	end
+	o.sizeTxt = Ink:Text(o, F.latinB, 11, C.accent, "CENTER")
+	o.sizeTxt:SetPoint("CENTER")
+	o.sizeTxt:Hide()
+end
+
+local function ResetSize(m)
+	if m and m.resize and m.defW then
+		m.resize(m.defW, m.defH)
+		Ink:SaveSize(m.key, nil)
+	end
+end
+
 local function BuildOverlay(m)
 	local o = CreateFrame("Frame", nil, Ink.root)
 	o:SetFrameStrata("DIALOG")
@@ -218,6 +314,7 @@ local function BuildOverlay(m)
 	-- 우클릭: 이 요소만 기본 위치로
 	o:SetScript("OnMouseUp", function(_, btn)
 		if btn == "RightButton" and not InCombatLockdown() then
+			ResetSize(m)
 			Ink:ResetPos(m.key)
 			Ink:Relayout()
 			M:SyncAll()
@@ -230,6 +327,7 @@ local function BuildOverlay(m)
 		M:Select(m.key)
 		M:Nudge(nil, nil, d > 0 and 0.05 or -0.05)
 	end)
+	if m.resize then AddResizeGrips(m, o) end
 	return o
 end
 
@@ -856,6 +954,7 @@ end
 
 function M:ResetAll()
 	if InCombatLockdown() then return end
+	for _, key in ipairs(Ink.moverOrder) do ResetSize(Ink.movers[key]) end
 	Ink:ResetPos()
 	Ink:Relayout()
 	local B = Ink.modules.Bags

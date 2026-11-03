@@ -1223,7 +1223,7 @@ function FX.AttachMeterRow(r, rowH)
 	local sg = Anim(g.sheen, "REPEAT")
 	local sm = A(sg, "Translation", 1.1, "IN_OUT", 1, 2.4)
 	sm:SetOffset((r:GetWidth() or 200) + 80, 0)
-	g.sg = sg
+	g.sg, g.sm = sg, sm
 	g:Hide()
 	r.fxGlow = g
 end
@@ -1234,7 +1234,11 @@ function FX.MeterTop(r, on, cr, cg, cb)
 	on = on and FX.on("meterGlow")
 	if on then
 		g.sheen:SetVertexColor(cr or 1, cg or 1, cb or 1)
-		if not g:IsShown() then g:Show(); g.sg:Play() end
+		if not g:IsShown() then
+			g.sm:SetOffset(math.max(120, r:GetWidth() or 200) + 80, 0)
+			g:Show()
+			g.sg:Play()
+		end
 	elseif g:IsShown() then
 		g.sg:Stop()
 		g:Hide()

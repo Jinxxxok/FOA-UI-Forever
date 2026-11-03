@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.23.4"
+Ink.version = "0.24.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -412,6 +412,32 @@ function Ink:Movable(key, label, frame, mode, x, y, w, h)
 	m.label, m.frame, m.mode, m.x, m.y, m.w, m.h = label, frame, mode, x, y, w, h
 	self:ApplyPos(key)
 	return m
+end
+
+-- 편집 모드 목록에서 빼기 (닫은 미터기 창 등)
+function Ink:RemoveMovable(key)
+	if not self.movers[key] then return end
+	self.movers[key] = nil
+	for i, k in ipairs(self.moverOrder) do
+		if k == key then table.remove(self.moverOrder, i) break end
+	end
+	local cfg = self.modules.Config
+	local o = cfg and cfg.overlays and cfg.overlays[key]
+	if o then o:Hide(); cfg.overlays[key] = nil end
+	if cfg and cfg.sel == key then cfg.sel = nil end
+end
+
+-- 창 크기 (편집 모드에서 끌어서 바꾼 크기 · 캐릭터별)
+function Ink:GetSize(key, w, h)
+	local t = self.cdb and self.cdb.sizes and self.cdb.sizes[key]
+	if t then return t[1] or w, t[2] or h end
+	return w, h
+end
+
+function Ink:SaveSize(key, w, h)
+	if not self.cdb then return end
+	self.cdb.sizes = self.cdb.sizes or {}
+	self.cdb.sizes[key] = (w and h) and { math.floor(w + 0.5), math.floor(h + 0.5) } or nil
 end
 
 -- 크기 조절이 되는 요소인가 (블리자드 프레임을 붙이는 투명 앵커는 크기 조절 안 함)

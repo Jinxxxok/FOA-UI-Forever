@@ -553,13 +553,21 @@ end
 function M:BuildAnchors()
 	self.buffAnchor = Ink:Anchor(300, 40)
 	self.questAnchor = Ink:Anchor(240, 400)
-	self.chatAnchor = Ink:Anchor(340, 140)
+	self.chatAnchor = Ink:Anchor(Ink:GetSize("chat", 340, 140))
 	self.bagAnchor = Ink:Anchor(180, 24)
 
 	Ink:Movable("minimap", "미니맵", self.mmAnchor, "right", 16, 16)
 	Ink:Movable("buffs", "버프", self.buffAnchor, "right", 236, 20)
 	Ink:Movable("quest", "퀘스트 목록", self.questAnchor, "right", 60, 240)
-	Ink:Movable("chat", "채팅", self.chatAnchor, "bottomleft", 16, 48)
+	local cm = Ink:Movable("chat", "채팅", self.chatAnchor, "bottomleft", 16, 48)
+	-- 편집 모드에서 아래 띠 / 모서리를 끌어 채팅창 크기 조절
+	cm.resize = function(w, h)
+		self.chatAnchor:SetSize(w, h)
+		Ink:SaveSize("chat", w, h)
+		if ChatFrame1 then Ink:Fit(ChatFrame1, self.chatAnchor, "BOTTOMLEFT", w, h) end
+	end
+	cm.minW, cm.minH, cm.maxW, cm.maxH = 220, 70, 900, 600
+	cm.defW, cm.defH = 340, 140
 	-- 장비 내구도 경고(노란 갑옷 인형): 퀘스트 목록을 가리지 않게 미니맵 왼쪽 아래 빈 곳으로
 	self.duraAnchor = Ink:Anchor(60, 75)
 	Ink:Movable("durability", "내구도", self.duraAnchor, "right", 236, 140)
@@ -582,7 +590,8 @@ function M:LayoutAnchors()
 		safe(function()
 			if ChatFrame1.SetUserPlaced then ChatFrame1:SetUserPlaced(true) end
 		end)
-		Ink:Fit(ChatFrame1, self.chatAnchor, "BOTTOMLEFT", 340, 140)
+		local cw, ch = self.chatAnchor:GetSize()
+		Ink:Fit(ChatFrame1, self.chatAnchor, "BOTTOMLEFT", cw, ch)
 	end
 	if BagsBar and Ink.db.launcher ~= false then
 		Ink:Fade(BagsBar)
