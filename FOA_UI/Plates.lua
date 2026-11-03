@@ -339,14 +339,15 @@ function M:UpdateLook(f)
 		if threat and threat >= 2 then
 			f.back.bd:SetVertexColor(C.red[1], C.red[2], C.red[3], 0.9)
 		elseif f.questInfo then
-			f.back.bd:SetVertexColor(QUEST_COLOR[1], QUEST_COLOR[2], QUEST_COLOR[3], 0.45)
+			-- 퀘스트 대상: 체력바 색(적대 빨강 / 중립 주황)은 그대로 두고 테두리만 노랗게
+			f.back.bd:SetVertexColor(QUEST_COLOR[1], QUEST_COLOR[2], QUEST_COLOR[3], 1)
 		else
 			f.back.bd:SetVertexColor(1, 1, 1, 0.08)
 		end
 		-- 퀘스트 대상은 은은한 노란 빛
 		if f.questInfo then
 			f.glow:SetVertexColor(QUEST_COLOR[1], QUEST_COLOR[2], QUEST_COLOR[3])
-			f.glow:SetAlpha(0.22)
+			f.glow:SetAlpha(0.3)
 		else
 			f.glow:SetAlpha(0)
 		end
@@ -382,7 +383,7 @@ end
 -- 퀘스트 대상 찾기: 몹 툴팁의 퀘스트 목표 줄("- 6/8 오우거 처치")을 읽는다
 -------------------------------------------------------------------------------
 local LINE_OBJ = Enum.TooltipDataLineType and Enum.TooltipDataLineType.QuestObjective or 8
-local KILL_WORDS = { "처치", "죽이", "물리치", "쓰러뜨", "사냥", "제거", "격파", "slain", "kill", "defeat", "destroy" }
+local KILL_WORDS = { "처치", "죽이", "물리치", "쓰러뜨", "사냥", "제거", "격파", "파괴", "부수", "slain", "kill", "defeat", "destroy" }
 
 local function IsKill(t)
 	local low = t:lower()
@@ -390,12 +391,8 @@ local function IsKill(t)
 	return false
 end
 
-local function QuestInfo(unit)
-	if Ink.db.questPlates == false then return end
-	if C_QuestLog and C_QuestLog.UnitIsRelatedToActiveQuest then
-		local ok, rel = pcall(C_QuestLog.UnitIsRelatedToActiveQuest, unit)
-		if ok and plain(rel) == false then return end
-	end
+-- 툴팁의 퀘스트 목표 줄에서 아직 안 끝난 진행 수치를 찾는다
+local function ScanQuestLines(unit)
 	if not (C_TooltipInfo and C_TooltipInfo.GetUnit) then return end
 	local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
 	if not ok or not data or not data.lines then return end
@@ -417,6 +414,109 @@ local function QuestInfo(unit)
 	end
 end
 
+local function QuestInfo(unit)
+	if Ink.db.questPlates == false then return end
+	if C_QuestLog and C_QuestLog.UnitIsRelatedToActiveQuest then
+		local ok, rel = pcall(C_QuestLog.UnitIsRelatedToActiveQuest, unit)
+		if ok and plain(rel) == false then return end
+	end
+	return ScanQuestLines(unit)
+end
+
+-------------------------------------------------------------------------------
+-- 퀘스트 오브젝트 (바닥에서 줍기 · 부수기 · 열기 같은 상호작용 물체)
+--  물체에는 원래 이름표가 없어서, 블리자드 "상호작용 대상(소프트 타겟)" 기능을 켜면
+--  내 앞의 가장 가까운 상호작용 물체 하나에 이름표가 생긴다. 그 물체가 퀘스트 대상이면
+--  노란 배지 + 진행 수치를 띄운다. (한 번에 하나, 내가 바라보는 쪽의 가까운 물체)
+-------------------------------------------------------------------------------
+local objCache -- 아직 안 끝난 퀘스트 목표 목록 (퀘스트 로그가 바뀌면 다시 만든다)
+
+local function QuestObjectives()
+	if objCache then return objCache end
+	objCache = {}
+	if not (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetQuestObjectives) then return objCache end
+	for i = 1, C_QuestLog.GetNumQuestLogEntries() do
+		local info = C_QuestLog.GetInfo(i)
+		if info and not info.isHeader and info.questID then
+			for _, o in ipairs(C_QuestLog.GetQuestObjectives(info.questID) or {}) do
+				if o and not o.finished and type(o.text) == "string" and o.text ~= "" then
+					table.insert(objCache, o)
+				end
+			end
+		end
+	end
+	return objCache
+end
+
+local function IsObject(unit)
+	if UnitIsGameObject then
+		local ok, v = pcall(UnitIsGameObject, unit)
+		if ok and plain(v) ~= nil then return plain(v) and true or false end
+	end
+	local ok, g = pcall(UnitGUID, unit)
+	g = ok and plain(g)
+	return type(g) == "string" and g:find("^GameObject") ~= nil
+end
+M.IsObject = IsObject
+
+local function ObjectQuestInfo(unit)
+	if Ink.db.questObjects == false then return end
+	-- 1) 물체 툴팁의 퀘스트 목표 줄
+	local info = ScanQuestLines(unit)
+	if info then return info end
+	-- 2) 물체 이름이 들어간 퀘스트 목표
+	local okN, name = pcall(UnitName, unit)
+	name = okN and plain(name)
+	if type(name) == "string" and name ~= "" then
+		for _, o in ipairs(QuestObjectives()) do
+			if o.text:find(name, 1, true) then
+				local need, have = tonumber(o.numRequired), tonumber(o.numFulfilled)
+				return {
+					kind = IsKill(o.text) and "kill" or "loot",
+					text = (need and need > 1 and have) and (have .. "/" .. need) or "",
+				}
+			end
+		end
+	end
+	-- 3) 블리자드가 퀘스트 관련이라고만 알려 주는 경우
+	if C_QuestLog and C_QuestLog.UnitIsRelatedToActiveQuest then
+		local ok, rel = pcall(C_QuestLog.UnitIsRelatedToActiveQuest, unit)
+		if ok and plain(rel) == true then return { kind = "loot", text = "" } end
+	end
+end
+
+-- 물체 이름표: 퀘스트 물체만 보인다 (배지 + 이름 + 진행 수치), 나머지 물체는 숨김
+function M:DrawObject(f, unit)
+	self:SetFriendly(f, true)
+	f.object = true
+	local okN, name = pcall(UnitName, unit)
+	f.name:SetText(okN and plain(name) or "")
+	f:SetScale(1)
+	f:SetAlpha(1)
+	if not f.otext then
+		f.otext = Ink:Text(f, F.latinB, 11, QUEST_COLOR, "CENTER")
+		f.otext:SetPoint("TOP", f.name, "BOTTOM", 0, -2)
+		f.otext:SetShadowColor(0, 0, 0, 1)
+	end
+	local info = ObjectQuestInfo(unit)
+	f.objInfo = info
+	if info then
+		local q = QUEST_COLOR
+		f.role.icon:SetTexture(Ink.icon(info.kind == "kill" and "QuestKill" or "QuestLoot"))
+		f.role.icon:SetVertexColor(q[1], q[2], q[3])
+		f.role.ring:SetVertexColor(q[1], q[2], q[3], 0.95)
+		f.role:Show()
+		f.name:SetTextColor(q[1], q[2], q[3])
+		f.name:SetAlpha(1)
+		f.otext:SetText(info.text)
+		f.otext:SetShown(info.text ~= "")
+	else
+		f.role:Hide()
+		f.name:SetAlpha(0)
+		f.otext:Hide()
+	end
+end
+
 function M:ApplyQuest(f)
 	local info = (not f.friendly and f.unit) and QuestInfo(f.unit) or nil
 	f.questInfo = info
@@ -426,7 +526,6 @@ function M:ApplyQuest(f)
 		f.qicon:Show()
 		f.qtext:SetText(info.text)
 		f.qtext:Show()
-		f.hp:SetStatusBarColor(QUEST_COLOR[1], QUEST_COLOR[2], QUEST_COLOR[3])
 	else
 		f.qicon:Hide()
 		f.qtext:Hide()
@@ -657,6 +756,11 @@ local function PlateError(where, err)
 end
 
 function M:Draw(f, unit)
+	if IsObject(unit) then return self:DrawObject(f, unit) end
+	if f.object then
+		f.object, f.objInfo = nil, nil
+		if f.otext then f.otext:Hide() end
+	end
 	local friendly = IsFriendly(unit)
 	self:SetFriendly(f, friendly)
 	self:UpdateInfo(f)
@@ -696,7 +800,7 @@ function M:OnAdded(unit)
 	HideBlizzard(plate, unit)
 	-- 첫 프레임에 공격 가능 여부가 틀리게 나올 수 있어 한 번 더 확인
 	C_Timer.After(0.1, function()
-		if plates[unit] ~= f then return end
+		if plates[unit] ~= f or f.object then return end
 		local fr = IsFriendly(unit)
 		if fr ~= f.friendly then
 			local okD, errD = pcall(M.Draw, M, f, unit)
@@ -735,6 +839,8 @@ function M:OnRemoved(unit)
 		f.roleInfo = nil
 		f.role:Hide()
 		f.auras:SetUnit("none")
+		f.object, f.objInfo = nil, nil
+		if f.otext then f.otext:Hide() end
 	end
 	local plate = C_NamePlate.GetNamePlateForUnit(unit)
 	if plate then RestoreBlizzard(plate) end
@@ -815,7 +921,38 @@ function M:UpdateFriendlyNPCs()
 	if GetCV("nameplateShowFriendlyNPCs") ~= want then SetCV("nameplateShowFriendlyNPCs", want) end
 end
 
+-- 퀘스트 오브젝트 표시용: 내 앞의 상호작용 물체에 이름표가 생기게 한다 (끄면 원래 값으로)
+local SOFT_CVARS = {
+	SoftTargetInteract = "3",          -- 상호작용 대상 잡기: 항상
+	SoftTargetNameplateInteract = "1", -- 그 대상에 이름표
+}
+
+function M:ApplyObjectCVars()
+	if InCombatLockdown() then
+		self.softPending = true
+		return
+	end
+	self.softPending = nil
+	if Ink.db.questObjects == false or Ink.db.plates == false then
+		local b = Ink.db.softBackup
+		if b then
+			for k, v in pairs(b) do SetCV(k, v) end
+			Ink.db.softBackup = nil
+		end
+		return
+	end
+	Ink.db.softBackup = Ink.db.softBackup or {}
+	for k, v in pairs(SOFT_CVARS) do
+		local cur = GetCV(k)
+		if cur ~= nil then
+			if Ink.db.softBackup[k] == nil then Ink.db.softBackup[k] = cur end
+			if cur ~= v then SetCV(k, v) end
+		end
+	end
+end
+
 function M:CombatEnd()
+	if self.softPending then self:ApplyObjectCVars() end
 	if self.cvarPending then self:ApplyNameCVars() end
 	if self.npcPending then self:UpdateFriendlyNPCs() end
 end
@@ -824,10 +961,12 @@ function M:Init()
 	Ink.db.plateCVars, Ink.db.plateDiag = nil, nil
 	if Ink.db.plates == false then
 		self:RestoreNameCVars()
+		pcall(self.ApplyObjectCVars, self)
 		return
 	end
 	self:ApplyNameCVars()
 	self:UpdateFriendlyNPCs()
+	pcall(self.ApplyObjectCVars, self)
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({
 		"NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED", "RAID_TARGET_UPDATE",
@@ -854,8 +993,11 @@ function M:Init()
 				M.questPending = true
 				C_Timer.After(0.3, function()
 					M.questPending = nil
+					objCache = nil
 					for _, pf in pairs(plates) do
-						if not pf.friendly and pf.unit then
+						if pf.object and pf.unit then
+							pcall(M.DrawObject, M, pf, pf.unit)
+						elseif not pf.friendly and pf.unit then
 							pcall(M.UpdateInfo, M, pf)
 							pcall(M.UpdateLook, M, pf)
 						end
@@ -870,11 +1012,11 @@ function M:Init()
 			for _, f in pairs(plates) do if not f.friendly then M:UpdateLook(f) end end
 			return
 		elseif event == "RAID_TARGET_UPDATE" then
-			for _, f in pairs(plates) do M:UpdateInfo(f) end
+			for _, f in pairs(plates) do if not f.object then M:UpdateInfo(f) end end
 			return
 		end
 		local f = unit and plates[unit]
-		if not f then return end
+		if not f or f.object then return end
 		if f.friendly then
 			if event == "UNIT_NAME_UPDATE" or event == "UNIT_FACTION" then
 				local fr = IsFriendly(unit)

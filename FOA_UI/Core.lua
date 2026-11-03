@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.21.0"
+Ink.version = "0.21.1"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -695,6 +695,7 @@ local defaults = {
 	hideTutorials = true,
 	autoPush = true,
 	clock = true,
+	questObjects = true,
 }
 
 local ev = CreateFrame("Frame")
