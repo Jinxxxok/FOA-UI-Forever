@@ -541,6 +541,27 @@ local function Diag(unit, plate)
 	while #d > 30 do table.remove(d, 1) end
 end
 
+-- 아군인가? (공격 불가 = 아군)
+--  멀리서 막 나타난 대상은 정보가 덜 와서 "공격 가능"이 빈 값일 때가 있다.
+--  그때는 반응(적대/중립/우호)으로 보고, 그것도 없으면 적으로 본다 → 체력바가 항상 보이게.
+local function IsFriendly(unit)
+	local ok, can = pcall(UnitCanAttack, "player", unit)
+	if ok then can = plain(can) else can = nil end
+	if can == true then return false end
+	if can == false then
+		-- 공격 불가인데 적대 반응이면(일시적 정보 부족) 적으로
+		local okR, r = pcall(UnitReaction, unit, "player")
+		r = okR and plain(r)
+		if r and r <= 3 then return false end
+		return true
+	end
+	local okR, r = pcall(UnitReaction, unit, "player")
+	r = okR and plain(r)
+	if r then return r >= 5 end
+	return false
+end
+M.IsFriendly = IsFriendly
+
 function M:OnAdded(unit)
 	local plate = C_NamePlate.GetNamePlateForUnit(unit)
 	if not plate or plate:IsForbidden() then return end
@@ -548,7 +569,7 @@ function M:OnAdded(unit)
 	f.unit = unit
 	plates[unit] = f
 	HideBlizzard(plate, unit)
-	local friendly = not plain(UnitCanAttack("player", unit))
+	local friendly = IsFriendly(unit)
 	self:SetFriendly(f, friendly)
 	self:UpdateInfo(f)
 	if friendly then
@@ -562,7 +583,7 @@ function M:OnAdded(unit)
 	-- 첫 프레임에 공격 가능 여부가 틀리게 나올 수 있어 한 번 더 확인
 	C_Timer.After(0.1, function()
 		if plates[unit] ~= f then return end
-		local fr = not plain(UnitCanAttack("player", unit))
+		local fr = IsFriendly(unit)
 		if fr ~= f.friendly then
 			M:SetFriendly(f, fr)
 			if not fr then M:UpdateAll(f) end
@@ -573,6 +594,8 @@ end
 function M:OnRemoved(unit)
 	local f = plates[unit]
 	plates[unit] = nil
+	-- 같은 플레이트가 이미 다른 대상에게 넘어갔으면 건드리지 않는다
+	if f and f.unit ~= unit then f = nil end
 	if f then
 		f:Hide()
 		f.cast:Hide()
@@ -688,7 +711,7 @@ function M:Init()
 		if not f then return end
 		if f.friendly then
 			if event == "UNIT_NAME_UPDATE" or event == "UNIT_FACTION" then
-				local fr = not plain(UnitCanAttack("player", unit))
+				local fr = IsFriendly(unit)
 				M:SetFriendly(f, fr)
 				M:UpdateInfo(f)
 				if not fr then M:UpdateAll(f) end
@@ -706,7 +729,7 @@ function M:Init()
 		else
 			M:UpdateInfo(f)
 			if event == "UNIT_FACTION" then
-				local fr = not plain(UnitCanAttack("player", unit))
+				local fr = IsFriendly(unit)
 				if fr ~= f.friendly then M:SetFriendly(f, fr) end
 			end
 		end
@@ -719,6 +742,14 @@ function M:Init()
 		if t < 0.2 then return end
 		t = 0
 		for u, f in pairs(plates) do
+			-- 적/아군이 바뀌었으면(정보가 늦게 왔거나 반응이 바뀜) 바로 모양을 바꾼다
+			local fr = IsFriendly(u)
+			if fr ~= f.friendly then
+				M:SetFriendly(f, fr)
+				M:UpdateInfo(f)
+				if not fr then M:UpdateAll(f) end
+				f:Show()
+			end
 			if f.friendly then
 				local a = (f.roleInfo or M:NearFriendly(u, f)) and 0.9 or 0
 				if f.nameAlpha ~= a then
