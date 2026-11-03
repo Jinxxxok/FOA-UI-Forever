@@ -684,6 +684,26 @@ function M:NearFriendly(u, f)
 	return near
 end
 
+-- 아군 이름 색: 플레이어 = 직업색, NPC = 초록. 던전 안처럼 값이 비공개면 직업 → 흰색 순으로
+local function FriendlyColor(u)
+	local isP = plain(UnitIsPlayer(u))
+	if isP == false then
+		local r = plain(UnitReaction(u, "player"))
+		if r and r <= 4 then return ReactionColor(u) end
+		return C.green[1], C.green[2], C.green[3]
+	end
+	local ok, _, cls = pcall(UnitClass, u)
+	cls = ok and plain(cls)
+	if cls and ns.ClassColorOf then return ns.ClassColorOf(cls) end
+	if isP then return ns.ClassColor(u) end
+	return C.text[1], C.text[2], C.text[3]
+end
+
+local function InInstance()
+	local inInst, kind = IsInInstance()
+	return inInst and kind ~= "none"
+end
+
 -- 아군: 이름만
 function M:SetFriendly(f, friendly)
 	f.friendly = friendly
@@ -697,7 +717,7 @@ function M:SetFriendly(f, friendly)
 		f.name:SetPoint("CENTER", f, "CENTER", 0, 0)
 		f.name:SetJustifyH("CENTER")
 		f.name:SetWidth(W + 40)
-		f.name:SetTextColor(ReactionColor(f.unit))
+		f.name:SetTextColor(FriendlyColor(f.unit))
 		f.near = nil
 		-- 역할 NPC는 멀리서도 아이콘과 이름이 보이게
 		local role = f.unit and NpcRole(f.unit)
@@ -710,7 +730,8 @@ function M:SetFriendly(f, friendly)
 		else
 			f.role:Hide()
 		end
-		f.nameAlpha = (role or self:NearFriendly(f.unit, f)) and 0.9 or 0
+		-- 던전 · 레이드 안에선 거리를 잴 수 없어서(보호된 동작) 파티원 이름은 항상 보이게
+		f.nameAlpha = (role or InInstance() or self:NearFriendly(f.unit, f)) and 0.9 or 0
 		f.name:SetAlpha(f.nameAlpha)
 		f.markL:Hide(); f.markR:Hide(); f.elite:Hide()
 		SetRank(f, nil)
@@ -787,7 +808,7 @@ function M:Draw(f, unit)
 	if friendly then
 		f:SetScale(1)
 		f:SetAlpha(1)
-		f.name:SetTextColor(ReactionColor(unit))
+		f.name:SetTextColor(FriendlyColor(unit))
 	else
 		self:UpdateAll(f)
 	end
@@ -932,15 +953,22 @@ end
 
 -- 아군 NPC 이름표: 바깥에선 켜고(역할 아이콘 · 이름), 던전 / 레이드 안에선 끈다
 --  (인스턴스 안 아군 이름표는 블리자드가 애드온 손을 막아 둬서 체력바째로 크게 나온다)
+local INSTANCE_NAMES = { "UnitNameNPC", "UnitNameFriendlySpecialNPCName", "UnitNameInteractiveNPC" }
 function M:UpdateFriendlyNPCs()
 	if InCombatLockdown() then
 		self.npcPending = true
 		return
 	end
 	self.npcPending = nil
-	local inInst, kind = IsInInstance()
-	local want = (inInst and kind ~= "none") and "0" or "1"
-	if GetCV("nameplateShowFriendlyNPCs") ~= want then SetCV("nameplateShowFriendlyNPCs", want) end
+	local inst = InInstance()
+	local function want(k, v) if GetCV(k) ~= nil and GetCV(k) ~= v then SetCV(k, v) end end
+	want("nameplateShowFriendlyNPCs", inst and "0" or "1")
+	for _, k in ipairs(INSTANCE_NAMES) do want(k, inst and "1" or "0") end
+	-- 아군 플레이어 이름표는 어디서든 켜고, 이름만 · 직업색
+	want("nameplateShowFriends", "1")
+	want("nameplateShowFriendlyPlayers", "1")
+	want("nameplateShowOnlyNameForFriendlyPlayerUnits", "1")
+	want("nameplateUseClassColorForFriendlyPlayerUnitNames", "1")
 end
 
 -- 퀘스트 오브젝트 표시용: 내 앞의 상호작용 물체에 이름표가 생기게 한다 (끄면 원래 값으로)

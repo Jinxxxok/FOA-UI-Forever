@@ -58,6 +58,53 @@ end
 -------------------------------------------------------------------------------
 -- 파티 멤버 칸 (시안 04-1)
 -------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-- 내가 잡은 대상 표시 (누구를 힐하고 있는지): 노란 테두리 + 아주 옅은 노란 바탕
+--  "이 칸이 내 대상인가"가 비공개 값이어도 SetAlphaFromBoolean 으로 보이기/숨기기
+-------------------------------------------------------------------------------
+local function TargetMark(f, raid)
+	if f.tgt then return f.tgt end
+	local t = CreateFrame("Frame", nil, f)
+	if raid then
+		t:SetPoint("TOPLEFT", -1, 1)
+		t:SetPoint("BOTTOMRIGHT", 1, -1)
+	else
+		t:SetPoint("TOPLEFT", -9, 6)
+		t:SetPoint("BOTTOMRIGHT", 9, -2)
+	end
+	t:SetFrameLevel(f:GetFrameLevel() + (raid and 8 or 1))
+	t:EnableMouse(false)
+	local a = C.accent
+	t.fill = Ink:Round(t, "BACKGROUND", raid, false)
+	t.fill:SetAllPoints()
+	t.fill:SetVertexColor(a[1], a[2], a[3], raid and 0.10 or 0.045)
+	t.bd = Ink:Round(t, "OVERLAY", raid, true)
+	t.bd:SetAllPoints()
+	t.bd:SetVertexColor(a[1], a[2], a[3], raid and 1 or 0.85)
+	if not raid then
+		-- 왼쪽 위 짧은 노란 선 (FOA 강조 표시)
+		t.tick = t:CreateTexture(nil, "OVERLAY", nil, 2)
+		t.tick:SetColorTexture(a[1], a[2], a[3], 1)
+		t.tick:SetSize(18, 2)
+		t.tick:SetPoint("TOPLEFT", 10, 0)
+	end
+	t:SetAlpha(0)
+	f.tgt = t
+	return t
+end
+
+local function UpdateTargetMark(f)
+	local t = f.tgt
+	if not t then return end
+	local u = f.unit
+	if not u or not UnitExists(u) or not UnitExists("target") then t:SetAlpha(0) return end
+	local ok, v = pcall(UnitIsUnit, u, "target")
+	if not ok then t:SetAlpha(0) return end
+	if t.SetAlphaFromBoolean and pcall(t.SetAlphaFromBoolean, t, v, 1, 0) then return end
+	t:SetAlpha(Ink.plain(v) and 1 or 0)
+end
+M.UpdateTargetMark = UpdateTargetMark
+
 local function BuildPartyVisual(f)
 	f.aggro = f:CreateTexture(nil, "OVERLAY")
 	f.aggro:SetColorTexture(C.red[1], C.red[2], C.red[3], 1)
@@ -116,6 +163,7 @@ local function BuildPartyVisual(f)
 		pcall(ns.FX.Trail, f.hp)
 		pcall(ns.FX.AttachMember, f)
 	end
+	TargetMark(f, false)
 end
 
 local function GlowBreathe(f, on)
@@ -157,6 +205,7 @@ function M:UpdateParty(f)
 	self:UpdatePartyPower(f)
 	self:UpdatePartyAuras(f)
 	self:UpdatePartyRange(f)
+	UpdateTargetMark(f)
 end
 
 function M:UpdatePartyHealth(f)
@@ -366,6 +415,7 @@ local function BuildRaidVisual(f)
 	f.status:SetPoint("BOTTOMRIGHT", -5, 5)
 	f.role = RoleIcon(f.top, 10)
 	f.role:SetPoint("TOPRIGHT", -5, -5)
+	TargetMark(f, true)
 end
 
 -- 직업색 → 35% 미만이면 빨강 (secret 체력에도 안전한 곡선)
@@ -405,6 +455,7 @@ end
 function M:UpdateRaid(f)
 	local u = f:GetAttribute("unit")
 	f.unit = u
+	UpdateTargetMark(f)
 	if not u or not UnitExists(u) then return end
 	f.name:SetText((UnitName(u)))
 	local cr, cg, cb = ns.ClassColor(u)
@@ -599,6 +650,7 @@ function M:BuildPreview()
 			end
 		end
 		if d[11] then f:SetAlpha(0.45) end
+		if i == 1 and f.tgt then f.tgt:SetAlpha(1) end
 		pv.members[i] = f
 	end
 	pv:Hide()
@@ -774,7 +826,7 @@ function M:Init()
 		"UNIT_NAME_UPDATE", "UNIT_CONNECTION", "UNIT_THREAT_SITUATION_UPDATE", "UNIT_FLAGS", "UNIT_IN_RANGE_UPDATE",
 		"GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "INSPECT_READY", "PLAYER_REGEN_ENABLED",
 		"UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED",
-		"READY_CHECK", "READY_CHECK_CONFIRM", "READY_CHECK_FINISHED",
+		"READY_CHECK", "READY_CHECK_CONFIRM", "READY_CHECK_FINISHED", "PLAYER_TARGET_CHANGED",
 	}) do
 		pcall(e.RegisterEvent, e, ev)
 	end
@@ -784,6 +836,10 @@ function M:Init()
 			return
 		elseif event:find("^READY_CHECK") then
 			M:ReadyCheck(event, arg)
+			return
+		elseif event == "PLAYER_TARGET_CHANGED" then
+			for _, f in ipairs(M.party or {}) do UpdateTargetMark(f) end
+			for _, f in ipairs(M.raidButtons or {}) do UpdateTargetMark(f) end
 			return
 		elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "PLAYER_REGEN_ENABLED" then
 			if event == "GROUP_ROSTER_UPDATE" then
