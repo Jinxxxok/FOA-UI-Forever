@@ -1039,7 +1039,7 @@ function Ink:OpenQuickKeybind()
 end
 
 -------------------------------------------------------------------------------
--- 새로 배운 주문 자동 배치 (블리자드 "새 주문 자동 배치" 설정을 따른다)
+-- 새로 배운 주문 자동 배치 (FOA 설정 "새 주문 자동 배치", 기본 켜짐)
 --  블리자드도 빈 칸에 넣어 주지만, 바 페이지 / 탈것 상태 등에 따라 빠지는 경우가 있어
 --  배운 뒤 잠시 기다렸다가 아직 어느 바에도 없으면 기본 바 첫 빈 칸에 넣는다.
 -------------------------------------------------------------------------------
@@ -1074,11 +1074,9 @@ local function FlashSlot(slot)
 	end)
 end
 
-function M:PushSpell(spellID)
+function M:PushSpell(spellID, quiet)
 	if not spellID then return end
 	if Ink.db.autoPush == false then return end
-	local cv = C_CVar and C_CVar.GetCVar and C_CVar.GetCVar("AutoPushSpellToActionBar")
-	if cv == "0" then return end
 	if C_Spell and C_Spell.IsSpellPassive and C_Spell.IsSpellPassive(spellID) then return end
 	if InCombatLockdown() then
 		self.pushQueue = self.pushQueue or {}
@@ -1094,18 +1092,55 @@ function M:PushSpell(spellID)
 				PlaceAction(slot)
 				ClearCursor()
 				FlashSlot(slot)
+				if not quiet then
+					local link = C_Spell.GetSpellLink and C_Spell.GetSpellLink(spellID)
+					local where = slot <= 12 and ("기본 바 " .. slot .. "번") or ("두 번째 바 " .. (slot - 60) .. "번")
+					print("|cffFFF468FOA|r 새 주문 " .. (link or "") .. " → " .. where)
+				end
+				return true
 			end
 			return
 		end
 	end
 end
 
+-- 전문화를 바꿨는데 기본 바가 거의 비어 있으면(처음 쓰는 전문화) 그 전문화 주문으로 채운다
+function M:FillSpec()
+	if Ink.db.autoPush == false or InCombatLockdown() then return end
+	if not (C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines and C_SpellBook.GetSpellBookItemInfo) then return end
+	local empty = 0
+	for slot = 1, 12 do if not HasAction(slot) then empty = empty + 1 end end
+	if empty < 6 then return end
+	local bank = Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
+	local placed = 0
+	for line = 2, C_SpellBook.GetNumSpellBookSkillLines() do
+		local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
+		if info and not info.offSpecID and not info.isGuild and not info.shouldHide then
+			for i = info.itemIndexOffset + 1, info.itemIndexOffset + info.numSpellBookItems do
+				local it = C_SpellBook.GetSpellBookItemInfo(i, bank)
+				if it and it.spellID and not it.isPassive and not it.isOffSpec
+					and it.itemType == (Enum.SpellBookItemType and Enum.SpellBookItemType.Spell or 1) then
+					local ok, did = pcall(M.PushSpell, M, it.spellID, true)
+					if ok and did then placed = placed + 1 end
+				end
+			end
+		end
+	end
+	if placed > 0 then print("|cffFFF468FOA|r 새 전문화 주문 " .. placed .. "개를 행동단축바에 넣었어요.") end
+end
+
 function M:SetupAutoPush()
 	local e = CreateFrame("Frame")
-	for _, ev in ipairs({ "LEARNED_SPELL_IN_SKILL_LINE", "LEARNED_SPELL_IN_TAB", "PLAYER_REGEN_ENABLED" }) do
+	for _, ev in ipairs({ "LEARNED_SPELL_IN_SKILL_LINE", "LEARNED_SPELL_IN_TAB", "PLAYER_REGEN_ENABLED", "PLAYER_SPECIALIZATION_CHANGED" }) do
 		pcall(e.RegisterEvent, e, ev)
 	end
 	e:SetScript("OnEvent", function(_, event, spellID, _, isGuildPerk)
+		if event == "PLAYER_SPECIALIZATION_CHANGED" then
+			if spellID ~= "player" then return end
+			-- 블리자드가 그 전문화의 바를 불러온 뒤에
+			C_Timer.After(2, function() pcall(M.FillSpec, M) end)
+			return
+		end
 		if event == "PLAYER_REGEN_ENABLED" then
 			local q = M.pushQueue
 			M.pushQueue = nil

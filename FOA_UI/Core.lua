@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.18.5"
+Ink.version = "0.18.6"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -552,6 +552,7 @@ local defaults = {
 	bossMod = true,
 	npcIcons = true,
 	hideTutorials = true,
+	autoPush = true,
 }
 
 local ev = CreateFrame("Frame")

@@ -318,6 +318,7 @@ function M:BuildPanel()
 		{ "위협 수준", "미터기 왼쪽에 어그로(위협) 미터를 붙입니다.", "threat" },
 		{ "보스 알림", "보스 패턴 타이머와 경고를 FOA 디자인으로.", "bossMod" },
 		{ "NPC 역할 아이콘", "상인 · 수리 · 경매장 · 은행 · 여관 등 NPC 머리 위에 아이콘.", "npcIcons" },
+		{ "새 주문 자동 배치", "새로 배운 주문을 행동단축바 빈 칸에 넣습니다.", "autoPush" },
 	})
 
 	p.reload = Button(p, "지금 다시 불러오기 (/reload)", 220, function() ReloadUI() end, true)
@@ -331,8 +332,8 @@ function M:BuildPanel()
 	cmds:SetPoint("TOPLEFT", h3, "BOTTOMLEFT", 0, -8)
 	cmds:SetSpacing(4)
 	cmds:SetWordWrap(true)
-	cmds:SetWidth(280)
-	cmds:SetText("/foa  설정 창\n/foa edit  편집 모드\n/foa test  테스트 모드\n/foa reset  위치 초기화\n/foa kb  단축키 설정\n/foa layout  배치 다시 적용")
+	cmds:SetWidth(340)
+	cmds:SetText("/foa 설정 창  ·  /foa edit 편집 모드  ·  /foa test 테스트\n/foa kb 단축키 설정  ·  /foa reset 위치 초기화\n/foa log 오류 기록  ·  /foa layout 배치 다시 적용")
 
 	p:SetScript("OnShow", function() M:SyncButtons() end)
 
