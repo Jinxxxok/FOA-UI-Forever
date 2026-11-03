@@ -45,8 +45,6 @@ function M:BuildMinimap()
 	o.bottom:SetColorTexture(0.03, 0.035, 0.045, 0.6)
 	o.coords = Ink:Text(o, F.latin, 10, C.soft, "LEFT")
 	o.coords:SetPoint("BOTTOMLEFT", 10, 5)
-	o.clock = Ink:Text(o, F.latin, 10, C.soft, "RIGHT")
-	o.clock:SetPoint("BOTTOMRIGHT", -10, 5)
 	self.mmOverlay = o
 
 	local t, scan = 0, 0
@@ -468,7 +466,6 @@ function M:UpdateMinimapText()
 		if pos then x, y = pos:GetXY() end
 	end)
 	if x and y then o.coords:SetFormattedText("%.1f, %.1f", x * 100, y * 100) else o.coords:SetText("") end
-	o.clock:SetText(date("%H:%M"))
 end
 
 function M:LayoutMinimap()
@@ -1259,7 +1256,7 @@ function M:Init()
 	self:SkinQuest()
 	self:SkinBuffs()
 	-- 부가 기능은 하나가 실패해도 나머지에 영향이 없게 따로따로
-	for _, fn in ipairs({ "BuildAddonList", "SetupQueue", "HookKeybindMode", "SetupAutoPush", "HookSpellAlerts", "HideVehicleSeats", "DisableTutorials", "SetupTalk" }) do
+	for _, fn in ipairs({ "BuildAddonList", "SetupQueue", "HookKeybindMode", "SetupAutoPush", "HookSpellAlerts", "HideVehicleSeats", "DisableTutorials", "SetupTalk", "BuildClock" }) do
 		local ok, err = pcall(self[fn], self)
 		if not ok then Ink:LogError("Blizzard." .. fn .. ": " .. tostring(err)) end
 	end
@@ -1595,5 +1592,114 @@ function T:Init()
 	if TooltipDataProcessor and Enum.TooltipDataType then
 		TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tt) pcall(OnItem, tt) end)
 		TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, function(tt) pcall(OnUnit, tt) end)
+	end
+end
+
+-------------------------------------------------------------------------------
+-- 화면 위 가운데 시계: 배경 없이 큰 숫자 + 노란 짧은 선 + 날짜
+--  왼쪽 클릭: 내 컴퓨터 시간 <-> 서버 시간, 오른쪽 클릭: 달력
+--  위치는 FOA 편집 모드에서 "시계"로 옮긴다.
+-------------------------------------------------------------------------------
+local WEEKDAY = { "일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일" }
+
+local function ServerHM()
+	if C_DateAndTime and C_DateAndTime.GetCurrentCalendarTime then
+		local t = C_DateAndTime.GetCurrentCalendarTime()
+		if t and t.hour then return t.hour, t.minute end
+	end
+	if GetGameTime then return GetGameTime() end
+	return tonumber(date("%H")), tonumber(date("%M"))
+end
+
+function M:UpdateClock()
+	local f = self.clock
+	if not f then return end
+	local h, m
+	if Ink.db.clockServer then h, m = ServerHM() else h, m = tonumber(date("%H")), tonumber(date("%M")) end
+	f.time:SetFormattedText("%02d:%02d", h or 0, m or 0)
+	local wd = WEEKDAY[(tonumber(date("%w")) or 0) + 1]
+	f.date:SetText(date("%m.%d") .. "  " .. wd .. (Ink.db.clockServer and "  ·  서버" or ""))
+end
+
+function M:ClockTip(f)
+	GameTooltip:SetOwner(f, "ANCHOR_BOTTOM", 0, -6)
+	GameTooltip:AddLine("시계", 1, 1, 1)
+	local sh, sm = ServerHM()
+	GameTooltip:AddDoubleLine("내 시간", date("%H:%M"), 0.7, 0.72, 0.75, 1, 1, 1)
+	GameTooltip:AddDoubleLine("서버 시간", string.format("%02d:%02d", sh or 0, sm or 0), 0.7, 0.72, 0.75, 1, 1, 1)
+	GameTooltip:AddLine(" ")
+	GameTooltip:AddLine("왼쪽 클릭: " .. (Ink.db.clockServer and "내 시간으로" or "서버 시간으로"), 0.56, 0.58, 0.61)
+	GameTooltip:AddLine("오른쪽 클릭: 달력", 0.56, 0.58, 0.61)
+	GameTooltip:Show()
+end
+
+-- 블리자드 화면 위 가운데 위젯(점령 막대 · 진행도 등)은 시계 밑으로
+function M:PlaceTopWidgets()
+	local w = UIWidgetTopCenterContainerFrame
+	if not (w and self.clock and self.clock:IsShown()) or w.inkPlacing then return end
+	if w:IsProtected() and InCombatLockdown() then return end
+	w.inkPlacing = true
+	safe(function()
+		w:ClearAllPoints()
+		w:SetPoint("TOP", self.clock, "BOTTOM", 0, -6)
+	end)
+	w.inkPlacing = nil
+end
+
+function M:BuildClock()
+	if Ink.db.clock == false then return end
+	local f = CreateFrame("Button", "FOAClock", Ink.root)
+	f:SetSize(180, 58)
+	f:SetFrameStrata("LOW")
+	f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+
+	f.time = Ink:Text(f, F.num, 32, C.text, "CENTER")
+	f.time:SetPoint("TOP", 0, -2)
+	f.time:SetShadowOffset(0, -1)
+	f.time:SetShadowColor(0, 0, 0, 0.6)
+
+	f.line = f:CreateTexture(nil, "ARTWORK")
+	f.line:SetSize(18, 2)
+	f.line:SetPoint("TOP", f.time, "BOTTOM", 0, -4)
+	f.line:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.9)
+
+	f.date = Ink:Text(f, F.latin, 10, C.soft, "CENTER")
+	f.date:SetPoint("TOP", f.line, "BOTTOM", 0, -5)
+
+	f:SetScript("OnClick", function(self, btn)
+		if btn == "RightButton" then
+			if ToggleCalendar then pcall(ToggleCalendar) end
+			return
+		end
+		Ink.db.clockServer = not Ink.db.clockServer
+		M:UpdateClock()
+		if GameTooltip:IsOwned(self) then M:ClockTip(self) end
+	end)
+	f:SetScript("OnEnter", function(self)
+		self.line:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+		self.line:SetWidth(30)
+		M:ClockTip(self)
+	end)
+	f:SetScript("OnLeave", function(self)
+		self.line:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.9)
+		self.line:SetWidth(18)
+		GameTooltip:Hide()
+	end)
+
+	local t = 1
+	f:SetScript("OnUpdate", function(_, e)
+		t = t + e
+		if t < 1 then return end
+		t = 0
+		M:UpdateClock()
+	end)
+	self.clock = f
+	Ink:Movable("clock", "시계", f, "center", 870, 10, 180, 58)
+	self:UpdateClock()
+
+	local w = UIWidgetTopCenterContainerFrame
+	if w then
+		hooksecurefunc(w, "SetPoint", function() M:PlaceTopWidgets() end)
+		self:PlaceTopWidgets()
 	end
 end

@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.20.0"
+Ink.version = "0.21.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -42,7 +42,22 @@ Ink.tex = {
 	ring = MEDIA .. "Textures\\Ring",
 	disc = MEDIA .. "Textures\\Disc",
 }
-Ink.icon = function(name) return MEDIA .. "Icons\\" .. name end
+-------------------------------------------------------------------------------
+-- 화면 선명도: 모니터 실제 세로 픽셀로 "저해상도"인지 본다
+--  FOA 1칸 = 실제 픽셀 (세로 픽셀 / 1080). 4K = 2픽셀, 1080p = 1픽셀.
+--  저해상도에서는 작은 아이콘을 32px 전용 이미지로 바꾸고(덜 뭉개짐), 작은 글자를 한 단계 키운다.
+-------------------------------------------------------------------------------
+function Ink:DetectDensity()
+	local ph = GetPhysicalScreenSize and select(2, GetPhysicalScreenSize()) or 1080
+	self.physH = ph
+	self.lowRes = ph < 1700          -- 1080p / 1200p / 1440p / 1600p
+	self.fontBoost = (ph < 1300) and 1 or 0 -- 1080p / 1200p 만 글자 +1
+	local sfx = self.lowRes and "_s" or ""
+	self.tex.ring = MEDIA .. "Textures\\Ring" .. sfx
+	self.tex.disc = MEDIA .. "Textures\\Disc" .. sfx
+end
+Ink.icon = function(name) return MEDIA .. "Icons\\" .. name .. (Ink.lowRes and "_s" or "") end
+pcall(Ink.DetectDensity, Ink)
 
 -- 데미지 글꼴 (머리 위에 뜨는 숫자). 접속할 때 읽히므로 바꾼 뒤엔 재접속해야 적용된다.
 -- 빗나감/흡수 같은 한글도 나오므로 한글이 들어있는 굵은 글꼴을 쓴다.
@@ -154,6 +169,8 @@ Ink.fo = {
 -------------------------------------------------------------------------------
 function Ink:Text(parent, font, size, color, justify, layer)
 	local fs = parent:CreateFontString(nil, layer or "OVERLAY")
+	-- 저해상도(1080p)에서 아주 작은 글자는 한 단계 키워서 뭉개짐을 줄인다
+	if self.fontBoost and self.fontBoost > 0 and size <= 13 then size = size + self.fontBoost end
 	fs:SetFont(font, size, "")
 	color = color or Ink.c.text
 	fs:SetTextColor(color[1], color[2], color[3], color[4] or 1)
@@ -677,6 +694,7 @@ local defaults = {
 	npcIcons = true,
 	hideTutorials = true,
 	autoPush = true,
+	clock = true,
 }
 
 local ev = CreateFrame("Frame")
@@ -712,6 +730,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 	end
 	if event == "PLAYER_LOGIN" then
 		Ink:ApplyDamageFont()
+		pcall(Ink.DetectDensity, Ink)
 		InkUIDB = InkUIDB or {}
 		Ink.db = InkUIDB
 		-- 캐릭터별 배치 (편집 모드 위치 · 가방 위치), 화면 비율마다 따로
