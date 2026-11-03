@@ -870,13 +870,15 @@ function M:BuildPet()
 	m.icon:SetPoint("CENTER")
 	m.hint = Ink:Text(m, F.semi, 10, C.red, "LEFT")
 	m.hint:SetPoint("LEFT", m, "RIGHT", 6, 0)
-	-- 행복: 위아래로 살랑
-	local bob = m.face:CreateAnimationGroup()
+	-- 행복: 뒤에서 초록 빛이 천천히 숨 쉰다
+	--  (예전엔 얼굴을 2픽셀 위아래로 움직였는데, 픽셀 단위로 끊겨 보여서 빛으로 바꿨다)
+	local bob = m.glow:CreateAnimationGroup()
 	bob:SetLooping("BOUNCE")
-	local tr = bob:CreateAnimation("Translation")
-	tr:SetOffset(0, 2)
-	tr:SetDuration(0.9)
-	tr:SetSmoothing("IN_OUT")
+	local ca = bob:CreateAnimation("Alpha")
+	ca:SetFromAlpha(0.1)
+	ca:SetToAlpha(0.38)
+	ca:SetDuration(1.8)
+	ca:SetSmoothing("IN_OUT")
 	m.bob = bob
 	-- 불만: 빛이 두근두근
 	local beat = m.glow:CreateAnimationGroup()
@@ -931,8 +933,8 @@ function M:UpdateMood(happiness, damage, loyalty)
 	m.ring:SetVertexColor(col[1], col[2], col[3], 0.85)
 	m.glow:SetVertexColor(col[1], col[2], col[3])
 	m.hint:SetText(d.hint or "")
-	if happiness == 3 then m.bob:Play() else m.bob:Stop() end
-	if happiness == 1 then m.beat:Play() else m.beat:Stop(); m.glow:SetAlpha(0) end
+	m.bob:Stop(); m.beat:Stop(); m.glow:SetAlpha(0)
+	if happiness == 3 then m.bob:Play() elseif happiness == 1 then m.beat:Play() end
 	m:Show()
 end
 

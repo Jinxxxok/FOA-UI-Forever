@@ -38,7 +38,6 @@ FX.LIST = {
 	{ "deathFade", "사망 · 부활", "파티원이 죽으면 가라앉고, 살아나면 빛" },
 	{ "readyCheck", "전투 준비 확인", "파티원 옆에 체크가 차례로 톡" },
 	{ "levelUp", "레벨업 연출", "화면 가운데 큰 숫자와 펼쳐지는 선" },
-	{ "combatMode", "전투 모드 전환", "전투 밖에선 미터기가 옅어지고 전투에선 선명" },
 	{ "lootToast", "전리품 알림", "희귀 이상 아이템을 얻으면 왼쪽에 알림" },
 	{ "mailRipple", "우편 잔물결", "새 우편이 오면 미니맵에 잔물결" },
 	{ "bossDrop", "보스 경고 등장", "보스 경고가 위에서 떨어지듯 + 선 펼침" },
@@ -970,35 +969,6 @@ function M:ShowLevelUp(level, force)
 end
 
 -------------------------------------------------------------------------------
--- 19. 전투 모드 전환: 전투 밖에선 미터기 · 위협이 옅고, 전투 · 마우스 올림이면 선명
--------------------------------------------------------------------------------
-local REST_ALPHA = 0.5
-function M:SetupCombatMode()
-	local t = 0
-	local driver = CreateFrame("Frame")
-	driver:SetScript("OnUpdate", function(_, e)
-		t = t + e
-		if t < 0.05 then return end
-		local step = t / 0.3
-		t = 0
-		local meter = Ink.modules.Meter
-		local list = meter and { meter.frame, meter.threat } or {}
-		local fight = InCombatLockdown() or UnitAffectingCombat("player")
-		for _, fr in ipairs(list) do
-			if fr and fr:IsShown() then
-				local want = 1
-				if FX.on("combatMode") and not fight and not (fr:IsMouseOver() or M.combatDemoBright) then want = REST_ALPHA end
-				if M.combatDemoDim then want = REST_ALPHA end
-				local a = fr:GetAlpha()
-				if math.abs(a - want) > 0.01 then
-					fr:SetAlpha(want > a and math.min(want, a + step) or math.max(want, a - step))
-				end
-			end
-		end
-	end)
-end
-
--------------------------------------------------------------------------------
 -- 20. 전리품 알림 (희귀 이상)
 -------------------------------------------------------------------------------
 local QCOLOR = {
@@ -1387,10 +1357,6 @@ end)
 
 Every("mailRipple", 4, function() M:Ripple(true) end)
 
-Every("combatMode", 6, function()
-	M.combatDemoDim = true
-	C_Timer.After(3, function() M.combatDemoDim = nil end)
-end)
 
 -- 모듈(유닛 · 파티 · 플레이트 · 미터기)이 각자 쓰는 예시 주기는 거기서 FX.demoOn 으로 확인한다.
 function FX.Demo(key, on)
@@ -1405,7 +1371,6 @@ function FX.Demo(key, on)
 				if f.fxLow then f.fxLow:SetVertexColor(1, 1, 1, 0) end
 			end
 		end
-		if key == "combatMode" then M.combatDemoDim = nil end
 		if key == "procBracket" then for _, b in ipairs(actionButtons) do FX.ProcHide(b) end end
 	elseif DEMOS[key] then
 		DEMOS[key].last = -999
@@ -1437,7 +1402,7 @@ end
 -------------------------------------------------------------------------------
 function M:Init()
 	Ink.db.fx = Ink.db.fx or {}
-	for _, fn in ipairs({ "BuildVignette", "BuildLevelUp", "SetupCombatMode", "BuildLoot", "BuildMail" }) do
+	for _, fn in ipairs({ "BuildVignette", "BuildLevelUp", "BuildLoot", "BuildMail" }) do
 		local ok, err = pcall(self[fn], self)
 		if not ok then Ink:LogError("FX." .. fn .. ": " .. tostring(err)) end
 	end

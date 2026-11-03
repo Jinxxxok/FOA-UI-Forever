@@ -260,9 +260,9 @@ local function Paint(r, src, maxAmount, mode, rank)
 	end
 end
 
--- 사람 수에 맞춰 창 높이 (최소 3줄)
-function M:FitHeight(n)
-	local h = HEAD + math.max(3, math.min(n, ROWS)) * ROW + 6
+-- 창 높이는 늘 8줄 크기로 고정 (혼자일 때도 테스트 때처럼 넉넉하게, 사람 수에 따라 들썩이지 않게)
+function M:FitHeight()
+	local h = HEAD + ROWS * ROW + 6
 	self.frame:SetHeight(h)
 	if self.threat then self.threat:SetHeight(h) end
 end
