@@ -685,7 +685,9 @@ local NAME_CVARS = {
 	nameplateShowFriends = "1",
 	nameplateShowFriendlyPlayers = "1", -- 성역의 적 진영 플레이어도 여기에 들어간다
 	nameplateShowFriendlyNPCs = "1",
-	nameplateShowOnlyNames = "1", -- 던전 안처럼 Ink가 못 꾸미는 아군 플레이트는 이름만
+	-- 던전 안처럼 FOA가 못 꾸미는 아군 플레이어 이름표는 체력바 없이 이름만 (12.x 새 설정)
+	nameplateShowOnlyNameForFriendlyPlayerUnits = "1",
+	nameplateUseClassColorForFriendlyPlayerUnitNames = "1",
 }
 
 local function GetCV(k)
@@ -719,8 +721,22 @@ function M:RestoreNameCVars()
 	Ink.db.cvarBackup = nil
 end
 
+-- 아군 NPC 이름표: 바깥에선 켜고(역할 아이콘 · 이름), 던전 / 레이드 안에선 끈다
+--  (인스턴스 안 아군 이름표는 블리자드가 애드온 손을 막아 둬서 체력바째로 크게 나온다)
+function M:UpdateFriendlyNPCs()
+	if InCombatLockdown() then
+		self.npcPending = true
+		return
+	end
+	self.npcPending = nil
+	local inInst, kind = IsInInstance()
+	local want = (inInst and kind ~= "none") and "0" or "1"
+	if GetCV("nameplateShowFriendlyNPCs") ~= want then SetCV("nameplateShowFriendlyNPCs", want) end
+end
+
 function M:CombatEnd()
 	if self.cvarPending then self:ApplyNameCVars() end
+	if self.npcPending then self:UpdateFriendlyNPCs() end
 end
 
 function M:Init()
@@ -730,9 +746,11 @@ function M:Init()
 		return
 	end
 	self:ApplyNameCVars()
+	self:UpdateFriendlyNPCs()
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({
 		"NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED", "RAID_TARGET_UPDATE",
+		"PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA",
 		"UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_AURA",
 		"UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE", "UNIT_CLASSIFICATION_CHANGED",
 		"UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
@@ -745,6 +763,9 @@ function M:Init()
 	local function OnEvent(_, event, unit)
 		if event == "NAME_PLATE_UNIT_ADDED" then
 			M:OnAdded(unit)
+			return
+		elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+			M:UpdateFriendlyNPCs()
 			return
 		elseif event == "NAME_PLATE_UNIT_REMOVED" then
 			M:OnRemoved(unit)
