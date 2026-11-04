@@ -1006,6 +1006,8 @@ local function SkinActionButton(b, small)
 	if ns.FX then pcall(ns.FX.AttachActionButton, b, small) end
 end
 
+M.SkinActionButton = SkinActionButton
+
 -- 블리자드 "빠른 단축키 설정" 모드와 맞추기
 --  설정 중에는 모든 버튼의 단축키를 가운데 크게 노랗게, 테두리도 노랗게 → 어떤 키가 어디에 있는지 한눈에
 function M:SetKeybindMode(on)
@@ -1037,6 +1039,14 @@ end
 function Ink:OpenQuickKeybind()
 	if InCombatLockdown() then
 		print("|cffFFF468FOA|r 전투 중에는 단축키를 바꿀 수 없어요.")
+		return
+	end
+	-- FOA 행동단축바를 쓰면 FOA 단축키 설정 모드로 (블리자드 창은 블리자드 버튼만 안다)
+	local bars = Ink.modules.Bars
+	if bars and bars:Active() then
+		if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+		if GameMenuFrame and GameMenuFrame:IsShown() then HideUIPanel(GameMenuFrame) end
+		bars:SetKeybindMode(true)
 		return
 	end
 	if not QuickKeybindFrame and C_AddOns and C_AddOns.LoadAddOn then pcall(C_AddOns.LoadAddOn, "Blizzard_QuickKeybind") end

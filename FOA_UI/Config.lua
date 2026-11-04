@@ -386,6 +386,7 @@ function M:UpdateFields()
 		bar.selName:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
 		for _, w in ipairs({ bar.xBox, bar.yBox }) do w:SetText(""); w:Disable() end
 		bar.scaleTxt:SetText("—")
+		self:SyncOpts()
 		return
 	end
 	bar.selName:SetText(m.label)
@@ -399,6 +400,72 @@ function M:UpdateFields()
 		bar.scaleTxt:SetText(string.format("%d%%", ((p and p.s) or 1) * 100))
 	else
 		bar.scaleTxt:SetText("고정")
+	end
+	self:SyncOpts()
+end
+
+-- 선택한 요소만의 조절 칸 (행동단축바: 켜기 · 버튼 수 · 한 줄 · 크기 · 간격 · 빈칸 표시)
+function M:SyncOpts()
+	local bar = self.bar
+	if not bar or not bar.optRow then return end
+	local m = self.sel and Ink.movers[self.sel]
+	local opts = m and m.opts
+	local row = bar.optRow
+	if not opts then
+		row:Hide()
+		bar:SetHeight(92)
+		return
+	end
+	row:Show()
+	bar:SetHeight(134)
+	if row.forKey ~= m.key then
+		for _, w in ipairs(row.widgets or {}) do w:Hide() end
+		row.widgets = {}
+		local prev
+		for i, o in ipairs(opts) do
+			local w
+			if o.kind == "toggle" then
+				w = Button(row, o.label, 84, function()
+					o.set(not o.get())
+					M:SyncOpts(); M:SyncAll()
+				end)
+				w:SetHeight(24)
+			else
+				w = CreateFrame("Frame", nil, row)
+				w:SetHeight(24)
+				w.label = Ink:Text(w, F.sans, 11, C.muted, "LEFT")
+				w.label:SetPoint("LEFT")
+				w.label:SetText(o.label)
+				local function step(dir)
+					local v = (o.get() or o.min) + dir * o.step
+					if v >= o.min and v <= o.max then o.set(v) end
+					M:SyncOpts(); M:SyncAll()
+				end
+				w.minus = Button(w, "−", 24, function() step(-1) end)
+				w.minus:SetHeight(24)
+				w.minus:SetPoint("LEFT", w.label, "RIGHT", 6, 0)
+				w.val = Ink:Text(w, F.latinB, 12, C.text, "CENTER")
+				w.val:SetWidth(30)
+				w.val:SetPoint("LEFT", w.minus, "RIGHT", 2, 0)
+				w.plus = Button(w, "+", 24, function() step(1) end)
+				w.plus:SetHeight(24)
+				w.plus:SetPoint("LEFT", w.val, "RIGHT", 2, 0)
+				w:SetWidth(math.ceil(w.label:GetStringWidth()) + 6 + 24 + 2 + 30 + 2 + 24)
+			end
+			w.opt = o
+			if prev then w:SetPoint("LEFT", prev, "RIGHT", 14, 0) else w:SetPoint("LEFT", row, "LEFT", 0, 0) end
+			prev = w
+			row.widgets[i] = w
+		end
+		row.forKey = m.key
+	end
+	for _, w in ipairs(row.widgets) do
+		local o = w.opt
+		if o.kind == "toggle" then
+			w:SetActive(o.get() and true or false)
+		else
+			w.val:SetText(tostring(o.get() or ""))
+		end
 	end
 end
 
@@ -823,6 +890,18 @@ function M:ShowBar(on)
 		bar.aspect:SetPoint("RIGHT", -12, 0)
 		bar.aspect:SetPoint("TOP", bar.line, "BOTTOM", 0, -9)
 
+		-- 3줄: 선택한 요소만의 조절 칸 (있을 때만)
+		bar.optRow = CreateFrame("Frame", nil, bar)
+		bar.optRow:SetPoint("TOPLEFT", 16, -96)
+		bar.optRow:SetPoint("TOPRIGHT", -12, -96)
+		bar.optRow:SetHeight(28)
+		bar.optRow.line = bar.optRow:CreateTexture(nil, "ARTWORK")
+		bar.optRow.line:SetColorTexture(1, 1, 1, 0.06)
+		bar.optRow.line:SetHeight(1)
+		bar.optRow.line:SetPoint("BOTTOMLEFT", bar.optRow, "TOPLEFT", -4, 4)
+		bar.optRow.line:SetPoint("BOTTOMRIGHT", bar.optRow, "TOPRIGHT", 0, 4)
+		bar.optRow:Hide()
+
 		-- 화살표 키로 미세 이동 (입력 칸에 글자를 넣는 중엔 그대로 둔다)
 		bar:EnableKeyboard(true)
 		bar:SetPropagateKeyboardInput(true)
@@ -1187,6 +1266,7 @@ function M:BuildPanel()
 		{ "파티 프레임", "FOA 파티 프레임을 씁니다.", "party" },
 		{ "레이드 프레임", "FOA 레이드 프레임을 씁니다.", "raid" },
 		{ "경험치 바", "얇은 FOA 경험치 바를 씁니다.", "xp" },
+		{ "행동단축바", "FOA 행동단축바를 씁니다. 편집 모드에서 바마다 버튼 수 · 줄 · 크기 · 간격을 바꿀 수 있어요.", "actionBars" },
 		{ "네임플레이트", "FOA 네임플레이트를 씁니다.", "plates" },
 		{ "가방", "분류별로 정리되는 FOA 가방을 씁니다.", "bags" },
 		{ "캐릭터 창", "캐릭터 창을 FOA 스타일로 꾸밉니다.", "charSheet" },

@@ -2,16 +2,21 @@
 ## Title: |cffFFF468FOA|r UI
 ## Notes: FOA (First of All) 통합 UI
 ## Author: hyeokjiny
-## Version: 0.28.1
+## Version: 0.29.0
 ## SavedVariables: InkUIDB
 ## SavedVariablesPerCharacter: InkUICharDB
 ## IconTexture: Interface\AddOns\FOA_UI\Media\Textures\Logo
+
+Libs\LibStub.lua
+Libs\CallbackHandler-1.0.lua
+Libs\LibActionButton-1.0.lua
 
 Core.lua
 FX.lua
 Units.lua
 Center.lua
 Blizzard.lua
+ActionBars.lua
 Group.lua
 Quest.lua
 Bags.lua
