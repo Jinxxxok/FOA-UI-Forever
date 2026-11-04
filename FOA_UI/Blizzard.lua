@@ -77,6 +77,36 @@ function M:BuildMinimap()
 	if Minimap.ZoomIn then Ink:KeepHidden(Minimap.ZoomIn) end
 	if Minimap.ZoomOut then Ink:KeepHidden(Minimap.ZoomOut) end
 
+	-- 포에버: 낮/밤 표시 (MinimapCluster.DielFrame). 원래 미니맵 묶음 가운데 기준으로
+	--  붙어 있어서 FOA 미니맵에서는 지도 한복판에 뜬다. 숨기고 아래 띠 오른쪽에 작게 다시 그린다.
+	if mc and mc.DielFrame then
+		Ink:KeepHidden(mc.DielFrame)
+		local d = CreateFrame("Frame", nil, o)
+		d:SetSize(16, 16)
+		d:SetPoint("BOTTOMRIGHT", -6, 3)
+		d:SetFrameLevel(o:GetFrameLevel() + 5)
+		d.icon = d:CreateTexture(nil, "ARTWORK")
+		d.icon:SetAllPoints()
+		local function Paint(isDay)
+			if isDay == nil and C_DateAndTime and C_DateAndTime.IsDayTime then
+				isDay = C_DateAndTime.IsDayTime()
+			end
+			d.isDay = isDay and true or false
+			safe(d.icon.SetAtlas, d.icon, d.isDay and "UI-HUD-Minimap-DayCycle" or "UI-HUD-Minimap-NightCycle")
+		end
+		safe(d.RegisterEvent, d, "DIEL_CYCLE_CHANGED")
+		d:SetScript("OnEvent", function(_, _, isDay) Paint(isDay) end)
+		d:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+			GameTooltip:SetText(self.isDay and "낮" or "밤", 1, 1, 1)
+			GameTooltip:AddLine("포에버 낮·밤 주기", 0.7, 0.7, 0.7)
+			GameTooltip:Show()
+		end)
+		d:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		Paint()
+		self.mmDiel = d
+	end
+
 	-- 마우스 휠 확대/축소, 우클릭으로 추적 메뉴
 	Minimap:EnableMouseWheel(true)
 	Minimap:HookScript("OnMouseWheel", function(self, d)

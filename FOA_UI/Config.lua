@@ -1491,6 +1491,57 @@ function M:PostLayout()
 	end
 end
 
+-- 마우스 밑에 있는 화면 조각을 전부 알려 준다 (프레임 + 그 안의 그림/글자).
+--  마우스를 받지 않는 그림도 잡으려고 모든 프레임을 훑는다. 작은 것부터 출력.
+function M:WhatIsUnderMouse()
+	local hits, seen = {}, {}
+	local function nameOf(o)
+		local n = o.GetDebugName and o:GetDebugName()
+		if not n or n == "" then n = (o.GetName and o:GetName()) or "(이름 없음)" end
+		return n
+	end
+	local function add(o, kind)
+		if seen[o] then return end
+		seen[o] = true
+		local ok, over = pcall(o.IsMouseOver, o)
+		if not ok or not over then return end
+		local w, h = o:GetSize()
+		if not w or w < 1 or h < 1 or w > 900 then return end
+		local extra = ""
+		if kind == "Texture" then
+			local atlas = o.GetAtlas and o:GetAtlas()
+			local tex = o.GetTexture and o:GetTexture()
+			extra = "  " .. (atlas and ("atlas=" .. atlas) or ("tex=" .. tostring(tex)))
+			if o:GetAlpha() == 0 then extra = extra .. " (투명)" end
+		elseif kind == "FontString" then
+			extra = "  \"" .. tostring(Ink.plain(o:GetText())) .. "\""
+		else
+			extra = "  " .. tostring(o:GetFrameStrata()) .. (o:IsMouseEnabled() and " 마우스O" or " 마우스X")
+		end
+		hits[#hits + 1] = { area = w * h, text = string.format("%s [%s] %dx%d%s", nameOf(o), kind, w, h, extra) }
+	end
+	local f = EnumerateFrames()
+	while f do
+		local okVis, vis = pcall(f.IsVisible, f)
+		if okVis and vis and not (f.IsForbidden and f:IsForbidden()) then
+			add(f, f:GetObjectType())
+			local okR, regs = pcall(function() return { f:GetRegions() } end)
+			if okR then
+				for _, r in ipairs(regs) do
+					if r.IsVisible and r:IsVisible() then add(r, r:GetObjectType()) end
+				end
+			end
+		end
+		f = EnumerateFrames(f)
+	end
+	table.sort(hits, function(a, b) return a.area < b.area end)
+	print("|cffFFF468FOA|r 마우스 밑 (작은 것부터, 최대 15개):")
+	for i = 1, math.min(15, #hits) do print("  " .. hits[i].text) end
+	if GameTooltip:IsShown() and GameTooltipTextLeft1 then
+		print("  툴팁: " .. tostring(GameTooltipTextLeft1:GetText()))
+	end
+end
+
 SLASH_INKUI1 = "/foa"
 SLASH_INKUI2 = "/ink"
 SlashCmdList.INKUI = function(msg)
@@ -1522,6 +1573,8 @@ SlashCmdList.INKUI = function(msg)
 	elseif msg == "layout" then
 		Ink:Relayout()
 		print("|cffFFF468FOA|r 배치를 다시 적용했어요.")
+	elseif msg == "what" or msg == "뭐야" or msg == "찾기" then
+		M:WhatIsUnderMouse()
 	else
 		M:OpenPanel()
 	end
