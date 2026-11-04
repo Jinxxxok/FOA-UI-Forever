@@ -301,6 +301,7 @@ local function Build(plate)
 
 	f:Hide()
 	plate.ink = f
+	C_Timer.After(0, function() Ink:CrispTree(f) end)
 	return f
 end
 

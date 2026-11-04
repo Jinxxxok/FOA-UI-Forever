@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.27.0"
+Ink.version = "0.28.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -25,9 +25,10 @@ local F = Ink.font
 -- 글꼴 묶음 (설정 → 글꼴). 바꾸면 /reload.
 --  foa        : 기본 (Plex 한글 + Inter + Space Grotesk 숫자)
 --  pretendard : 선명한 글꼴. 획이 굵고 작은 크기에서도 덜 뭉개져서 1080p·1440p 윈도우에 권장
---  mubig      : 무빅UI 글꼴. 글꼴 파일은 같이 배포할 수 없어서 직접 넣는다
---               → AddOns\FOA_Fonts\MUBIG.ttf (굵은 글꼴이 따로 있으면 MUBIG-Bold.ttf)
---               FOA_UI 폴더 밖이라 FOA 를 업데이트해도 지워지지 않는다
+--  mubig      : 무빅UI 글꼴. 숫자·영문 = Y 스포트라이트 (KT 무료 글꼴, 같이 넣음)
+--               한글 = 게임 기본 글꼴 자리(Fonts\2002.ttf). 무빅UI 를 설치하면 그 자리가
+--               세방고딕으로 바뀌어 있어서 무빅UI 와 똑같이 보인다. (세방고딕은 재배포가 금지라 FOA 에 못 넣음)
+--               AddOns\FOA_Fonts\MUBIG.ttf 가 있으면 한글은 그 파일을 쓴다.
 -- 모듈들이 Ink.font 표를 그대로 들고 있으므로 표 안의 값만 바꾼다 (모듈 Init 전에).
 -------------------------------------------------------------------------------
 local PRET = MEDIA .. "Fonts\\Pretendard-"
@@ -74,15 +75,14 @@ function Ink:ApplyFontSet()
 		F.latinB = PRET .. "SemiBold.ttf"
 		self.fontSetActive = "pretendard"
 	elseif set == "mubig" then
-		local reg = self:FindUserFont("MUBIG")
-		if reg then
-			local bold = self:FindUserFont("MUBIG-Bold") or reg
-			F.sans, F.latin, F.num, F.numR = reg, reg, reg, reg
-			F.semi, F.bold, F.latinB = bold, bold, bold
-			self.fontSetActive = "mubig"
-		else
-			self.fontMissing = true
-		end
+		local ys = MEDIA .. "Fonts\\YSpotlight.ttf"
+		local kr = self:FindUserFont("MUBIG")
+		if not kr and self:FontExists("Fonts\\2002.ttf") then kr = "Fonts\\2002.ttf" end
+		kr = kr or ys
+		local krB = self:FindUserFont("MUBIG-Bold") or (kr == "Fonts\\2002.ttf" and self:FontExists("Fonts\\2002B.ttf") and "Fonts\\2002B.ttf") or kr
+		F.sans, F.semi, F.bold = kr, krB, krB
+		F.num, F.numR, F.latin, F.latinB = ys, ys, ys, ys
+		self.fontSetActive = "mubig"
 	end
 	-- 저해상도: 아주 가는 숫자 글꼴(Light)은 작은 크기에서 뭉개지므로 Regular 로
 	if self.fontSetActive == "foa" and self.lowRes then
@@ -95,6 +95,8 @@ function Ink:ApplyFontSet()
 		end
 	end
 	self.damageFont = F.semi
+	-- 무빅UI 는 머리 위 숫자도 게임 기본 자리(K_Damage)를 바꿔 쓰므로 그 자리를 그대로 쓴다
+	if self.fontSetActive == "mubig" and self:FontExists("Fonts\\K_Damage.ttf") then self.damageFont = "Fonts\\K_Damage.ttf" end
 	DAMAGE_TEXT_FONT = self.damageFont
 end
 
@@ -131,11 +133,67 @@ function Ink:DetectDensity()
 	-- 작은 글자 키우기: 1080p·1200p 는 +1 (10 이하는 +2), 1440p·1600p 는 11 이하만 +1
 	self.fontBoost = (ph < 1300) and 1 or 0
 	self.fontBoostSmall = (ph < 1300) and 2 or (ph < 1700 and 1 or 0)
-	local sfx = self.lowRes and "_s" or ""
+	-- FOA 1칸 = 몇 픽셀인지. 1080p = 1, 4K = 2 (딱 떨어져서 선명), QHD 1440p = 1.333 (소수라 번진다)
+	local k = ph / 1080
+	self.pxPerUnit = k
+	self.px = 1 / k                    -- 실제 화면 1픽셀 = FOA 몇 칸
+	-- 선명 렌더: 1칸이 정수 픽셀로 안 떨어지는 화면 (1200p · 1440p · 1600p)
+	--  · 아이콘/원/둥근 모서리를 그 해상도에 맞춰 따로 그린 이미지(_q)로
+	--  · 둥근 모서리는 이미지 1점 = 화면 1픽셀이 되게 축소해서 그린다
+	--  · 모든 FOA 이미지를 화면 픽셀 격자에 붙이고, 1칸짜리 선은 정확히 1픽셀로
+	local frac = math.abs(k - math.floor(k + 0.5)) > 0.03
+	self.crisp = ph < 1700 and frac and not (self.db and self.db.crisp == false)
+	local sfx = self.crisp and "_q" or (self.lowRes and "_s" or "")
 	self.tex.ring = MEDIA .. "Textures\\Ring" .. sfx
 	self.tex.disc = MEDIA .. "Textures\\Disc" .. sfx
 end
-Ink.icon = function(name) return MEDIA .. "Icons\\" .. name .. (Ink.lowRes and "_s" or "") end
+Ink.icon = function(name)
+	return MEDIA .. "Icons\\" .. name .. (Ink.crisp and "_q" or (Ink.lowRes and "_s" or ""))
+end
+
+-- 화면 픽셀 단위로 맞춘 두께 (1칸 선 → 정확히 1픽셀)
+function Ink:Px(size)
+	if not self.crisp then return size end
+	local n = math.max(1, math.floor(size * self.pxPerUnit + 0.5))
+	return n * self.px
+end
+
+-- 선명 렌더: 프레임 아래 모든 이미지를 픽셀 격자에 붙이고, 1칸 두께 선은 1픽셀로
+local crispDone = setmetatable({}, { __mode = "k" })
+local function CrispRegion(r)
+	if not crispDone[r] then
+		crispDone[r] = true
+		if r.SetSnapToPixelGrid then
+			r:SetSnapToPixelGrid(true)
+			r:SetTexelSnappingBias(0)
+		end
+	end
+	if r.inkRoundScaled then return end
+	local w, h = r:GetSize()
+	local one = (h and math.abs(h - 1) < 0.01 and w and w > 2) and "h" or ((w and math.abs(w - 1) < 0.01 and h and h > 2) and "w")
+	if not one then return end
+	-- 이 이미지가 화면에서 1칸 = 몇 픽셀인지 (네임플레이트는 배율이 따로라 각자 계산)
+	local ppu = r:GetEffectiveScale() * (Ink.physH or 1080) / 768
+	if ppu <= 0 or math.abs(ppu - math.floor(ppu + 0.5)) < 0.03 then return end
+	local u = math.max(1, math.floor(ppu + 0.5)) / ppu
+	if one == "h" then r:SetHeight(u) else r:SetWidth(u) end
+end
+local function CrispWalk(f, depth)
+	if depth > 40 then return end
+	for _, r in ipairs({ f:GetRegions() }) do
+		if r.IsObjectType and r:IsObjectType("Texture") then CrispRegion(r) end
+	end
+	for _, c in ipairs({ f:GetChildren() }) do CrispWalk(c, depth + 1) end
+end
+function Ink:CrispTree(f)
+	if not self.crisp or not f or not f.GetRegions then return end
+	pcall(CrispWalk, f, 0)
+end
+function Ink:CrispAll()
+	if not self.crisp then return end
+	self:CrispTree(self.root)
+	for _, n in ipairs({ "FOADungeonLoot", "FOABisPanel", "FOAVignette" }) do self:CrispTree(_G[n]) end
+end
 pcall(Ink.DetectDensity, Ink)
 
 -- 데미지 글꼴 (머리 위에 뜨는 숫자). 접속할 때 읽히므로 바꾼 뒤엔 재접속해야 적용된다.
@@ -294,6 +352,24 @@ end
 function Ink:Round(parent, layer, small, isBorder, sub)
 	local t = parent:CreateTexture(nil, layer or "BACKGROUND", nil, sub)
 	local file = isBorder and (small and Ink.tex.roundBorder4 or Ink.tex.roundBorder) or (small and Ink.tex.round4 or Ink.tex.round)
+	if Ink.crisp and t.SetScale then
+		-- 선명 렌더: 이 해상도용으로 그린 모서리(_q)를 이미지 1점 = 화면 1픽셀로 그린다.
+		-- 텍스처를 1/배율로 줄였으니 크기를 줄 때는 배율만큼 늘려서 넘긴다.
+		t:SetTexture(file .. "_q")
+		t:SetScale(Ink.px)
+		t.inkRoundScaled = true
+		local k = Ink.pxPerUnit
+		local setSize, setW, setH = t.SetSize, t.SetWidth, t.SetHeight
+		t.SetSize = function(self, w, h) setSize(self, w * k, (h or w) * k) end
+		t.SetWidth = function(self, w) setW(self, w * k) end
+		t.SetHeight = function(self, h) setH(self, h * k) end
+		if t.SetTextureSliceMargins then
+			local m = small and 7 or 11
+			t:SetTextureSliceMargins(m, m, m, m)
+			if Enum.UITextureSliceMode then t:SetTextureSliceMode(Enum.UITextureSliceMode.Stretched) end
+		end
+		return t
+	end
 	t:SetTexture(file)
 	if t.SetTextureSliceMargins then
 		local m = small and 5 or 8
@@ -305,7 +381,7 @@ end
 
 -- 1px 각진 테두리
 function Ink:Border(frame, color, size)
-	size = size or 1
+	size = self:Px(size or 1)
 	color = color or Ink.c.border
 	local b = frame.inkBorder
 	if not b then
@@ -793,6 +869,7 @@ function Ink:Relayout()
 	callAll("Layout")
 	for _, key in ipairs(self.moverOrder) do self:ApplyPos(key) end
 	callAll("PostLayout")
+	self:CrispAll()
 end
 
 local defaults = {
@@ -817,6 +894,7 @@ local defaults = {
 	questObjects = true,
 	combatHide = true,
 	dungeon = true,
+	crisp = true,
 }
 
 local ev = CreateFrame("Frame")
@@ -830,6 +908,15 @@ ev:RegisterEvent("DISPLAY_SIZE_CHANGED")
 ev:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
 ev:RegisterEvent("ADDON_ACTION_BLOCKED")
 ev:RegisterEvent("ADDON_ACTION_FORBIDDEN")
+
+-- 선명 렌더: 파티/레이드 칸은 인원이 바뀔 때 새로 생기므로 그때 다시 훑는다
+local crispEv = CreateFrame("Frame")
+crispEv:RegisterEvent("GROUP_ROSTER_UPDATE")
+crispEv:SetScript("OnEvent", function()
+	if not Ink.crisp or Ink.crispQueued then return end
+	Ink.crispQueued = true
+	C_Timer.After(1, function() Ink.crispQueued = nil; Ink:CrispAll() end)
+end)
 ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 	if event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
 		-- 원인 추적용: InkUI 때문에 막힌 동작이 있으면 어떤 함수인지 남긴다
@@ -877,18 +964,17 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 		for k, v in pairs(defaults) do
 			if Ink.db[k] == nil then Ink.db[k] = v end
 		end
+		pcall(Ink.DetectDensity, Ink)
 		pcall(Ink.ApplyFontSet, Ink)
 		Ink:UpdateScale()
 		callAll("Init")
+		C_Timer.After(0.5, function() Ink:CrispAll() end)
 		if EditModeManagerFrame then
 			hooksecurefunc(EditModeManagerFrame, "ExitEditMode", function()
 				C_Timer.After(0.2, function() Ink:Relayout() end)
 			end)
 		end
 		print("|T" .. Ink.tex.logo .. ":14:14|t |cffFFF468FOA|r " .. Ink.version .. " 로드됨 · /foa 로 설정 열기")
-		if Ink.fontMissing then
-			print("|cffFFF468FOA|r 무빅UI 글꼴 파일을 못 찾아서 기본 글꼴로 보여요. AddOns\\FOA_Fonts 폴더에 MUBIG.ttf 를 넣고 게임을 완전히 껐다 켜 주세요.")
-		end
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		Ink:Relayout()
 		C_Timer.After(1, function() Ink:Relayout() end)

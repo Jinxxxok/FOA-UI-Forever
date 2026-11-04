@@ -485,6 +485,7 @@ function M:SetTest(on)
 	end
 	self.testing = on
 	self.testFromEdit = on and self.editing or nil
+	if on then C_Timer.After(0.3, function() Ink:CrispAll() end) end
 	for _, mod in ipairs(Ink.modules) do
 		if mod ~= self and mod.SetTest then ModTest(mod, on and TestSel(mod.name)) end
 	end
@@ -993,7 +994,7 @@ end
 local FONT_DESC = {
 	foa = "FOA 기본 글꼴 (IBM Plex 한글 · Inter · Space Grotesk 숫자).",
 	pretendard = "획이 굵어 작은 글자도 또렷해요. 1080p · 1440p 모니터나 윈도우에서 글자가 뭉개질 때 추천.",
-	mubig = "무빅UI 글꼴. AddOns 안에 FOA_Fonts 폴더를 만들고 글꼴 파일을 MUBIG.ttf 로 넣은 뒤 게임을 완전히 껐다 켜 주세요.",
+	mubig = "무빅UI 글꼴. 숫자·영문은 Y 스포트라이트, 한글은 게임 글꼴 자리를 써서 무빅UI(세방고딕)를 깔아 둔 PC면 똑같이 보여요.",
 }
 function M:SyncFontButton()
 	local p = self.panel
@@ -1002,11 +1003,6 @@ function M:SyncFontButton()
 	p.font.text:SetText("글꼴: " .. (Ink.FONT_NAME[set] or set))
 	p.font:SetActive(set ~= "foa")
 	local d = FONT_DESC[set] or ""
-	if set == "mubig" and Ink.fontSetActive == "mubig" then
-		d = "무빅UI 글꼴 사용 중 (FOA_Fonts 폴더의 파일)."
-	elseif set == "mubig" and Ink:FindUserFont("MUBIG") then
-		d = "글꼴 파일을 찾았어요. /reload 하면 적용돼요."
-	end
 	p.fontDesc:SetText(d)
 end
 
@@ -1165,6 +1161,7 @@ function M:BuildPanel()
 		{ "파티 프레임", "FOA 파티 프레임을 씁니다.", "party" },
 		{ "레이드 프레임", "FOA 레이드 프레임을 씁니다.", "raid" },
 		{ "경험치 바", "얇은 FOA 경험치 바를 씁니다.", "xp" },
+		{ "선명하게 그리기", "QHD(1440p) 같은 화면에서 아이콘·테두리·선을 화면 픽셀에 맞춰 또렷하게 그립니다. 1080p·4K 는 원래 선명해서 영향 없어요.", "crisp" },
 		{ "네임플레이트", "FOA 네임플레이트를 씁니다.", "plates" },
 		{ "가방", "분류별로 정리되는 FOA 가방을 씁니다.", "bags" },
 		{ "캐릭터 창", "캐릭터 창을 FOA 스타일로 꾸밉니다.", "charSheet" },
