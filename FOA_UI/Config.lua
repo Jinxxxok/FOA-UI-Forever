@@ -996,14 +996,28 @@ local FONT_DESC = {
 	pretendard = "획이 굵어 작은 글자도 또렷해요. 1080p · 1440p 모니터나 윈도우에서 글자가 뭉개질 때 추천.",
 	mubig = "무빅UI 글꼴. 숫자·영문은 Y 스포트라이트, 한글은 게임 글꼴 자리를 써서 무빅UI(세방고딕)를 깔아 둔 PC면 똑같이 보여요.",
 }
+local TIER_NAME = { ["1x"] = "1080p", q = "QHD", ["2x"] = "4K" }
+local TIER_DESC = {
+	["1x"] = "1080p · 1200p 모니터용 이미지 (FOA 1칸 = 화면 1픽셀).",
+	q = "QHD(1440p)용: 아이콘·둥근 모서리를 1440p 에 맞춰 따로 그린 이미지로 바꾸고, 선과 테두리를 화면 픽셀에 딱 맞춰요.",
+	["2x"] = "4K 고해상도 이미지 (FOA 1칸 = 화면 2픽셀).",
+}
 function M:SyncFontButton()
 	local p = self.panel
 	if not p or not p.font then return end
 	local set = Ink.db.fontSet or "foa"
 	p.font.text:SetText("글꼴: " .. (Ink.FONT_NAME[set] or set))
 	p.font:SetActive(set ~= "foa")
-	local d = FONT_DESC[set] or ""
-	p.fontDesc:SetText(d)
+	p.fontDesc:SetText("글꼴 · " .. (FONT_DESC[set] or ""))
+	local mode = Ink.db.renderMode or "auto"
+	local auto = Ink.autoTier or "1x"
+	local tier = mode == "auto" and auto or mode
+	p.render.text:SetText("선명도: " .. (mode == "auto" and ("자동 (" .. TIER_NAME[auto] .. ")") or TIER_NAME[mode]))
+	p.render:SetActive(mode ~= "auto")
+	local w, h = GetPhysicalScreenSize()
+	local d = "선명도 · " .. (TIER_DESC[tier] or "")
+	if mode == "auto" then d = d .. string.format("  지금 화면 %d×%d", w or 0, h or 0) end
+	p.renderDesc:SetText(d)
 end
 
 function M:NeedReload()
@@ -1123,24 +1137,36 @@ function M:BuildPanel()
 	p.gfxLabel:SetPoint("BOTTOMLEFT", p.gfx.perf, "TOPLEFT", 2, 4)
 	p.gfxLabel:SetText("그래픽 프리셋")
 
-	-- 3줄: 글꼴 묶음 (누를 때마다 다음 글꼴, /reload 필요)
+	-- 3줄: 글꼴 · 화면 선명도 (누를 때마다 다음 것, /reload 필요)
 	local h3 = Ink:Text(p, F.semi, 11, C.muted, "LEFT")
 	h3:SetPoint("TOPLEFT", p.aspect, "BOTTOMLEFT", 0, -16)
-	h3:SetText("글꼴 (바꾸면 /reload 필요)")
-	p.font = Button(p, "글꼴", 180, function()
-		local cur = Ink.db.fontSet or "foa"
-		local list = Ink.FONT_SETS
+	h3:SetText("글자 · 화면 선명도 (바꾸면 /reload 필요)")
+	local function Cycle(list, cur)
 		local i = 1
 		for n, v in ipairs(list) do if v == cur then i = n end end
-		Ink.db.fontSet = list[i % #list + 1]
+		return list[i % #list + 1]
+	end
+	p.font = Button(p, "글꼴", 190, function()
+		Ink.db.fontSet = Cycle(Ink.FONT_SETS, Ink.db.fontSet or "foa")
 		M:SyncFontButton()
 		M:NeedReload()
 	end)
 	p.font:SetPoint("TOPLEFT", h3, "BOTTOMLEFT", 0, -8)
+	p.render = Button(p, "선명도", 230, function()
+		Ink.db.renderMode = Cycle({ "auto", "1x", "q", "2x" }, Ink.db.renderMode or "auto")
+		M:SyncFontButton()
+		M:NeedReload()
+	end)
+	p.render:SetPoint("LEFT", p.font, "RIGHT", 8, 0)
+	-- 설명은 버튼 아래 한 줄씩 (오른쪽 칸과 겹치지 않게 전체 폭으로)
 	p.fontDesc = Ink:Text(p, F.sans, 11, C.dim, "LEFT")
-	p.fontDesc:SetPoint("LEFT", p.font, "RIGHT", 12, 0)
-	p.fontDesc:SetWidth(440)
+	p.fontDesc:SetPoint("TOPLEFT", p.font, "BOTTOMLEFT", 2, -8)
+	p.fontDesc:SetWidth(620)
 	p.fontDesc:SetWordWrap(true)
+	p.renderDesc = Ink:Text(p, F.sans, 11, C.dim, "LEFT")
+	p.renderDesc:SetPoint("TOPLEFT", p.fontDesc, "BOTTOMLEFT", 0, -4)
+	p.renderDesc:SetWidth(620)
+	p.renderDesc:SetWordWrap(true)
 
 	-- 두 칸으로: 왼쪽 = 화면 구성, 오른쪽 = 편의 기능 + 명령어
 	local function Column(anchor, x, header, list)
@@ -1157,11 +1183,10 @@ function M:BuildPanel()
 		end
 		return prev
 	end
-	local left = Column(p.font, 0, "화면 구성 (바꾸면 /reload 필요)", {
+	local left = Column(p.renderDesc, -2, "화면 구성 (바꾸면 /reload 필요)", {
 		{ "파티 프레임", "FOA 파티 프레임을 씁니다.", "party" },
 		{ "레이드 프레임", "FOA 레이드 프레임을 씁니다.", "raid" },
 		{ "경험치 바", "얇은 FOA 경험치 바를 씁니다.", "xp" },
-		{ "선명하게 그리기", "QHD(1440p) 같은 화면에서 아이콘·테두리·선을 화면 픽셀에 맞춰 또렷하게 그립니다. 1080p·4K 는 원래 선명해서 영향 없어요.", "crisp" },
 		{ "네임플레이트", "FOA 네임플레이트를 씁니다.", "plates" },
 		{ "가방", "분류별로 정리되는 FOA 가방을 씁니다.", "bags" },
 		{ "캐릭터 창", "캐릭터 창을 FOA 스타일로 꾸밉니다.", "charSheet" },
@@ -1171,7 +1196,7 @@ function M:BuildPanel()
 		{ "던전 전리품 · BIS", "지도 옆 보스별 전리품, 캐릭터 창 BIS 탭 (본섭 예시).", "dungeon" },
 		{ "기본 창 / 글꼴 (실험)", "기본 창 껍데기와 글꼴 변경. 기본은 꺼짐.", "windows" },
 	})
-	local right = Column(p.aspect, 330, "편의 기능", {
+	local right = Column(p.renderDesc, 328, "편의 기능", {
 		{ "잡동사니 자동 판매", "상인 창을 열면 회색 아이템을 팝니다.", "sellJunk" },
 		{ "자동 수리", "상인 창을 열면 장비를 수리합니다.", "autoRepair" },
 		{ "길드 자금으로 수리", "가능하면 길드 자금을 먼저 씁니다.", "guildRepair" },

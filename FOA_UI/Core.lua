@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.28.0"
+Ink.version = "0.28.1"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -141,14 +141,19 @@ function Ink:DetectDensity()
 	--  · 아이콘/원/둥근 모서리를 그 해상도에 맞춰 따로 그린 이미지(_q)로
 	--  · 둥근 모서리는 이미지 1점 = 화면 1픽셀이 되게 축소해서 그린다
 	--  · 모든 FOA 이미지를 화면 픽셀 격자에 붙이고, 1칸짜리 선은 정확히 1픽셀로
+	--  설정 → 화면 선명도: 자동 / 1080p / QHD / 4K (자동이면 모니터 세로 픽셀로 고른다)
 	local frac = math.abs(k - math.floor(k + 0.5)) > 0.03
-	self.crisp = ph < 1700 and frac and not (self.db and self.db.crisp == false)
-	local sfx = self.crisp and "_q" or (self.lowRes and "_s" or "")
+	self.autoTier = (ph >= 1700) and "2x" or (frac and "q" or "1x")
+	local mode = self.db and self.db.renderMode or "auto"
+	self.renderTier = (mode == "1x" or mode == "q" or mode == "2x") and mode or self.autoTier
+	self.crisp = self.renderTier == "q"
+	local sfx = (self.renderTier == "q" and "_q") or (self.renderTier == "1x" and "_s") or ""
 	self.tex.ring = MEDIA .. "Textures\\Ring" .. sfx
 	self.tex.disc = MEDIA .. "Textures\\Disc" .. sfx
 end
 Ink.icon = function(name)
-	return MEDIA .. "Icons\\" .. name .. (Ink.crisp and "_q" or (Ink.lowRes and "_s" or ""))
+	local t = Ink.renderTier
+	return MEDIA .. "Icons\\" .. name .. ((t == "q" and "_q") or (t == "1x" and "_s") or "")
 end
 
 -- 화면 픽셀 단위로 맞춘 두께 (1칸 선 → 정확히 1픽셀)
@@ -894,7 +899,6 @@ local defaults = {
 	questObjects = true,
 	combatHide = true,
 	dungeon = true,
-	crisp = true,
 }
 
 local ev = CreateFrame("Frame")
