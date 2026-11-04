@@ -899,7 +899,7 @@ end
 function M:BuildLevelUp()
 	local f = CreateFrame("Frame", "FOALevelUp", Ink.root)
 	f:SetSize(480, 170)
-	f:SetPoint("TOP", Ink.root, "TOP", 0, -250)
+	f:SetPoint("TOP", Ink.root, "TOP", 0, -150)
 	f:SetFrameStrata("HIGH")
 	f:EnableMouse(false)
 	f.glow = f:CreateTexture(nil, "BACKGROUND")
@@ -950,9 +950,29 @@ function M:BuildLevelUp()
 	e:SetScript("OnEvent", function(_, _, level) M:ShowLevelUp(level) end)
 end
 
+-- 블리자드 레벨업 알림(가운데 큰 글자 / 알림 띠)은 FOA 효과와 겹치니 그동안만 투명하게
+local BLIZZ_LEVELUP = { "LevelUpDisplay", "EventToastManagerFrame" }
+function M:MuteBlizzLevelUp()
+	self.muteUntil = GetTime() + 5
+	for _, n in ipairs(BLIZZ_LEVELUP) do
+		local fr = _G[n]
+		if fr then
+			if not fr.foaMuteHook then
+				fr.foaMuteHook = true
+				fr:HookScript("OnShow", function(self) if (M.muteUntil or 0) > GetTime() then self:SetAlpha(0) end end)
+			end
+			fr:SetAlpha(0)
+		end
+	end
+	C_Timer.After(5.2, function()
+		for _, n in ipairs(BLIZZ_LEVELUP) do if _G[n] then _G[n]:SetAlpha(1) end end
+	end)
+end
+
 function M:ShowLevelUp(level, force)
 	local f = self.levelUp
 	if not f or (not force and not FX.on("levelUp")) then return end
+	if not force then self:MuteBlizzLevelUp() end
 	level = plain(level) or plain(UnitLevel("player")) or 0
 	f.num:SetText(tostring(level))
 	local _, class = UnitClass("player")

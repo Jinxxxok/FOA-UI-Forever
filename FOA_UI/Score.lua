@@ -261,6 +261,9 @@ function M:Score(link, asOffhand)
 			if short == "dps" then
 				if RANGED[loc] then total = total + v * (w.rdps or 0)
 				else total = total + v * (w.dps or 0) * (asOffhand and OFFHAND_FACTOR or 1) end
+			elseif short == "armor" then
+				-- 방어도는 가중치가 없는 특성도 아주 조금 쳐준다 (나머지가 같을 때 방어도 높은 쪽)
+				total = total + v * (w.armor or 0.004)
 			else
 				-- 클래식식 적중 · 치명타는 1% 단위. 혹시 등급 수치(큰 숫자)로 오면 대략 1% = 14 로 본다
 				if (short == "hit" or short == "crit" or short == "shit" or short == "scrit" or short == "haste") and v > 5 then v = v / 14 end
@@ -411,9 +414,11 @@ function M:Compare(link)
 	local score = FOREVER and function(l, oh) return self:Score(l, oh) end or function(l) return RetailScore(l) end
 	local new
 	local old
+	local emptySlot = false -- 그 칸에 착용한 게 정말 없을 때만 "빈 칸"
 	if loc == "INVTYPE_2HWEAPON" then
 		new = score(link)
 		local mh, oh = Equipped(16), Equipped(17)
+		emptySlot = not mh and not oh
 		local a = mh and score(mh) or 0
 		local b = oh and score(oh, true) or 0
 		if a == nil or b == nil then return end
@@ -434,15 +439,17 @@ function M:Compare(link)
 				if FOREVER and so < sm * OFFHAND_FACTOR then new, old = score(link, true), so else new, old = score(link), sm end
 			elseif dual and not oh then
 				new, old = score(link, true), 0
+				emptySlot = true
 				if not mh then new, old = score(link), 0 end
 			else
 				new, old = score(link), sm
+				emptySlot = not mh
 			end
 		end
 	elseif loc == "INVTYPE_FINGER" or loc == "INVTYPE_TRINKET" then
 		new = score(link)
 		local a, b = Equipped(slots[1]), Equipped(slots[2])
-		if not a or not b then old = 0
+		if not a or not b then old = 0; emptySlot = true
 		else
 			local sa, sb = score(a), score(b)
 			if sa == nil or sb == nil then return end
@@ -454,15 +461,20 @@ function M:Compare(link)
 		new = score(link, loc == "INVTYPE_WEAPONOFFHAND")
 		local oh = Equipped(17)
 		old = oh and score(oh, loc == "INVTYPE_WEAPONOFFHAND") or 0
+		emptySlot = not oh
 	else
 		new = score(link)
 		local cur = Equipped(slots[1])
 		old = cur and score(cur) or 0
+		emptySlot = not cur
 	end
 	if new == false or old == false then return end
 	if new == nil or old == nil then return end
-	local empty = old == 0
-	local pct = empty and 100 or ((new - old) / math.max(math.abs(old), 1) * 100)
+	local empty = emptySlot
+	local pct
+	if empty then pct = 100
+	elseif old <= 0 then pct = (new > 0) and 100 or 0 -- 둘 다 점수 0 (예: 방어도만 다른 천 장갑) → 비슷
+	else pct = (new - old) / math.max(math.abs(old), 1) * 100 end
 	local lvl = tip.level
 	if lvl and lvl <= (UnitLevel("player") or 0) then lvl = nil end
 	return { pct = pct, new = new, old = old, level = lvl, empty = empty }

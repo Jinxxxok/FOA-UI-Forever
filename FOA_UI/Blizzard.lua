@@ -564,7 +564,11 @@ function M:BuildAnchors()
 	cm.resize = function(w, h)
 		self.chatAnchor:SetSize(w, h)
 		Ink:SaveSize("chat", w, h)
-		if ChatFrame1 then Ink:Fit(ChatFrame1, self.chatAnchor, "BOTTOMLEFT", w, h) end
+		if ChatFrame1 then
+			ChatFrame1.foaFitting = true
+			Ink:Fit(ChatFrame1, self.chatAnchor, "BOTTOMLEFT", w, h)
+			ChatFrame1.foaFitting = nil
+		end
 	end
 	cm.minW, cm.minH, cm.maxW, cm.maxH = 220, 70, 900, 600
 	cm.defW, cm.defH = 340, 140
@@ -591,7 +595,29 @@ function M:LayoutAnchors()
 			if ChatFrame1.SetUserPlaced then ChatFrame1:SetUserPlaced(true) end
 		end)
 		local cw, ch = self.chatAnchor:GetSize()
+		ChatFrame1.foaFitting = true
 		Ink:Fit(ChatFrame1, self.chatAnchor, "BOTTOMLEFT", cw, ch)
+		ChatFrame1.foaFitting = nil
+		-- 블리자드(편집 모드 · 채팅 창 위치 복원)가 채팅창을 다른 자리로 옮기면 FOA 자리로 다시
+		--  (포에버는 이게 늦게 와서 편집 모드 틀과 실제 채팅창 위치가 어긋났다)
+		if not ChatFrame1.foaRefitHook then
+			ChatFrame1.foaRefitHook = true
+			local function refit()
+				if ChatFrame1.foaFitting or InCombatLockdown() or ChatFrame1.foaRefitQueued then return end
+				ChatFrame1.foaRefitQueued = true
+				C_Timer.After(0, function()
+					ChatFrame1.foaRefitQueued = nil
+					local w, h = M.chatAnchor:GetSize()
+					ChatFrame1.foaFitting = true
+					Ink:Fit(ChatFrame1, M.chatAnchor, "BOTTOMLEFT", w, h)
+					ChatFrame1.foaFitting = nil
+				end)
+			end
+			hooksecurefunc(ChatFrame1, "SetPoint", refit)
+			hooksecurefunc(ChatFrame1, "SetSize", refit)
+			if ChatFrame1.SetWidth then hooksecurefunc(ChatFrame1, "SetWidth", refit) end
+			if ChatFrame1.SetHeight then hooksecurefunc(ChatFrame1, "SetHeight", refit) end
+		end
 	end
 	if BagsBar and Ink.db.launcher ~= false then
 		Ink:Fade(BagsBar)

@@ -247,6 +247,12 @@ function M:LayoutBar(d)
 	local s = Settings(d.key)
 	local total = #d.buttons
 	local n = math.max(1, math.min(s.num or total, total))
+	-- 태세 바: 배운 태세 · 형상 수만큼만 (없으면 바를 숨긴다 · 빈칸만 남지 않게)
+	local forms
+	if d.key == "stance" then
+		forms = GetNumShapeshiftForms and GetNumShapeshiftForms() or 0
+		n = math.max(1, math.min(n, forms))
+	end
 	local per = math.max(1, math.min(s.per or n, n))
 	local size, gap = s.size or 36, s.gap or 4
 	local rows = math.ceil(n / per)
@@ -273,7 +279,7 @@ function M:LayoutBar(d)
 		else
 			RegisterStateDriver(h, "visibility", d.vis)
 		end
-	elseif s.on == false then
+	elseif s.on == false or forms == 0 then
 		h:Hide()
 	else
 		h:Show()
