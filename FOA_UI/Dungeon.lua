@@ -1569,11 +1569,21 @@ function M:AttachBisTab()
 	local cf = CharacterFrame
 	if not cf or self.bisTab then return end
 	local last
-	for i = 1, 6 do if _G["CharacterFrameTab" .. i] then last = _G["CharacterFrameTab" .. i] end end
-	if not last then return end
+	for i = 1, 6 do
+		local tab = _G["CharacterFrameTab" .. i]
+		if tab and tab:IsShown() then last = tab end
+	end
 	local t = CreateFrame("Button", "FOABisTab", cf)
-	t:SetSize(70, 32)
-	t:SetPoint("LEFT", last, "RIGHT", 2, 0)
+	-- 포에버 캐릭터 창은 아래 탭 줄 대신 오른쪽 세로 아이콘 → 창 위쪽 제목 줄(닫기 왼쪽)에 BIS 버튼
+	local side = not last
+	if side then
+		t:SetSize(46, 22)
+		t:SetPoint("TOPRIGHT", cf, "TOPRIGHT", -30, -3)
+		t:SetFrameLevel(cf:GetFrameLevel() + 20)
+	else
+		t:SetSize(70, 32)
+		t:SetPoint("LEFT", last, "RIGHT", 2, 0)
+	end
 	t.bg = Ink:Round(t, "BACKGROUND", true, false, -8)
 	t.bg:SetPoint("TOPLEFT", 3, -2)
 	t.bg:SetPoint("BOTTOMRIGHT", -3, 3)
@@ -1583,7 +1593,7 @@ function M:AttachBisTab()
 	t.line = t:CreateTexture(nil, "OVERLAY")
 	t.line:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
 	t.line:SetSize(18, 2)
-	t.line:SetPoint("BOTTOM", 0, 5)
+	t.line:SetPoint("BOTTOM", 0, side and 2 or 5)
 	local function paint()
 		local on = M.bisPanel and M.bisPanel:IsShown()
 		t.label:SetTextColor(on and C.accent[1] or C.muted[1], on and C.accent[2] or C.muted[2], on and C.accent[3] or C.muted[3])
@@ -1595,7 +1605,8 @@ function M:AttachBisTab()
 		local p = M.bisPanel
 		if p:IsShown() then p:Hide() else
 			p:ClearAllPoints()
-			p:SetPoint("TOPLEFT", cf, "TOPRIGHT", 10, 0)
+			-- 오른쪽 세로 아이콘 줄이 있으면 그 너머에
+			p:SetPoint("TOPLEFT", cf, "TOPRIGHT", side and 64 or 10, 0)
 			p:SetHeight(math.max(570, cf:GetHeight()))
 			p:Show()
 		end
