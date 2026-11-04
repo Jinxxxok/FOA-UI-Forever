@@ -228,15 +228,80 @@ function M:TierDungeons()
 	return list
 end
 
--- 순위 매기기: 진짜 데이터가 있으면 그것, 없으면 예시 (부위마다 품질 → 던전 → 보스 순 4개)
+-- 캐릭터 창 칸 번호 → 던전 도감 부위
+local INV2EJ = { [1] = 0, [2] = 1, [3] = 2, [15] = 3, [5] = 4, [9] = 5, [10] = 6, [6] = 7, [7] = 8, [8] = 9,
+	[11] = 12, [12] = 12, [13] = 13, [14] = 13, [16] = 10, [17] = 11 }
+M.INV2EJ = INV2EJ
+
+local SECONDARY = { "ITEM_MOD_CRIT_RATING_SHORT", "ITEM_MOD_HASTE_RATING_SHORT", "ITEM_MOD_MASTERY_RATING_SHORT", "ITEM_MOD_VERSATILITY" }
+
+local function ItemStats(id)
+	local ok, st = pcall(C_Item.GetItemStats, "item:" .. id)
+	return ok and st or nil
+end
+
+-- BIS 장비에 붙은 2차 능력치 합 → 이 전문화가 좋아하는 능력치 비중
+local function Weights(spec)
+	local w, total = {}, 0
+	for _, id in pairs(spec.g) do
+		local st = ItemStats(id)
+		if st then
+			for _, k in ipairs(SECONDARY) do
+				local v = st[k] or 0
+				w[k] = (w[k] or 0) + v
+				total = total + v
+			end
+		elseif C_Item.RequestLoadItemDataByID then
+			pcall(C_Item.RequestLoadItemDataByID, id)
+		end
+	end
+	if total <= 0 then return nil end
+	for _, k in ipairs(SECONDARY) do w[k] = (w[k] or 0) / total end
+	return w
+end
+
+local function Score(it, w)
+	local st = ItemStats(it.id)
+	if not st then return 0 end
+	local sc = 0
+	for _, k in ipairs(SECONDARY) do sc = sc + (st[k] or 0) * ((w and w[k]) or 0.25) end
+	return sc
+end
+
+-- 도감에 없는 아이템(제작 · 티어 · 기타)의 표시 정보
+local function LooseItem(id)
+	local _, _, _, _, icon = C_Item.GetItemInfoInstant(id)
+	local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+	if not name and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+	local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
+	local _, link = C_Item.GetItemInfo(id)
+	local data = ns.BIS
+	local src = (data and data.crafted[id]) and "전문기술 제작"
+		or (data and data.tier[id]) and "티어 세트 · 레이드 / 촉매"
+		or "기타 (평판 · 상점 · 월드 드랍 등)"
+	return { id = id, name = name, icon = icon, quality = q or 4, link = link, srcText = src }
+end
+
+-- 아이템 출처 글자
+function M:SourceText(it)
+	if it.srcText then return it.srcText end
+	local inst = self.cache[it.inst]
+	return (inst and inst.name or "던전") .. " · " .. (it.boss or "?") .. "넴 " .. (it.bossName or "")
+end
+
+-- 순위 매기기
+--  BIS 자료가 있는 전문화: BIS = 자료의 장비, 대체 1~3 = 이번 확장팩 레이드 · 던전 전리품 중
+--  BIS 장비들의 2차 능력치 비중으로 점수를 매긴 상위 3개 (FOA 계산)
+--  자료가 없으면: 예시 (부위마다 품질 → 레이드 · 던전 → 보스 순)
 function M:BuildRanks(extra)
 	local key = SpecKey()
 	if self.rankKey == key and not extra and not self.dirty then return end
 	self.rankKey, self.dirty = key, nil
 	wipe(self.ranks)
 	wipe(self.rankCount)
-	local real = BIS_DATA[key]
-	local pool = {}
+	local spec = ns.BIS and ns.BIS.specs[key]
+	self.spec = spec
+	local pool, byId = {}, {}
 	local ids = {}
 	for _, id in ipairs(self:TierDungeons()) do ids[#ids + 1] = id end
 	if extra then
@@ -253,27 +318,49 @@ function M:BuildRanks(extra)
 						it.order = order
 						pool[it.slot] = pool[it.slot] or {}
 						table.insert(pool[it.slot], it)
+						byId[it.id] = byId[it.id] or it
 					end
 				end
 			end
 		end
 	end
-	for slot, list in pairs(pool) do
-		if real then
+	if spec then
+		-- BIS: 칸마다 (반지 · 장신구는 두 칸 모두 BIS)
+		local bisIds = {}
+		for inv, id in pairs(spec.g) do
+			local slot = INV2EJ[inv]
+			local it = byId[id] or LooseItem(id)
+			it.slot = it.slot or slot
+			self.ranks[id] = { rank = 0, slot = slot, it = it, inv = inv }
+			bisIds[id] = true
+		end
+		-- 대체 1~3: BIS 능력치 비중 점수
+		local w = Weights(spec)
+		for slot, list in pairs(pool) do
+			local cand, seen = {}, {}
 			for _, it in ipairs(list) do
-				local r = real[it.id]
-				if r then self.ranks[it.id] = { rank = r.rank, slot = slot, it = it } end
+				if not bisIds[it.id] and not seen[it.id] then
+					seen[it.id] = true
+					it.score = Score(it, w)
+					cand[#cand + 1] = it
+				end
 			end
-		else
+			table.sort(cand, function(a, b)
+				if a.score ~= b.score then return a.score > b.score end
+				if a.quality ~= b.quality then return a.quality > b.quality end
+				return a.order < b.order
+			end)
+			for i = 1, math.min(3, #cand) do self.ranks[cand[i].id] = { rank = i, slot = slot, it = cand[i] } end
+		end
+	else
+		for slot, list in pairs(pool) do
 			table.sort(list, function(a, b)
 				if a.quality ~= b.quality then return a.quality > b.quality end
 				if a.order ~= b.order then return a.order < b.order end
 				if a.boss ~= b.boss then return a.boss > b.boss end
 				return a.id < b.id
 			end)
-			local seen = {}
-			local n = 0
-			-- 반지 · 장신구는 두 칸이라 5개까지
+			local seen, n = {}, 0
 			local max = (slot == 12 or slot == 13) and 5 or 4
 			for _, it in ipairs(list) do
 				if not seen[it.id] and n < max then
@@ -284,12 +371,20 @@ function M:BuildRanks(extra)
 			end
 		end
 	end
-	for id, r in pairs(self.ranks) do
-		local c = self.rankCount[r.it.inst] or { bis = 0, alt = 0 }
-		if r.rank == 0 then c.bis = c.bis + 1 else c.alt = c.alt + 1 end
-		self.rankCount[r.it.inst] = c
+	for _, r in pairs(self.ranks) do
+		if r.it.inst then
+			local c = self.rankCount[r.it.inst] or { bis = 0, alt = 0 }
+			if r.rank == 0 then c.bis = c.bis + 1 else c.alt = c.alt + 1 end
+			self.rankCount[r.it.inst] = c
+		end
 	end
-	self.isExample = not real
+	self.isExample = not spec
+end
+
+-- 자료 출처 한 줄
+function M:SourceLabel()
+	if self.spec then return "BIS: " .. self.spec.src .. " · 대체: FOA 계산" end
+	return "예시 순위 (BIS 자료 없음)"
 end
 
 local function RankText(r)
@@ -524,7 +619,7 @@ function M:PaintSidebar()
 	f.spec:SetText((UnitClass("player") or "") .. " · " .. (specName or ""))
 	f.spec:SetTextColor(cr, cg, cb)
 	f.pills:Refresh()
-	f.example:SetText(self.isExample and "예시 순위 (BIS 데이터 연결 전)" or "BIS 데이터")
+	f.example:SetText(self.isExample and "예시 순위 (BIS 자료 없음)" or ("BIS · " .. self.spec.src))
 	local cnt = self.rankCount[jid] or { bis = 0, alt = 0 }
 	f.nBis:SetText(cnt.bis)
 	f.nAlt:SetText(cnt.alt)
@@ -733,12 +828,11 @@ function M:HookTooltip()
 		local r = id and M.ranks[id]
 		if not r then return end
 		local _, _, _, specName = SpecKey()
-		local inst = M.cache[r.it.inst]
 		tt:AddLine(" ")
 		tt:AddLine("|cffFFF468—|r  |cff8E939BFOA · " .. (UnitClass("player") or "") .. " " .. (specName or "") .. (M.isExample and " · 예시 순위" or "") .. "|r")
 		local label = r.rank == 0 and "|cffFFF468BIS|r" or ("|cffFFF468대체 " .. r.rank .. "|r")
 		tt:AddDoubleLine(label .. "  " .. (SLOT_NAME[r.slot] or "") .. " " .. (r.rank + 1) .. "순위", " ", 1, 1, 1)
-		tt:AddDoubleLine("|cff9EA3AB드랍|r", (inst and inst.name or "던전") .. " · " .. r.it.boss .. "넴 " .. (r.it.bossName or ""), 1, 1, 1, 1, 1, 1)
+		tt:AddDoubleLine("|cff9EA3AB획득|r", M:SourceText(r.it), 1, 1, 1, 1, 1, 1)
 	end)
 end
 
@@ -798,7 +892,7 @@ function M:BuildBisPanel()
 	p.sep:SetPoint("TOPLEFT", 172, -76)
 	p.sep:SetPoint("BOTTOMLEFT", 172, 14)
 	p.selName = Ink:Text(p, F.bold, 14, C.text, "LEFT")
-	p.selName:SetPoint("TOPLEFT", 186, -80)
+	p.selName:SetPoint("TOPLEFT", 186, -84)
 	p.cur = Ink:Text(p, F.sans, 10, C.muted, "LEFT")
 	p.cur:SetPoint("TOPLEFT", p.selName, "BOTTOMLEFT", 0, -4)
 	p.cur:SetWidth(BP_W - 204)
@@ -806,7 +900,7 @@ function M:BuildBisPanel()
 	for i = 1, 5 do
 		local r = CreateFrame("Button", nil, p)
 		r:SetSize(BP_W - 200, 54)
-		r:SetPoint("TOPLEFT", 184, -122 - (i - 1) * 60)
+		r:SetPoint("TOPLEFT", 184, -126 - (i - 1) * 60)
 		r.bg = Ink:Round(r, "BACKGROUND", true, false)
 		r.bg:SetAllPoints()
 		r.bd = Ink:Round(r, "BORDER", true, true)
@@ -840,21 +934,223 @@ function M:BuildBisPanel()
 	p.hint:SetPoint("BOTTOMLEFT", 186, 16)
 	p.hint:SetWidth(BP_W - 204)
 	p.hint:SetWordWrap(true)
-	p.hint:SetText("마우스를 올리면 툴팁 + 드랍 위치. 순위는 이번 확장팩 레이드 · 던전 전리품 기준 예시예요.")
+	p.hint:SetText("마우스를 올리면 툴팁 + 획득처. 대체템은 BIS 장비의 능력치 비중으로 이번 시즌 레이드 · 던전 전리품에서 FOA가 고른 거예요.")
+	-- 장비 / 준비물 전환 (위 오른쪽, 예시 문구 아래)
+	p.modes = {}
+	for i, m in ipairs({ { "gear", "장비" }, { "prep", "준비물" } }) do
+		local b = CreateFrame("Button", nil, p)
+		b:SetSize(58, 24)
+		b:SetPoint("TOPLEFT", 186 + (i - 1) * 62, -48)
+		b.label = Ink:Text(b, F.semi, 12, C.muted, "CENTER")
+		b.label:SetPoint("CENTER", 0, 1)
+		b.label:SetText(m[2])
+		b.line = b:CreateTexture(nil, "OVERLAY")
+		b.line:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+		b.line:SetSize(18, 2)
+		b.line:SetPoint("BOTTOM", 0, 0)
+		b:SetScript("OnClick", function() M.bisMode = m[1]; M:PaintBis() end)
+		b.mode = m[1]
+		p.modes[i] = b
+	end
+	self:BuildPrep(p)
 	p:SetScript("OnShow", function() M:PaintBis() end)
 	self.bisPanel = p
+end
+
+-------------------------------------------------------------------------------
+-- 준비물: 소모품 · 보석 · 마법부여 (SimC 프로필 기준)
+-------------------------------------------------------------------------------
+local enchCache = {}
+-- 마법부여 이름을 게임 언어로: 그 칸 아이템에 마법부여를 붙인 링크의 툴팁에서 읽는다
+local function EnchantName(itemID, enchantID, fallback)
+	local key = (itemID or 0) .. ":" .. (enchantID or 0)
+	if enchCache[key] then return enchCache[key] end
+	local name
+	if itemID and enchantID and enchantID > 0 and C_TooltipInfo and C_TooltipInfo.GetHyperlink then
+		local ok, data = pcall(C_TooltipInfo.GetHyperlink, "item:" .. itemID .. ":" .. enchantID)
+		local T = Enum.TooltipDataLineType
+		if ok and data and data.lines then
+			for _, line in ipairs(data.lines) do
+				local t = plain(line.leftText)
+				if type(t) == "string" and ((T and line.type == T.ItemEnchantmentPermanent) or t:find("^마법부여") or t:find("^Enchanted")) then
+					name = t:gsub("^마법부여:%s*", ""):gsub("^Enchanted:%s*", "")
+					break
+				end
+			end
+		end
+	end
+	if not name then
+		name = (fallback or ""):gsub("^Enchant [%a%s]+ %- ", "")
+		if name:find("^%+") then name = "능력치 강화" end
+		if name == "" then name = "?" end
+	else
+		enchCache[key] = name
+	end
+	return name
+end
+
+local function EquippedEnchant(inv)
+	local link = GetInventoryItemLink("player", inv)
+	local e = link and link:match("item:%d+:(%d*)")
+	return tonumber(e or "")
+end
+
+local PREP_CONS = { { "flask", "영약" }, { "potion", "물약" }, { "food", "음식" }, { "rune", "증강 룬" }, { "oil", "무기 강화" } }
+
+function M:BuildPrep(p)
+	local f = CreateFrame("Frame", nil, p)
+	f:SetPoint("TOPLEFT", 12, -82)
+	f:SetPoint("BOTTOMRIGHT", -12, 12)
+	f:Hide()
+	local function Header(text, y, x)
+		local h = Ink:Text(f, F.semi, 10, C.muted, "LEFT")
+		h:SetPoint("TOPLEFT", x or 4, -y)
+		h:SetText(text)
+		return h
+	end
+	local function Line(x, y, w)
+		local r = CreateFrame("Button", nil, f)
+		r:SetSize(w, 28)
+		r:SetPoint("TOPLEFT", x, -y)
+		r.icon = ItemIcon(r, 24)
+		r.icon:SetPoint("LEFT", 0, 0)
+		r.label = Ink:Text(r, F.sans, 10, C.muted, "LEFT")
+		r.label:SetPoint("LEFT", r.icon, "RIGHT", 8, 6)
+		r.name = Ink:Text(r, F.semi, 12, C.text, "LEFT")
+		r.name:SetPoint("LEFT", r.icon, "RIGHT", 8, -6)
+		r.name:SetPoint("RIGHT", -24, -6)
+		r.mark = Ink:Text(r, F.latinB, 12, C.green, "RIGHT")
+		r.mark:SetPoint("RIGHT", -2, 0)
+		r:SetScript("OnEnter", function(self)
+			if self.itemID then
+				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+				GameTooltip:SetItemByID(self.itemID)
+				GameTooltip:Show()
+			end
+		end)
+		r:SetScript("OnLeave", GameTooltip_Hide)
+		return r
+	end
+	local half = (BP_W - 24) / 2
+	f.h1 = Header("소모품", 0)
+	f.cons = {}
+	for i = 1, #PREP_CONS do f.cons[i] = Line(4, 18 + (i - 1) * 32, half - 8) end
+	f.h2 = Header("보석", 18 + #PREP_CONS * 32 + 8)
+	f.gems = {}
+	for i = 1, 6 do f.gems[i] = Line(4, 18 + #PREP_CONS * 32 + 26 + (i - 1) * 32, half - 8) end
+	f.h3 = Header("마법부여", 0, half + 8)
+	f.ench = {}
+	for i = 1, 10 do f.ench[i] = Line(half + 8, 18 + (i - 1) * 32, half - 8) end
+	f.hint = Ink:Text(f, F.sans, 10, C.dim, "LEFT")
+	f.hint:SetPoint("BOTTOMLEFT", 4, 4)
+	f.hint:SetWidth(BP_W - 40)
+	f.hint:SetWordWrap(true)
+	p.prep = f
+end
+
+local function SetLine(r, id, label, name, quality)
+	r.itemID = id
+	r.label:SetText(label or "")
+	if id then
+		local _, _, _, _, icon = C_Item.GetItemInfoInstant(id)
+		local nm = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+		if not nm and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+		local q = quality or (C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)) or 1
+		r.icon:Set(icon, q, "")
+		local c = QCOL[q] or QCOL[1]
+		r.name:SetText(nm or name or "불러오는 중…")
+		r.name:SetTextColor(c[1], c[2], c[3])
+	else
+		r.icon:Set(nil, 1, "·")
+		r.name:SetText(name or "")
+		r.name:SetTextColor(C.text[1], C.text[2], C.text[3])
+	end
+	r.mark:SetText("")
+	r:Show()
+end
+
+function M:PaintPrep()
+	local p = self.bisPanel
+	local f = p.prep
+	local spec = self.spec
+	for _, list in ipairs({ f.cons, f.gems, f.ench }) do for _, r in ipairs(list) do r:Hide() end end
+	if not spec then
+		f.hint:SetText("이 전문화는 아직 준비물 자료가 없어요.")
+		return
+	end
+	local n = 0
+	for _, c in ipairs(PREP_CONS) do
+		local v = spec.co and spec.co[c[1]]
+		if v then
+			n = n + 1
+			if type(v) == "number" then SetLine(f.cons[n], v, c[2]) else SetLine(f.cons[n], nil, c[2], v) end
+		end
+	end
+	if n == 0 then SetLine(f.cons[1], nil, "소모품", "자료 없음") end
+	local g = 0
+	for _, id in ipairs(spec.gem or {}) do
+		g = g + 1
+		if f.gems[g] then SetLine(f.gems[g], id, g == 1 and "보석" or "") end
+	end
+	if g == 0 then SetLine(f.gems[1], nil, "보석", "자료 없음") end
+	local e = 0
+	local done = 0
+	for _, en in ipairs(spec.en or {}) do
+		e = e + 1
+		local r = f.ench[e]
+		if r then
+			local inv, eid, fallback = en[1], en[2], en[3]
+			local slotName = ""
+			for _, s in ipairs(INV) do if s[1] == inv then slotName = s[3] end end
+			local baseItem = spec.g[inv] or GetInventoryItemID("player", inv)
+			SetLine(r, nil, slotName, EnchantName(baseItem, eid, fallback))
+			local tex = GetInventoryItemTexture("player", inv)
+			r.icon:Set(tex, GetInventoryItemQuality("player", inv) or 1, "")
+			local have = EquippedEnchant(inv)
+			if eid and eid > 0 and have == eid then
+				r.mark:SetText("✓")
+				r.mark:SetTextColor(C.green[1], C.green[2], C.green[3])
+				done = done + 1
+			elseif GetInventoryItemID("player", inv) then
+				r.mark:SetText(have and "다름" or "없음")
+				r.mark:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
+			end
+		end
+	end
+	f.hint:SetText(string.format("마법부여 %d / %d 적용 · 노란 글자 = 바꾸면 좋은 칸 · 자료: %s", done, e, spec.src))
 end
 
 function M:PaintBis()
 	local p = self.bisPanel
 	if not p or not p:IsShown() then return end
 	self:BuildRanks()
+	local mode = self.bisMode or "gear"
+	for _, b in ipairs(p.modes) do
+		local on = b.mode == mode
+		b.label:SetTextColor(on and C.text[1] or C.muted[1], on and C.text[2] or C.muted[2], on and C.text[3] or C.muted[3])
+		b.line:SetShown(on)
+	end
+	local gearShown = mode == "gear"
+	for _, b in ipairs(p.slots) do b:SetShown(gearShown) end
+	for _, r in ipairs(p.ranks) do r:SetShown(gearShown) end
+	p.sep:SetShown(gearShown); p.selName:SetShown(gearShown); p.cur:SetShown(gearShown); p.hint:SetShown(gearShown)
+	p.prep:SetShown(not gearShown)
+	if not gearShown then
+		local _, _, _, specName, class = SpecKey()
+		local cr, cg, cb = ns.ClassTint(class)
+		p.spec:SetText((UnitClass("player") or "") .. " · " .. (specName or ""))
+		p.spec:SetTextColor(cr, cg, cb)
+		p.pills:Refresh()
+		p.example:SetText(self:SourceLabel())
+		self:PaintPrep()
+		return
+	end
 	local _, _, _, specName, class = SpecKey()
 	local cr, cg, cb = ns.ClassTint(class)
 	p.spec:SetText((UnitClass("player") or "") .. " · " .. (specName or ""))
 	p.spec:SetTextColor(cr, cg, cb)
 	p.pills:Refresh()
-	p.example:SetText(self.isExample and "예시 순위" or "")
+	p.example:SetText(self:SourceLabel())
 	-- 부위별 목록 (순위 순)
 	local bySlot = {}
 	for id, r in pairs(self.ranks) do
@@ -907,8 +1203,7 @@ function M:PaintBis()
 			local q = QCOL[it.quality or 1] or QCOL[1]
 			row.name:SetText(it.name or "불러오는 중…")
 			row.name:SetTextColor(q[1], q[2], q[3])
-			local inst = self.cache[it.inst]
-			row.src:SetText((inst and inst.name or "던전") .. " · " .. it.boss .. "넴 " .. (it.bossName or ""))
+			row.src:SetText(self:SourceText(it))
 			local isBis = r.rank == 0
 			row.badge:SetShown(isBis)
 			if isBis then row.badge:Set(r) end
@@ -969,7 +1264,7 @@ function M:AttachBisTab()
 		if p:IsShown() then p:Hide() else
 			p:ClearAllPoints()
 			p:SetPoint("TOPLEFT", cf, "TOPRIGHT", 10, 0)
-			p:SetHeight(math.max(520, cf:GetHeight()))
+			p:SetHeight(math.max(570, cf:GetHeight()))
 			p:Show()
 		end
 		paint()
@@ -1010,9 +1305,11 @@ function M:Init()
 	self:HookTooltip()
 	self:HookMap()
 	self:AttachBisTab()
+	-- 툴팁에 순위가 바로 나오게 접속 후 미리 한 번 계산
+	C_Timer.After(8, function() pcall(M.BuildRanks, M) end)
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({ "PLAYER_ENTERING_WORLD", "EJ_LOOT_DATA_RECIEVED", "PLAYER_SPECIALIZATION_CHANGED",
-		"ADDON_LOADED", "PLAYER_EQUIPMENT_CHANGED", "ENCOUNTER_END" }) do
+		"ADDON_LOADED", "PLAYER_EQUIPMENT_CHANGED", "ENCOUNTER_END", "GET_ITEM_INFO_RECEIVED" }) do
 		pcall(e.RegisterEvent, e, ev)
 	end
 	local pending
@@ -1024,6 +1321,20 @@ function M:Init()
 			if not M.bisTab then M:AttachBisTab() end
 		elseif event == "PLAYER_EQUIPMENT_CHANGED" then
 			M:PaintBis()
+		elseif event == "GET_ITEM_INFO_RECEIVED" then
+			-- 아이템 이름 · 능력치가 늦게 도착: 순위(대체템 점수)와 화면만 다시
+			if not (M.bisPanel and M.bisPanel:IsShown()) and not (M.sidebar and M.sidebar:IsShown()) then
+				M.dirty = true
+				return
+			end
+			if pending then return end
+			pending = true
+			C_Timer.After(0.5, function()
+				pending = nil
+				M.dirty = true
+				M:PaintSidebar()
+				M:PaintBis()
+			end)
 		else
 			-- 아이템 정보 도착 / 전문화 변경 / 보스 처치: 잠깐 모아서 다시 그리기
 			if event ~= "ENCOUNTER_END" then
