@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.33.2"
+Ink.version = "0.33.3"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -930,6 +930,12 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 		if arg1 == ADDON then
 			Ink.blocked = Ink.blocked or {}
 			table.insert(Ink.blocked, (arg2 or "?") .. " · " .. date("%H:%M:%S") .. (InCombatLockdown() and " (전투 중)" or ""))
+			-- FOA 가 숨겨 둔 블리자드 행동단축바를 블리자드가 전투 중에 다시 배치하려다 막힌 것은
+			-- 화면에 영향이 없으니 채팅에는 안 띄운다 (/foa log 에는 남김)
+			local fn = tostring(arg2)
+			if fn:find("^MultiBar") or fn:find("^MainActionBar") or fn:find("^MainMenuBar[:%.]") or fn:find("^StanceBar") or fn:find("^PetActionBar") then
+				return
+			end
 			-- 같은 동작은 30초에 한 번만 알린다 (채팅창 도배 방지)
 			Ink.blockedSaid = Ink.blockedSaid or {}
 			local key, now = tostring(arg2), GetTime()

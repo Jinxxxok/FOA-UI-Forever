@@ -61,6 +61,8 @@ local function HideBlizz(frame)
 	if not frame or frame.foaHidden then return end
 	frame.foaHidden = true
 	frame:SetParent(Ink.hidden)
+	-- 화면 배치 관리자가 이 바 자리를 다시 잡지 않게 (전투 중 "막힌 동작" 줄이기)
+	frame.ignoreFramePositionManager = true
 	hooksecurefunc(frame, "SetParent", function(self, p)
 		if p == Ink.hidden or self.foaReparent then return end
 		local function again()
