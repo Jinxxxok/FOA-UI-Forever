@@ -40,15 +40,102 @@ local function Available()
 	return C_EncounterJournal and EJ_SelectInstance and EJ_GetNumLoot and C_EncounterJournal.GetLootInfoByIndex and true or false
 end
 
+-- 내 직업의 전문화 목록 { {id, name, icon}, ... }
+local function Specs()
+	local list = {}
+	local n = GetNumSpecializations and GetNumSpecializations() or 0
+	for i = 1, n do
+		local id, name, _, icon = GetSpecializationInfo(i)
+		if id then list[#list + 1] = { id = id, name = name, icon = icon } end
+	end
+	return list
+end
+
+local function CurrentSpecID()
+	local idx = GetSpecialization and GetSpecialization()
+	return idx and GetSpecializationInfo(idx) or 0
+end
+
+-- 지금 "보고 있는" 전문화 (BIS 판 · 사이드바에서 바꿀 수 있다. 기본은 지금 전문화)
+local function ViewSpecID()
+	local v = Ink.cdb and Ink.cdb.bisSpec
+	if v then
+		for _, sp in ipairs(Specs()) do if sp.id == v then return v end end
+	end
+	return CurrentSpecID()
+end
+
 local function SpecKey()
 	local _, class, classID = UnitClass("player")
-	local idx = GetSpecialization and GetSpecialization()
-	local specID, specName = 0, ""
-	if idx then
-		local id, name = GetSpecializationInfo(idx)
-		specID, specName = id or 0, name or ""
-	end
+	local specID = ViewSpecID() or 0
+	local specName = ""
+	for _, sp in ipairs(Specs()) do if sp.id == specID then specName = sp.name end end
 	return class .. ":" .. specID, classID, specID, specName, class
+end
+
+function M:SetViewSpec(id)
+	if Ink.cdb then Ink.cdb.bisSpec = (id ~= CurrentSpecID()) and id or nil end
+	self.dirty = true
+	self:PaintSidebar()
+	self:PaintBis()
+end
+
+-- 전문화 고르기 (아이콘 줄): 고른 것 = 노란 테두리, 지금 내 전문화 = 아래 작은 점
+local function SpecPills(parent, size)
+	local holder = CreateFrame("Frame", nil, parent)
+	holder:SetSize(10, size)
+	holder.btns = {}
+	function holder:Refresh()
+		local specs = Specs()
+		local view, cur = ViewSpecID(), CurrentSpecID()
+		local x = 0
+		for i, sp in ipairs(specs) do
+			local b = self.btns[i]
+			if not b then
+				b = CreateFrame("Button", nil, self)
+				b:SetSize(size, size)
+				b.icon = b:CreateTexture(nil, "ARTWORK")
+				b.icon:SetPoint("TOPLEFT", 2, -2)
+				b.icon:SetPoint("BOTTOMRIGHT", -2, 2)
+				b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+				local m = b:CreateMaskTexture()
+				m:SetTexture(Ink.tex.mask, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+				m:SetAllPoints(b.icon)
+				b.icon:AddMaskTexture(m)
+				b.bd = Ink:Round(b, "OVERLAY", true, true)
+				b.bd:SetAllPoints()
+				b.dot = b:CreateTexture(nil, "OVERLAY", nil, 2)
+				b.dot:SetTexture(Ink.tex.disc)
+				b.dot:SetSize(5, 5)
+				b.dot:SetPoint("TOP", b, "BOTTOM", 0, -2)
+				b.dot:SetVertexColor(C.green[1], C.green[2], C.green[3])
+				b:SetScript("OnClick", function(btn) M:SetViewSpec(btn.specID) end)
+				b:SetScript("OnEnter", function(btn)
+					GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+					GameTooltip:AddLine(btn.specName .. " BIS 보기", 1, 1, 1)
+					if btn.specID == CurrentSpecID() then GameTooltip:AddLine("지금 내 전문화", 0.44, 0.83, 0.6) end
+					GameTooltip:Show()
+				end)
+				b:SetScript("OnLeave", GameTooltip_Hide)
+				self.btns[i] = b
+			end
+			b.specID, b.specName = sp.id, sp.name
+			b.icon:SetTexture(sp.icon)
+			local on = sp.id == view
+			local a = C.accent
+			b.bd:SetVertexColor(on and a[1] or 1, on and a[2] or 1, on and a[3] or 1, on and 1 or 0.15)
+			b.icon:SetDesaturated(not on)
+			b.icon:SetAlpha(on and 1 or 0.6)
+			b.dot:SetShown(sp.id == cur)
+			b:ClearAllPoints()
+			b:SetPoint("LEFT", x, 0)
+			b:Show()
+			x = x + size + 5
+		end
+		for i = #specs + 1, #self.btns do self.btns[i]:Hide() end
+		self:SetWidth(math.max(10, x - 5))
+	end
+	return holder
 end
 
 -------------------------------------------------------------------------------
@@ -317,8 +404,10 @@ function M:BuildSidebar()
 	f.lAlt = Ink:Text(f, F.sans, 10, C.soft, "LEFT")
 	f.lAlt:SetPoint("TOPLEFT", f.nAlt, "BOTTOMLEFT", 1, -2)
 	f.lAlt:SetText("대체템")
+	f.pills = SpecPills(f, 22)
+	f.pills:SetPoint("TOPRIGHT", -16, -56)
 	f.spec = Ink:Text(f, F.semi, 11, C.text, "RIGHT")
-	f.spec:SetPoint("TOPRIGHT", -16, -60)
+	f.spec:SetPoint("TOPRIGHT", f.pills, "BOTTOMRIGHT", 0, -9)
 	f.example = Ink:Text(f, F.sans, 10, C.dim, "RIGHT")
 	f.example:SetPoint("TOPRIGHT", f.spec, "BOTTOMRIGHT", 0, -4)
 	-- 내 장비만 / 전부
@@ -338,11 +427,11 @@ function M:BuildSidebar()
 	f.line = f:CreateTexture(nil, "ARTWORK")
 	f.line:SetColorTexture(1, 1, 1, 0.06)
 	f.line:SetHeight(1)
-	f.line:SetPoint("TOPLEFT", 12, -134)
-	f.line:SetPoint("TOPRIGHT", -12, -134)
+	f.line:SetPoint("TOPLEFT", 12, -150)
+	f.line:SetPoint("TOPRIGHT", -12, -150)
 	-- 목록 (휠로 스크롤)
 	local sf = CreateFrame("ScrollFrame", nil, f)
-	sf:SetPoint("TOPLEFT", 8, -140)
+	sf:SetPoint("TOPLEFT", 8, -156)
 	sf:SetPoint("BOTTOMRIGHT", -8, 10)
 	local body = CreateFrame("Frame", nil, sf)
 	body:SetSize(SB_W - 16, 10)
@@ -430,6 +519,7 @@ function M:PaintSidebar()
 	f.title:SetText(data and data.name or "던전")
 	f.spec:SetText((UnitClass("player") or "") .. " · " .. (specName or ""))
 	f.spec:SetTextColor(cr, cg, cb)
+	f.pills:Refresh()
 	f.example:SetText(self.isExample and "예시 순위 (BIS 데이터 연결 전)" or "BIS 데이터")
 	local cnt = self.rankCount[jid] or { bis = 0, alt = 0 }
 	f.nBis:SetText(cnt.bis)
@@ -665,8 +755,10 @@ function M:BuildBisPanel()
 	p.title:SetText("BIS")
 	p.spec = Ink:Text(p, F.semi, 11, C.text, "LEFT")
 	p.spec:SetPoint("LEFT", p.title, "RIGHT", 10, -1)
+	p.pills = SpecPills(p, 24)
+	p.pills:SetPoint("TOPRIGHT", -16, -12)
 	p.example = Ink:Text(p, F.sans, 10, C.dim, "RIGHT")
-	p.example:SetPoint("TOPRIGHT", -16, -17)
+	p.example:SetPoint("TOPRIGHT", p.pills, "BOTTOMRIGHT", 0, -12)
 	p.sumN = Ink:Text(p, F.num, 26, C.text, "LEFT")
 	p.sumN:SetPoint("TOPLEFT", p.title, "BOTTOMLEFT", 0, -10)
 	p.sumL = Ink:Text(p, F.sans, 10, C.muted, "LEFT")
@@ -757,6 +849,7 @@ function M:PaintBis()
 	local cr, cg, cb = ns.ClassTint(class)
 	p.spec:SetText((UnitClass("player") or "") .. " · " .. (specName or ""))
 	p.spec:SetTextColor(cr, cg, cb)
+	p.pills:Refresh()
 	p.example:SetText(self.isExample and "예시 순위" or "")
 	-- 부위별 목록 (순위 순)
 	local bySlot = {}
@@ -797,7 +890,8 @@ function M:PaintBis()
 	local curID = GetInventoryItemID("player", sb.inv)
 	local curLink = GetInventoryItemLink("player", sb.inv)
 	local curR = curID and self.ranks[curID]
-	p.cur:SetText("지금: " .. (curLink or "비어 있음") .. (curR and ("  (" .. RankText(curR) .. ")") or ""))
+	local other = ViewSpecID() ~= CurrentSpecID()
+	p.cur:SetText("지금: " .. (curLink or "비어 있음") .. (curR and ("  (" .. RankText(curR) .. ")") or "") .. (other and "  ·  다른 전문화 보는 중" or ""))
 	local list = bySlot[sb.ej] or {}
 	local a = C.accent
 	for i, row in ipairs(p.ranks) do
