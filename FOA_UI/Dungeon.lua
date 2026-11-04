@@ -72,7 +72,8 @@ end
 
 local function CurrentSpecID()
 	if FOREVER then
-		local _, spec = ns.Score and ns.Score:Spec()
+		if not ns.Score then return "" end
+		local _, spec = ns.Score:Spec() -- (a and f() 는 값 하나만 돌려주므로 따로 부른다)
 		return spec or ""
 	end
 	local idx = GetSpecialization and GetSpecialization()
@@ -363,11 +364,12 @@ ForeverScan = function(key)
 		for _, id in ipairs(b[2]) do
 			local _, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
 			local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+			local iname, link = C_Item.GetItemInfo(id) -- 서버에 정보를 요청하는 역할도 한다
+			name = name or iname
 			if not name then
 				data.missing = data.missing + 1
 				if C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
 			end
-			local _, link = C_Item.GetItemInfo(id)
 			local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
 			table.insert(boss.items, {
 				id = id, name = name, link = link, icon = icon, slot = loc and EQUIP_EJ[loc], quality = q or 2,
@@ -890,6 +892,15 @@ function M:PaintSidebar()
 			end
 			y = y + 6
 		end
+	end
+	-- 포에버: 아이템 이름이 아직 안 온 게 있으면 잠깐씩 다시 (서버가 늦게 보내 준다)
+	if FOREVER and data and data.missing > 0 and (self.sbRetry or 0) < 20 then
+		self.sbRetry = (self.sbRetry or 0) + 1
+		C_Timer.After(0.8, function()
+			if self.sidebar and self.sidebar:IsShown() then self.dirty = true; self:PaintSidebar() end
+		end)
+	elseif data and data.missing == 0 then
+		self.sbRetry = 0
 	end
 	f.empty:SetShown(nr == 0)
 	f.empty:SetText(data and (all and "여기에는 내 직업 전리품이 없어요" or "여기선 내 BIS · 대체템이 안 나와요\n(오른쪽 위 버튼으로 전부 보기)") or "전리품 정보를 불러오는 중…")

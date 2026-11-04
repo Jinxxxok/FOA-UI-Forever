@@ -25,6 +25,96 @@ local function Unspent()
 end
 
 -------------------------------------------------------------------------------
+-- 포에버 특성 체계: 클래식식 함수(GetTalentInfo)가 없고 용군단식 특성(C_ClassTalents · C_Traits)을 쓴다.
+--  특성 칸(노드)마다 주문 아이콘을 읽어서, 데이터의 아이콘 번호와 맞춘다.
+-------------------------------------------------------------------------------
+local function TraitsMode()
+	return not GetNumTalentTabs and C_ClassTalents and C_Traits and C_ClassTalents.GetActiveConfigID and true or false
+end
+M.TraitsMode = TraitsMode
+
+local function ConfigID()
+	local ok, id = pcall(C_ClassTalents.GetActiveConfigID)
+	return ok and id or nil
+end
+
+local function SpellIcon(spellID)
+	if not spellID then return end
+	if C_Spell and C_Spell.GetSpellTexture then return C_Spell.GetSpellTexture(spellID) end
+	if GetSpellTexture then return GetSpellTexture(spellID) end
+end
+
+local function SpellName(spellID)
+	if not spellID then return end
+	if C_Spell and C_Spell.GetSpellName then return C_Spell.GetSpellName(spellID) end
+	if GetSpellInfo then return (GetSpellInfo(spellID)) end
+end
+
+-- 노드 목록: { node, icon, rank, max, name }
+local function TraitNodes()
+	local cfg = ConfigID()
+	if not cfg then return {} end
+	local okc, info = pcall(C_Traits.GetConfigInfo, cfg)
+	if not okc or not info or not info.treeIDs then return {} end
+	local out = {}
+	for _, tree in ipairs(info.treeIDs) do
+		local okn, nodes = pcall(C_Traits.GetTreeNodes, tree)
+		for _, nodeID in ipairs(okn and nodes or {}) do
+			local ok, n = pcall(C_Traits.GetNodeInfo, cfg, nodeID)
+			if ok and n and n.ID and n.ID ~= 0 and (n.isVisible ~= false) then
+				local entryID = (n.activeEntry and n.activeEntry.entryID) or (n.entryIDs and n.entryIDs[1])
+				local icon, name
+				if entryID then
+					local oke, e = pcall(C_Traits.GetEntryInfo, cfg, entryID)
+					if oke and e and e.definitionID then
+						local okd, d = pcall(C_Traits.GetDefinitionInfo, e.definitionID)
+						if okd and d then
+							icon = d.overrideIcon or SpellIcon(d.spellID)
+							name = d.overrideName or SpellName(d.spellID)
+						end
+					end
+				end
+				out[#out + 1] = { node = nodeID, entry = entryID, icon = icon, name = name,
+					rank = n.currentRank or n.ranksPurchased or 0, max = n.maxRanks or 1 }
+			end
+		end
+	end
+	return out
+end
+M.TraitNodes = TraitNodes
+
+local function NodeRank(nodeID)
+	local cfg = ConfigID()
+	if not cfg then return 0 end
+	local ok, n = pcall(C_Traits.GetNodeInfo, cfg, nodeID)
+	return ok and n and (n.currentRank or n.ranksPurchased) or 0
+end
+
+-- 찍은 특성으로 특성(빌드) 짐작: 각 빌드의 단계 아이콘과 겹치는 찍은 단계 수가 가장 많은 것
+function M:GuessSpec()
+	if not TraitsMode() then return end
+	local _, class = UnitClass("player")
+	local byIcon = {}
+	local spent = 0
+	for _, n in ipairs(TraitNodes()) do
+		if n.icon and n.rank > 0 then byIcon[n.icon] = (byIcon[n.icon] or 0) + n.rank; spent = spent + n.rank end
+	end
+	if spent == 0 then return end
+	local best, bestN = nil, 0
+	for key, b in pairs(ns.TalentData and ns.TalentData.builds or {}) do
+		local cls, spec = key:match("^(%u+):(%w+)$")
+		if cls == class then
+			local seen, n = {}, 0
+			for _, st in ipairs(b.steps) do
+				if not seen[st[1]] then seen[st[1]] = true; n = n + (byIcon[st[1]] or 0) end
+			end
+			if n > bestN then best, bestN = spec, n end
+		end
+	end
+	return best
+end
+
+-------------------------------------------------------------------------------
 -- 빌드 고르기 · 게임 특성과 맞추기
 -------------------------------------------------------------------------------
 function M:Builds()
@@ -43,7 +133,8 @@ function M:BuildKey()
 	if #list == 0 then return end
 	local want = Ink.cdb and Ink.cdb.talentBuild
 	if want and ns.TalentData.builds[want] then return want end
-	local class, spec = ns.Score and ns.Score:Spec()
+	local class, spec
+	if ns.Score then class, spec = ns.Score:Spec() end
 	local key = class and spec and (class .. ":" .. spec)
 	if key and ns.TalentData.builds[key] then return key end
 	return list[1]
@@ -52,6 +143,15 @@ end
 -- 아이콘 → 게임 특성 위치
 local function IconMap()
 	local map = {}
+	if TraitsMode() then
+		for _, n in ipairs(TraitNodes()) do
+			if n.icon then
+				map[n.icon] = map[n.icon] or {}
+				table.insert(map[n.icon], { node = n.node, max = n.max, name = n.name })
+			end
+		end
+		return map
+	end
 	local tabs = GetNumTalentTabs and GetNumTalentTabs() or 0
 	for t = 1, tabs do
 		for i = 1, (GetNumTalents(t) or 0) do
@@ -83,8 +183,9 @@ function M:Resolve()
 		end
 		local r = { lo = lo, hi = hi, en = en, icon = fid }
 		if pick then
-			r.t, r.i, r.max, r.name = pick.t, pick.i, pick.max, pick.name
-			local k = pick.t .. ":" .. pick.i
+			r.t, r.i, r.node, r.max, r.name = pick.t, pick.i, pick.node, pick.max, pick.name
+			local k = pick.node and ("n" .. pick.node) or (pick.t .. ":" .. pick.i)
+			r.k = k
 			r.from = prev[k] or 0
 			r.target = math.min(target, pick.max)
 			prev[k] = r.target
@@ -103,13 +204,15 @@ function M:Next(n)
 	if not steps then return {} end
 	local out, sim = {}, {}
 	for _, s in ipairs(steps) do
-		if s.t then
-			local k = s.t .. ":" .. s.i
+		if s.k then
+			local k = s.k
 			local cur = sim[k]
-			if cur == nil then cur = select(5, TalentInfo(s.t, s.i)) end
+			if cur == nil then
+				if s.node then cur = NodeRank(s.node) else cur = select(5, TalentInfo(s.t, s.i)) end
+			end
 			while cur < s.target and #out < n do
 				cur = cur + 1
-				out[#out + 1] = { t = s.t, i = s.i, name = s.name or s.en, icon = s.icon, rank = cur, max = s.max,
+				out[#out + 1] = { t = s.t, i = s.i, node = s.node, name = s.name or s.en, icon = s.icon, rank = cur, max = s.max,
 					level = math.max(s.lo, math.min(s.hi, s.lo + (cur - s.from) - 1)) }
 			end
 			sim[k] = cur
@@ -124,6 +227,14 @@ end
 -------------------------------------------------------------------------------
 local function TalentFrame()
 	return _G.PlayerTalentFrame or _G.TalentFrame
+end
+
+-- 용군단식 특성 창 (불러온 뒤에만 있다)
+local function TraitFrame()
+	local psf = _G.PlayerSpellsFrame
+	if psf and psf.TalentsFrame then return psf.TalentsFrame, psf end
+	local ctf = _G.ClassTalentFrame
+	if ctf and ctf.TalentsTab then return ctf.TalentsTab, ctf end
 end
 
 local function SelectedTab(f)
@@ -159,7 +270,23 @@ local function Glow(b)
 	return g
 end
 
+function M:PaintTraitFrame()
+	local tf, host = TraitFrame()
+	if not tf or not host or not host:IsShown() then if self.panel then self.panel:Hide() end return end
+	local nxt = self:Next(8)
+	local first = nxt[1]
+	-- 이전 강조 지우기
+	for b in pairs(self.glowed or {}) do if b.foaNext then b.foaNext:Hide() end end
+	self.glowed = {}
+	if first and first.node and tf.GetTalentButtonByNodeID and Ink.db.talentGuide ~= false then
+		local ok, b = pcall(tf.GetTalentButtonByNodeID, tf, first.node)
+		if ok and b then Glow(b):Show(); self.glowed[b] = true end
+	end
+	self:PaintPanel(host, nxt)
+end
+
 function M:PaintFrame()
+	if TraitsMode() then return self:PaintTraitFrame() end
 	local f = TalentFrame()
 	if not f or not f:IsShown() then if self.panel then self.panel:Hide() end return end
 	local nxt = self:Next(8)
@@ -269,11 +396,12 @@ function M:PaintPanel(f, nxt)
 			r:Show()
 			r.icon:SetTexture(n.icon)
 			r.name:SetText(n.name or "?")
-			if not TREE_NAMES[n.t] and GetTalentTabInfo then
+			if n.t and not TREE_NAMES[n.t] and GetTalentTabInfo then
 				local a, b2 = GetTalentTabInfo(n.t)
 				TREE_NAMES[n.t] = type(a) == "string" and a or (type(b2) == "string" and b2) or ""
 			end
-			r.sub:SetText(string.format("%s · %d/%d", TREE_NAMES[n.t] or "", n.rank, n.max))
+			local tree = n.t and TREE_NAMES[n.t] or ""
+			r.sub:SetText(tree ~= "" and string.format("%s · %d/%d", tree, n.rank, n.max) or string.format("%d/%d 단계", n.rank, n.max))
 			r.lv:SetText("Lv " .. n.level)
 			if i == 1 then
 				r.name:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
@@ -297,7 +425,18 @@ function M:PaintPanel(f, nxt)
 	p.foot:SetText(foot)
 end
 
+function M:HookTraitFrame()
+	if self.traitHooked then return end
+	local tf, host = TraitFrame()
+	if not tf or not host then return end
+	self.traitHooked = true
+	host:HookScript("OnShow", function() C_Timer.After(0.1, function() M:PaintFrame() end) end)
+	host:HookScript("OnHide", function() if M.panel then M.panel:Hide() end end)
+	if tf.HookScript then tf:HookScript("OnShow", function() C_Timer.After(0.1, function() M:PaintFrame() end) end) end
+end
+
 function M:HookFrame()
+	if TraitsMode() then return self:HookTraitFrame() end
 	if self.hooked then return end
 	local f = TalentFrame()
 	if not f then return end
@@ -324,22 +463,26 @@ end
 function M:Init()
 	local build = select(4, GetBuildInfo()) or 0
 	if not (build >= 16001 and build < 20000) then return end -- 포에버 전용 (본섭은 특성 체계가 다름)
-	if not (GetNumTalentTabs and GetTalentInfo and ns.TalentData) then return end
+	if not ns.TalentData then return end
+	if not ((GetNumTalentTabs and GetTalentInfo) or TraitsMode()) then return end
 	if #self:Builds() == 0 then return end
 	self:HookFrame()
 	local ev = CreateFrame("Frame")
-	for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LEVEL_UP", "CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE", "SPELLS_CHANGED" }) do
+	for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LEVEL_UP", "CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE", "SPELLS_CHANGED",
+		"TRAIT_CONFIG_UPDATED", "TRAIT_NODE_CHANGED", "TRAIT_TREE_CURRENCY_INFO_UPDATED" }) do
 		pcall(ev.RegisterEvent, ev, e)
 	end
 	ev:SetScript("OnEvent", function(_, event, arg)
 		if event == "ADDON_LOADED" then
-			if arg == "Blizzard_TalentUI" or arg == "Blizzard_PlayerTalentUI" then M:HookFrame() end
+			if type(arg) == "string" and (arg:find("Talent") or arg:find("PlayerSpells")) then
+				C_Timer.After(0, function() M:HookFrame() end)
+			end
 			return
 		end
 		M.resolved = nil
 		if event == "PLAYER_LEVEL_UP" then
 			C_Timer.After(1, function() M:Remind() end)
-		elseif event == "CHARACTER_POINTS_CHANGED" then
+		elseif event == "CHARACTER_POINTS_CHANGED" or event:find("^TRAIT_") then
 			C_Timer.After(0.2, function() M:PaintFrame() end)
 		else
 			M:PaintFrame()

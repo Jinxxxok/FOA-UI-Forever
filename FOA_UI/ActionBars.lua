@@ -484,6 +484,12 @@ function M:Init()
 		self:BuildExtra(d)
 		if d.header then self.list[#self.list + 1] = d end
 	end
+	-- 예전 버전에서 새 캐릭터 1번 바가 꺼진 채로 저장된 경우 되살리기 (한 번만)
+	if Ink.cdb.barsImported and not Ink.cdb.barsFix1 then
+		Ink.cdb.barsFix1 = true
+		local b1 = Ink.cdb.bars.bar1
+		if b1 and b1.on == false then b1.on = true end
+	end
 	if Ink.cdb.barsImported then
 		self:HideAllBlizz()
 	else
@@ -543,8 +549,18 @@ end
 function M:FirstImport()
 	if Ink.cdb.barsImported then return end
 	if InCombatLockdown() then self.pendingImport = true return end
+	-- 새 캐릭터 첫 접속(시작 영상 · 로딩)에는 블리자드 바가 아직 안 보여서 "전부 꺼짐"으로 읽힌다.
+	-- 화면이 보이고 1번 바 버튼이 잡힐 때까지 기다렸다가 읽고, 끝내 못 읽으면 기본 배치로.
+	self.importTries = (self.importTries or 0) + 1
 	local ok, imported = pcall(self.ImportBlizzard, self)
 	if not ok then imported = {} end
+	local mainOK = imported.bar1 and imported.bar1.on
+	if (not UIParent:IsVisible() or not mainOK) and self.importTries < 20 then
+		C_Timer.After(3, function() M:FirstImport() end)
+		return
+	end
+	if not mainOK then imported = {} end
+	if imported.bar1 then imported.bar1.on = true end -- 1번 바는 절대 끄지 않는다
 	for key, r in pairs(imported) do
 		local s = Settings(key)
 		for _, k in ipairs({ "on", "num", "per", "size", "gap" }) do if r[k] ~= nil then s[k] = r[k] end end
