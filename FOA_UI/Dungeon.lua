@@ -38,6 +38,7 @@ local QCOL = {
 
 local FOREVER = (function() local b = select(4, GetBuildInfo()) or 0 return b >= 16001 and b < 20000 end)()
 M.forever = FOREVER
+local FLoot, ForeverScan -- 포에버 던전 자료 (아래에서 정의)
 
 local function Available()
 	return C_EncounterJournal and EJ_SelectInstance and EJ_GetNumLoot and C_EncounterJournal.GetLootInfoByIndex and true or false
@@ -216,6 +217,14 @@ local function ReadInstance(jid)
 end
 
 function M:Scan(jid)
+	if FOREVER then
+		if not jid then return end
+		local cached = self.cache[jid]
+		if cached and cached.missing == 0 then return cached end
+		local data = ForeverScan(jid)
+		if data then self.cache[jid] = data end
+		return data or cached
+	end
 	if not Available() or not jid then return nil end
 	local key = SpecKey()
 	local cached = self.cache[jid]
@@ -307,6 +316,10 @@ end
 -- 아이템 출처 글자
 function M:SourceText(it)
 	if it.srcText then return it.srcText end
+	if FOREVER and it.inst then
+		local d = FLoot(it.inst)
+		return (d and (d.ko or d.en) or "던전") .. " · " .. (it.boss or "?") .. "넴 " .. (it.bossName or "")
+	end
 	local inst = self.cache[it.inst]
 	return (inst and inst.name or "던전") .. " · " .. (it.boss or "?") .. "넴 " .. (it.bossName or "")
 end
@@ -327,6 +340,45 @@ local function KoSource(s)
 	return s
 end
 
+-- 포에버 던전 전리품 (ForeverLoot.lua · 던전 도감 대신)
+local EQUIP_EJ = {
+	INVTYPE_HEAD = 0, INVTYPE_NECK = 1, INVTYPE_SHOULDER = 2, INVTYPE_CLOAK = 3, INVTYPE_CHEST = 4, INVTYPE_ROBE = 4,
+	INVTYPE_WRIST = 5, INVTYPE_HAND = 6, INVTYPE_WAIST = 7, INVTYPE_LEGS = 8, INVTYPE_FEET = 9,
+	INVTYPE_WEAPON = 10, INVTYPE_WEAPONMAINHAND = 10, INVTYPE_2HWEAPON = 10, INVTYPE_WEAPONOFFHAND = 11,
+	INVTYPE_SHIELD = 11, INVTYPE_HOLDABLE = 11, INVTYPE_FINGER = 12, INVTYPE_TRINKET = 13,
+}
+FLoot = function(key)
+	for i, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
+		if d.key == key then return d, i end
+	end
+end
+M.FLoot = FLoot
+
+ForeverScan = function(key)
+	local d = FLoot(key)
+	if not d then return end
+	local data = { id = key, name = d.ko or d.en, lo = d.lo, hi = d.hi, bosses = {}, missing = 0 }
+	for bi, b in ipairs(d.bosses) do
+		local boss = { index = bi, name = b[1], items = {} }
+		for _, id in ipairs(b[2]) do
+			local _, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
+			local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+			if not name then
+				data.missing = data.missing + 1
+				if C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+			end
+			local _, link = C_Item.GetItemInfo(id)
+			local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
+			table.insert(boss.items, {
+				id = id, name = name, link = link, icon = icon, slot = loc and EQUIP_EJ[loc], quality = q or 2,
+				inst = key, boss = bi, bossName = b[1],
+			})
+		end
+		data.bosses[bi] = boss
+	end
+	return data
+end
+
 -- 포에버: 공략 BIS (g) = BIS, 공략 대체(alt) 순서 = 대체 1~3 (던전 도감이 없어서 전리품 표 대신 공략 목록)
 function M:BuildRanksForever()
 	local key = SpecKey()
@@ -337,13 +389,56 @@ function M:BuildRanksForever()
 	local spec = ns.BIS_FOREVER and ns.BIS_FOREVER.specs[key]
 	self.spec = spec and { src = ns.BIS_FOREVER.src, g = spec.g, fo = spec } or nil
 	self.isExample = false
-	if not spec then return end
 	local per = {}
+	-- 던전 전리품 모음 (아이템 → 어느 던전 몇 넴)
+	local pool, byId = {}, {}
+	for _, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
+		local data = self:Scan(d.key)
+		for _, b in ipairs(data and data.bosses or {}) do
+			for _, it in ipairs(b.items) do
+				byId[it.id] = byId[it.id] or it
+				if it.slot then
+					pool[it.slot] = pool[it.slot] or {}
+					table.insert(pool[it.slot], it)
+				end
+			end
+		end
+	end
+	local function Fill()
+		-- 공략 대체가 3개 안 되는 칸은 던전 전리품 중 FOA 점수(직업 · 특성 가중치) 높은 순으로 채운다
+		local sc = ns.Score
+		if not sc then return end
+		for slot, list in pairs(pool) do
+			local cand = {}
+			for _, it in ipairs(list) do
+				if not self.ranks[it.id] then
+					local l = "item:" .. it.id
+					local v = sc:Score(l)
+					if v and v > 0 and sc:Usable(l) then it.score = v; cand[#cand + 1] = it end
+				end
+			end
+			table.sort(cand, function(a, b) return a.score > b.score end)
+			for _, it in ipairs(cand) do
+				if (per[slot] or 0) >= 3 then break end
+				per[slot] = (per[slot] or 0) + 1
+				self.ranks[it.id] = { rank = per[slot], slot = slot, it = it, foa = true }
+			end
+		end
+		for _, r in pairs(self.ranks) do
+			if r.it.inst then
+				local c = self.rankCount[r.it.inst] or { bis = 0, alt = 0 }
+				if r.rank == 0 then c.bis = c.bis + 1 else c.alt = c.alt + 1 end
+				self.rankCount[r.it.inst] = c
+			end
+		end
+	end
+	if not spec then Fill() return end
 	for inv, id in pairs(spec.g) do
 		local slot = INV2EJ[inv]
 		if slot then
-			local it = LooseItem(id)
-			it.slot, it.srcText = slot, KoSource(spec.src[id])
+			local it = byId[id] or LooseItem(id)
+			if not it.inst then it.srcText = KoSource(spec.src[id]) end
+			it.slot = it.slot or slot
 			self.ranks[id] = { rank = 0, slot = slot, it = it, inv = inv }
 		end
 	end
@@ -353,12 +448,14 @@ function M:BuildRanksForever()
 		if slot and not self.ranks[id] then
 			per[slot] = (per[slot] or 0) + 1
 			if per[slot] <= 3 then
-				local it = LooseItem(id)
-				it.slot, it.srcText = slot, KoSource(spec.src[id])
+				local it = byId[id] or LooseItem(id)
+				if not it.inst then it.srcText = KoSource(spec.src[id]) end
+				it.slot = it.slot or slot
 				self.ranks[id] = { rank = per[slot], slot = slot, it = it, inv = inv }
 			end
 		end
 	end
+	Fill()
 end
 
 -- 순위 매기기
@@ -457,7 +554,7 @@ end
 -- 자료 출처 한 줄
 function M:SourceLabel()
 	if FOREVER then
-		return self.spec and ("BIS · 대체: " .. self.spec.src .. " (레이드 전)") or "이 특성은 공략 자료 준비 중"
+		return self.spec and ("BIS · 대체: " .. self.spec.src .. " (레이드 전) + FOA 점수") or "대체: FOA 점수 (공략 BIS 준비 중)"
 	end
 	if self.spec then return "BIS: " .. self.spec.src .. " · 대체: FOA 계산" end
 	return "예시 순위 (BIS 자료 없음)"
@@ -568,6 +665,28 @@ function M:BuildSidebar()
 	f.title = Ink:Text(f, F.bold, 15, C.text, "LEFT")
 	f.title:SetPoint("TOPLEFT", f.tag, "BOTTOMLEFT", 0, -4)
 	f.title:SetWidth(SB_W - 32)
+	if FOREVER then
+		-- 포에버: 던전 고르기 (◀ ▶) · 권장 레벨
+		f.title:SetWidth(SB_W - 96)
+		local function Arrow(dir)
+			local b = CreateFrame("Button", nil, f)
+			b:SetSize(24, 22)
+			b.bg = Ink:Round(b, "BACKGROUND", true, false)
+			b.bg:SetAllPoints()
+			b.bg:SetVertexColor(1, 1, 1, 0.06)
+			b.t = Ink:Text(b, F.semi, 12, C.text, "CENTER")
+			b.t:SetPoint("CENTER")
+			b.t:SetText(dir < 0 and "<" or ">")
+			b:SetScript("OnClick", function() M:StepForever(dir) end)
+			return b
+		end
+		f.next = Arrow(1)
+		f.next:SetPoint("TOPRIGHT", -16, -12)
+		f.prev = Arrow(-1)
+		f.prev:SetPoint("RIGHT", f.next, "LEFT", -4, 0)
+		f.lvl = Ink:Text(f, F.sans, 10, C.dim, "RIGHT")
+		f.lvl:SetPoint("TOPRIGHT", f.next, "BOTTOMRIGHT", 0, -6)
+	end
 	-- 요약: 큰 숫자 BIS · 대체 + 직업/전문화
 	f.nBis = Ink:Text(f, F.num, 34, C.accent, "LEFT")
 	f.nBis:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -12)
@@ -695,7 +814,10 @@ function M:PaintSidebar()
 	f.spec:SetText((UnitClass("player") or "") .. " · " .. (specName or ""))
 	f.spec:SetTextColor(cr, cg, cb)
 	f.pills:Refresh()
-	f.example:SetText(self.isExample and "예시 순위 (BIS 자료 없음)" or ("BIS · " .. self.spec.src))
+	f.example:SetText(FOREVER and self:SourceLabel() or (self.isExample and "예시 순위 (BIS 자료 없음)" or ("BIS · " .. self.spec.src)))
+	if f.lvl then
+		f.lvl:SetText(data and data.lo and string.format("권장 %d–%d 레벨", data.lo, data.hi) or "")
+	end
 	local cnt = self.rankCount[jid] or { bis = 0, alt = 0 }
 	f.nBis:SetText(cnt.bis)
 	f.nAlt:SetText(cnt.alt)
@@ -730,7 +852,7 @@ function M:PaintSidebar()
 			h:ClearAllPoints()
 			h:SetPoint("TOPLEFT", 0, -y)
 			local done = false
-			if C_EncounterJournal.IsEncounterComplete and b.id then
+			if C_EncounterJournal and C_EncounterJournal.IsEncounterComplete and b.id then
 				local ok, v = pcall(C_EncounterJournal.IsEncounterComplete, b.id)
 				done = ok and plain(v) and true or false
 			end
@@ -819,8 +941,45 @@ function M:CurrentInstance()
 	end
 end
 
+-- 포에버: 지금 던전 (안에 있으면 그 던전, 아니면 고른 것 / 내 레벨에 맞는 것)
+function M:ForeverCurrent()
+	local list = ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}
+	local inInst = IsInInstance()
+	if inInst then
+		local name, _, _, _, _, _, _, instID = GetInstanceInfo()
+		for _, d in ipairs(list) do
+			if (d.inst and d.inst == instID) or (name and (name == d.en or name == d.ko)) then return d.key end
+		end
+	end
+	local sel = Ink.cdb and Ink.cdb.fDungeon
+	if sel and FLoot(sel) then return sel end
+	local lv, best, bestD = UnitLevel("player") or 1, nil, 999
+	for _, d in ipairs(list) do
+		local mid = (d.lo + d.hi) / 2
+		local dist = math.abs(mid - lv)
+		if dist < bestD then best, bestD = d.key, dist end
+	end
+	return best
+end
+
+function M:StepForever(dir)
+	local list = ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}
+	if #list == 0 then return end
+	local _, i = FLoot(self.showing or self:ForeverCurrent())
+	i = ((i or 1) - 1 + dir) % #list + 1
+	if Ink.cdb then Ink.cdb.fDungeon = list[i].key end
+	self.showing = list[i].key
+	if self.sidebar then self.sidebar.sf:SetVerticalScroll(0) end
+	self:PaintSidebar()
+end
+
 function M:UpdateMap()
 	if self.testing then return end
+	if FOREVER then
+		local wm = WorldMapFrame
+		if not wm or not wm:IsShown() then return self:HideSidebar() end
+		return self:ShowFor(self:ForeverCurrent(), wm)
+	end
 	local wm = WorldMapFrame
 	if not wm or not wm:IsShown() then return self:HideSidebar() end
 	local jid = InstanceForUiMap(wm.GetMapID and wm:GetMapID()) or self:CurrentInstance()
@@ -1480,6 +1639,7 @@ function M:Init()
 		if not ns.BIS_FOREVER then return end
 		self:HookTooltip()
 		self:AttachBisTab()
+		if ns.FOREVER_LOOT then self:HookMap() end
 		local e = CreateFrame("Frame")
 		for _, ev in ipairs({ "ADDON_LOADED", "PLAYER_EQUIPMENT_CHANGED", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT",
 			"CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE" }) do pcall(e.RegisterEvent, e, ev) end
@@ -1487,6 +1647,7 @@ function M:Init()
 		e:SetScript("OnEvent", function(_, event)
 			if event == "ADDON_LOADED" then
 				if not M.bisTab then M:AttachBisTab() end
+				if not M.mapHooked and ns.FOREVER_LOOT then M:HookMap() end
 				return
 			end
 			if event == "CHARACTER_POINTS_CHANGED" or event == "PLAYER_TALENT_UPDATE" then M.dirty = true end
@@ -1496,6 +1657,7 @@ function M:Init()
 				pending = nil
 				if event ~= "PLAYER_EQUIPMENT_CHANGED" then M.dirty = true end
 				M:PaintBis()
+				M:PaintSidebar()
 			end)
 		end)
 		C_Timer.After(8, function() pcall(M.BuildRanks, M) end)
