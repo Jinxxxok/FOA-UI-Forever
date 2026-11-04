@@ -459,7 +459,7 @@ end
 local TEST_MODS = {
 	{ "Units", "유닛 프레임" }, { "Group", "파티 · 레이드" }, { "Center", "자원 · 쿨다운 · 시전바" },
 	{ "Plates", "네임플레이트" }, { "Meter", "미터기 · 위협" }, { "Boss", "보스 알림" },
-	{ "Quest", "퀘스트 목록" }, { "Blizzard", "경험치 · 대사" },
+	{ "Quest", "퀘스트 목록" }, { "Blizzard", "경험치 · 대사" }, { "Dungeon", "던전 전리품 · BIS" },
 }
 local function TestSel(key)
 	local t = Ink.db.testSel
@@ -1132,6 +1132,7 @@ function M:BuildPanel()
 		{ "진영 메뉴", "왼쪽 위 진영 문양 메뉴를 씁니다.", "launcher" },
 		{ "튜토리얼 끄기", "노란 안내 상자 · 화살표 · 도움말 말풍선을 숨깁니다.", "hideTutorials" },
 		{ "화면 위 시계", "화면 위 가운데에 큰 시계. 클릭하면 서버 시간.", "clock" },
+		{ "던전 전리품 · BIS", "지도 옆 보스별 전리품, 캐릭터 창 BIS 탭 (본섭 예시).", "dungeon" },
 		{ "기본 창 / 글꼴 (실험)", "기본 창 껍데기와 글꼴 변경. 기본은 꺼짐.", "windows" },
 	})
 	local right = Column(p.aspect, 330, "편의 기능", {
