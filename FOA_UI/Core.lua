@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.29.0"
+Ink.version = "0.30.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -900,6 +900,7 @@ local defaults = {
 	combatHide = true,
 	dungeon = true,
 	actionBars = true,
+	itemCompare = true,
 }
 
 local ev = CreateFrame("Frame")

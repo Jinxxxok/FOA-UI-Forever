@@ -221,6 +221,13 @@ local function SkinButton(b)
 	s.new:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 1)
 	s.new:Hide()
 
+	-- 지금 착용한 것보다 좋은 장비 (아이템 점수 비교)
+	s.up = top:CreateTexture(nil, "OVERLAY", nil, 7)
+	s.up:SetTexture(Ink.icon("Up"))
+	s.up:SetSize(12, 12)
+	s.up:SetPoint("BOTTOMLEFT", 2, 2)
+	s.up:Hide()
+
 	s.free = Ink:Text(top, F.latinB, 11, C.soft, "CENTER")
 	s.free:SetPoint("CENTER")
 	s.free:Hide()
@@ -261,6 +268,7 @@ local function Paint(h)
 		s.border:SetVertexColor(1, 1, 1, 0.08)
 		s.ilvl:SetText("")
 		s.new:Hide()
+		s.up:Hide()
 		s.cd:Clear()
 		b:SetAlpha(1)
 		return
@@ -295,6 +303,15 @@ local function Paint(h)
 	if text ~= "" and q >= 2 then
 		local r, g, bl = C_Item.GetItemQualityColor(q)
 		s.ilvl:SetTextColor(r, g, bl)
+	end
+
+	local up = h.cat == "gear" and ns.Score and ns.Score:BagUpgrade(bag, slot)
+	if up then
+		-- 레벨이 모자라 아직 못 입으면 노랑, 바로 입을 수 있으면 초록
+		if up.level then s.up:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 1) else s.up:SetVertexColor(0.44, 0.83, 0.6, 1) end
+		s.up:Show()
+	else
+		s.up:Hide()
 	end
 
 	local isNew = C_NewItems and C_NewItems.IsNewItem and C_NewItems.IsNewItem(bag, slot)

@@ -1097,6 +1097,13 @@ function M:SyncFontButton()
 	local d = "선명도 · " .. (TIER_DESC[tier] or "")
 	if mode == "auto" then d = d .. string.format("  지금 화면 %d×%d", w or 0, h or 0) end
 	p.renderDesc:SetText(d)
+	local on = Ink.db.itemCompare ~= false
+	local mode = Ink.cdb.scoreMode or "pve"
+	p.compare.text:SetText("아이템 비교: " .. (not on and "끔" or (mode == "pvp" and "PvP" or "PvE")))
+	p.compare:SetActive(on)
+	local prof = ns.Score and ns.Score.forever and ns.Score:ProfileName() or nil
+	p.compareDesc:SetText("아이템 비교 · " .. (not on and "꺼짐" or
+		(prof and (prof .. " 기준 점수로 가방 · 퀘스트 보상에 화살표, 툴팁에 착용 대비 %") or "아이템 레벨로 가방 · 퀘스트 보상에 화살표, 툴팁에 착용 대비 차이")))
 end
 
 function M:NeedReload()
@@ -1237,6 +1244,15 @@ function M:BuildPanel()
 		M:NeedReload()
 	end)
 	p.render:SetPoint("LEFT", p.font, "RIGHT", 8, 0)
+	p.compare = Button(p, "비교", 190, function()
+		local cur = Ink.db.itemCompare == false and "off" or (Ink.cdb.scoreMode or "pve")
+		local nxt = Cycle({ "pve", "pvp", "off" }, cur)
+		Ink.db.itemCompare = nxt ~= "off"
+		if nxt ~= "off" then Ink.cdb.scoreMode = nxt end
+		if ns.Score then ns.Score:Invalidate() end
+		M:SyncFontButton()
+	end)
+	p.compare:SetPoint("LEFT", p.render, "RIGHT", 8, 0)
 	-- 설명은 버튼 아래 한 줄씩 (오른쪽 칸과 겹치지 않게 전체 폭으로)
 	p.fontDesc = Ink:Text(p, F.sans, 11, C.dim, "LEFT")
 	p.fontDesc:SetPoint("TOPLEFT", p.font, "BOTTOMLEFT", 2, -8)
@@ -1246,6 +1262,10 @@ function M:BuildPanel()
 	p.renderDesc:SetPoint("TOPLEFT", p.fontDesc, "BOTTOMLEFT", 0, -4)
 	p.renderDesc:SetWidth(620)
 	p.renderDesc:SetWordWrap(true)
+	p.compareDesc = Ink:Text(p, F.sans, 11, C.dim, "LEFT")
+	p.compareDesc:SetPoint("TOPLEFT", p.renderDesc, "BOTTOMLEFT", 0, -4)
+	p.compareDesc:SetWidth(620)
+	p.compareDesc:SetWordWrap(true)
 
 	-- 두 칸으로: 왼쪽 = 화면 구성, 오른쪽 = 편의 기능 + 명령어
 	local function Column(anchor, x, header, list)
@@ -1262,7 +1282,7 @@ function M:BuildPanel()
 		end
 		return prev
 	end
-	local left = Column(p.renderDesc, -2, "화면 구성 (바꾸면 /reload 필요)", {
+	local left = Column(p.compareDesc, -2, "화면 구성 (바꾸면 /reload 필요)", {
 		{ "파티 프레임", "FOA 파티 프레임을 씁니다.", "party" },
 		{ "레이드 프레임", "FOA 레이드 프레임을 씁니다.", "raid" },
 		{ "경험치 바", "얇은 FOA 경험치 바를 씁니다.", "xp" },
@@ -1276,7 +1296,7 @@ function M:BuildPanel()
 		{ "던전 전리품 · BIS", "지도 옆 보스별 전리품, 캐릭터 창 BIS 탭 (본섭 예시).", "dungeon" },
 		{ "기본 창 / 글꼴 (실험)", "기본 창 껍데기와 글꼴 변경. 기본은 꺼짐.", "windows" },
 	})
-	local right = Column(p.renderDesc, 328, "편의 기능", {
+	local right = Column(p.compareDesc, 328, "편의 기능", {
 		{ "잡동사니 자동 판매", "상인 창을 열면 회색 아이템을 팝니다.", "sellJunk" },
 		{ "자동 수리", "상인 창을 열면 장비를 수리합니다.", "autoRepair" },
 		{ "길드 자금으로 수리", "가능하면 길드 자금을 먼저 씁니다.", "guildRepair" },
