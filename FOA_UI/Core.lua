@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.26.0"
+Ink.version = "0.27.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -20,6 +20,83 @@ Ink.font = {
 	latinB = MEDIA .. "Fonts\\Inter-SemiBold.ttf",
 }
 local F = Ink.font
+
+-------------------------------------------------------------------------------
+-- 글꼴 묶음 (설정 → 글꼴). 바꾸면 /reload.
+--  foa        : 기본 (Plex 한글 + Inter + Space Grotesk 숫자)
+--  pretendard : 선명한 글꼴. 획이 굵고 작은 크기에서도 덜 뭉개져서 1080p·1440p 윈도우에 권장
+--  mubig      : 무빅UI 글꼴. 글꼴 파일은 같이 배포할 수 없어서 직접 넣는다
+--               → AddOns\FOA_Fonts\MUBIG.ttf (굵은 글꼴이 따로 있으면 MUBIG-Bold.ttf)
+--               FOA_UI 폴더 밖이라 FOA 를 업데이트해도 지워지지 않는다
+-- 모듈들이 Ink.font 표를 그대로 들고 있으므로 표 안의 값만 바꾼다 (모듈 Init 전에).
+-------------------------------------------------------------------------------
+local PRET = MEDIA .. "Fonts\\Pretendard-"
+local USER = "Interface\\AddOns\\FOA_Fonts\\"
+Ink.FONT_SETS = { "foa", "pretendard", "mubig" }
+Ink.FONT_NAME = { foa = "FOA 기본", pretendard = "선명한 글꼴", mubig = "무빅UI 글꼴" }
+
+local probe
+-- 글꼴 파일이 실제로 있는지 (없는 파일은 SetFont 가 실패한다)
+function Ink:FontExists(path)
+	if not probe then
+		local holder = CreateFrame("Frame")
+		probe = holder:CreateFontString(nil, "OVERLAY")
+	end
+	probe:SetFont(F.sans, 12, "")
+	local ok = probe:SetFont(path, 12, "")
+	if ok == false then return false end
+	local cur = probe:GetFont()
+	return cur ~= nil and cur:lower() == path:lower()
+end
+
+function Ink:FindUserFont(base)
+	for _, ext in ipairs({ ".ttf", ".otf", ".TTF", ".OTF" }) do
+		local p = USER .. base .. ext
+		if self:FontExists(p) then return p end
+	end
+end
+
+-- 기본값을 기억해 두고 묶음에 따라 덮어쓴다
+local FONT_BASE = {}
+for k, v in pairs(F) do FONT_BASE[k] = v end
+
+function Ink:ApplyFontSet()
+	for k, v in pairs(FONT_BASE) do F[k] = v end
+	local set = self.db and self.db.fontSet or "foa"
+	self.fontSetActive = "foa"
+	if set == "pretendard" then
+		F.sans = PRET .. "Medium.ttf"
+		F.semi = PRET .. "SemiBold.ttf"
+		F.bold = PRET .. "Bold.ttf"
+		F.num = PRET .. "Regular.ttf"
+		F.numR = PRET .. "Medium.ttf"
+		F.latin = PRET .. "Medium.ttf"
+		F.latinB = PRET .. "SemiBold.ttf"
+		self.fontSetActive = "pretendard"
+	elseif set == "mubig" then
+		local reg = self:FindUserFont("MUBIG")
+		if reg then
+			local bold = self:FindUserFont("MUBIG-Bold") or reg
+			F.sans, F.latin, F.num, F.numR = reg, reg, reg, reg
+			F.semi, F.bold, F.latinB = bold, bold, bold
+			self.fontSetActive = "mubig"
+		else
+			self.fontMissing = true
+		end
+	end
+	-- 저해상도: 아주 가는 숫자 글꼴(Light)은 작은 크기에서 뭉개지므로 Regular 로
+	if self.fontSetActive == "foa" and self.lowRes then
+		F.num = FONT_BASE.numR
+	end
+	-- 블리자드 위젯용 글꼴 오브젝트도 새 글꼴로
+	if self.fo then
+		for _, spec in pairs(self.foSpec or {}) do
+			spec.obj:SetFont(F[spec.key], spec.size, spec.flags or "")
+		end
+	end
+	self.damageFont = F.semi
+	DAMAGE_TEXT_FONT = self.damageFont
+end
 
 Ink.tex = {
 	white = "Interface\\Buttons\\WHITE8X8",
@@ -51,7 +128,9 @@ function Ink:DetectDensity()
 	local ph = GetPhysicalScreenSize and select(2, GetPhysicalScreenSize()) or 1080
 	self.physH = ph
 	self.lowRes = ph < 1700          -- 1080p / 1200p / 1440p / 1600p
-	self.fontBoost = (ph < 1300) and 1 or 0 -- 1080p / 1200p 만 글자 +1
+	-- 작은 글자 키우기: 1080p·1200p 는 +1 (10 이하는 +2), 1440p·1600p 는 11 이하만 +1
+	self.fontBoost = (ph < 1300) and 1 or 0
+	self.fontBoostSmall = (ph < 1300) and 2 or (ph < 1700 and 1 or 0)
 	local sfx = self.lowRes and "_s" or ""
 	self.tex.ring = MEDIA .. "Textures\\Ring" .. sfx
 	self.tex.disc = MEDIA .. "Textures\\Disc" .. sfx
@@ -163,14 +242,28 @@ Ink.fo = {
 	cdNumberSmall = FontObj("InkUIFontCooldownSmall", F.semi, 10, "OUTLINE"),
 	cdTimer = FontObj("InkUIFontCdTimer", F.semi, 10),
 }
+Ink.foSpec = {
+	{ obj = Ink.fo.auraTimer, key = "sans", size = 9 },
+	{ obj = Ink.fo.cdNumber, key = "semi", size = 12, flags = "OUTLINE" },
+	{ obj = Ink.fo.cdNumberSmall, key = "semi", size = 10, flags = "OUTLINE" },
+	{ obj = Ink.fo.cdTimer, key = "semi", size = 10 },
+}
 
 -------------------------------------------------------------------------------
 -- 위젯 헬퍼
 -------------------------------------------------------------------------------
+function Ink:BoostSize(size)
+	if not size then return size end
+	if size <= 10 and (self.fontBoostSmall or 0) > 0 then return size + self.fontBoostSmall end
+	if size <= 11 and self.lowRes and (self.fontBoostSmall or 0) > 0 then return size + 1 end
+	if size <= 13 and (self.fontBoost or 0) > 0 then return size + self.fontBoost end
+	return size
+end
+
 function Ink:Text(parent, font, size, color, justify, layer)
 	local fs = parent:CreateFontString(nil, layer or "OVERLAY")
 	-- 저해상도(1080p)에서 아주 작은 글자는 한 단계 키워서 뭉개짐을 줄인다
-	if self.fontBoost and self.fontBoost > 0 and size <= 13 then size = size + self.fontBoost end
+	size = self:BoostSize(size)
 	fs:SetFont(font, size, "")
 	color = color or Ink.c.text
 	fs:SetTextColor(color[1], color[2], color[3], color[4] or 1)
@@ -784,6 +877,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 		for k, v in pairs(defaults) do
 			if Ink.db[k] == nil then Ink.db[k] = v end
 		end
+		pcall(Ink.ApplyFontSet, Ink)
 		Ink:UpdateScale()
 		callAll("Init")
 		if EditModeManagerFrame then
@@ -792,6 +886,9 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 			end)
 		end
 		print("|T" .. Ink.tex.logo .. ":14:14|t |cffFFF468FOA|r " .. Ink.version .. " 로드됨 · /foa 로 설정 열기")
+		if Ink.fontMissing then
+			print("|cffFFF468FOA|r 무빅UI 글꼴 파일을 못 찾아서 기본 글꼴로 보여요. AddOns\\FOA_Fonts 폴더에 MUBIG.ttf 를 넣고 게임을 완전히 껐다 켜 주세요.")
+		end
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		Ink:Relayout()
 		C_Timer.After(1, function() Ink:Relayout() end)

@@ -990,6 +990,26 @@ function M:SyncButtons()
 	end
 end
 
+local FONT_DESC = {
+	foa = "FOA 기본 글꼴 (IBM Plex 한글 · Inter · Space Grotesk 숫자).",
+	pretendard = "획이 굵어 작은 글자도 또렷해요. 1080p · 1440p 모니터나 윈도우에서 글자가 뭉개질 때 추천.",
+	mubig = "무빅UI 글꼴. AddOns 안에 FOA_Fonts 폴더를 만들고 글꼴 파일을 MUBIG.ttf 로 넣은 뒤 게임을 완전히 껐다 켜 주세요.",
+}
+function M:SyncFontButton()
+	local p = self.panel
+	if not p or not p.font then return end
+	local set = Ink.db.fontSet or "foa"
+	p.font.text:SetText("글꼴: " .. (Ink.FONT_NAME[set] or set))
+	p.font:SetActive(set ~= "foa")
+	local d = FONT_DESC[set] or ""
+	if set == "mubig" and Ink.fontSetActive == "mubig" then
+		d = "무빅UI 글꼴 사용 중 (FOA_Fonts 폴더의 파일)."
+	elseif set == "mubig" and Ink:FindUserFont("MUBIG") then
+		d = "글꼴 파일을 찾았어요. /reload 하면 적용돼요."
+	end
+	p.fontDesc:SetText(d)
+end
+
 function M:NeedReload()
 	if self.panel then
 		self.panel.reload:Show()
@@ -1107,6 +1127,25 @@ function M:BuildPanel()
 	p.gfxLabel:SetPoint("BOTTOMLEFT", p.gfx.perf, "TOPLEFT", 2, 4)
 	p.gfxLabel:SetText("그래픽 프리셋")
 
+	-- 3줄: 글꼴 묶음 (누를 때마다 다음 글꼴, /reload 필요)
+	local h3 = Ink:Text(p, F.semi, 11, C.muted, "LEFT")
+	h3:SetPoint("TOPLEFT", p.aspect, "BOTTOMLEFT", 0, -16)
+	h3:SetText("글꼴 (바꾸면 /reload 필요)")
+	p.font = Button(p, "글꼴", 180, function()
+		local cur = Ink.db.fontSet or "foa"
+		local list = Ink.FONT_SETS
+		local i = 1
+		for n, v in ipairs(list) do if v == cur then i = n end end
+		Ink.db.fontSet = list[i % #list + 1]
+		M:SyncFontButton()
+		M:NeedReload()
+	end)
+	p.font:SetPoint("TOPLEFT", h3, "BOTTOMLEFT", 0, -8)
+	p.fontDesc = Ink:Text(p, F.sans, 11, C.dim, "LEFT")
+	p.fontDesc:SetPoint("LEFT", p.font, "RIGHT", 12, 0)
+	p.fontDesc:SetWidth(440)
+	p.fontDesc:SetWordWrap(true)
+
 	-- 두 칸으로: 왼쪽 = 화면 구성, 오른쪽 = 편의 기능 + 명령어
 	local function Column(anchor, x, header, list)
 		local h = Ink:Text(p, F.semi, 11, C.muted, "LEFT")
@@ -1122,7 +1161,7 @@ function M:BuildPanel()
 		end
 		return prev
 	end
-	local left = Column(p.aspect, 0, "화면 구성 (바꾸면 /reload 필요)", {
+	local left = Column(p.font, 0, "화면 구성 (바꾸면 /reload 필요)", {
 		{ "파티 프레임", "FOA 파티 프레임을 씁니다.", "party" },
 		{ "레이드 프레임", "FOA 레이드 프레임을 씁니다.", "raid" },
 		{ "경험치 바", "얇은 FOA 경험치 바를 씁니다.", "xp" },
@@ -1217,6 +1256,7 @@ function M:BuildPanel()
 		InterfaceOptions_AddCategory(outer)
 	end
 	self.panel = p
+	self:SyncFontButton()
 	self.panelOuter = outer
 end
 
