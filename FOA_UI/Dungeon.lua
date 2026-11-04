@@ -207,17 +207,21 @@ function M:Scan(jid)
 	return data or cached
 end
 
--- 이번 확장팩 던전 목록 (예시 순위를 매길 범위)
+-- 이번 확장팩 레이드 + 던전 목록 (순위를 매길 범위). 레이드를 앞에 둬서 같은 품질이면 레이드 템이 먼저
 function M:TierDungeons()
 	if self.tierList then return self.tierList end
 	local list = {}
+	self.isRaid = {}
 	WithEJ(function()
 		local n = EJ_GetNumTiers and EJ_GetNumTiers()
 		if n and EJ_SelectTier then EJ_SelectTier(n) end
-		for i = 1, 30 do
-			local id = EJ_GetInstanceByIndex(i, false)
-			if not id then break end
-			list[#list + 1] = id
+		for _, raid in ipairs({ true, false }) do
+			for i = 1, 30 do
+				local id = EJ_GetInstanceByIndex(i, raid)
+				if not id then break end
+				list[#list + 1] = id
+				self.isRaid[id] = raid
+			end
 		end
 	end)
 	self.tierList = list
@@ -515,7 +519,7 @@ function M:PaintSidebar()
 	self:BuildRanks(jid)
 	local key, _, _, specName, class = SpecKey()
 	local cr, cg, cb = ns.ClassTint(class)
-	f.tag:SetText("DUNGEON LOOT")
+	f.tag:SetText((self.isRaid and self.isRaid[jid]) and "RAID LOOT" or "DUNGEON LOOT")
 	f.title:SetText(data and data.name or "던전")
 	f.spec:SetText((UnitClass("player") or "") .. " · " .. (specName or ""))
 	f.spec:SetTextColor(cr, cg, cb)
@@ -595,7 +599,7 @@ function M:PaintSidebar()
 		end
 	end
 	f.empty:SetShown(nr == 0)
-	f.empty:SetText(data and (all and "이 던전에는 내 직업 전리품이 없어요" or "이 던전에선 내 BIS · 대체템이 안 나와요\n(오른쪽 위 버튼으로 전부 보기)") or "던전 정보를 불러오는 중…")
+	f.empty:SetText(data and (all and "여기에는 내 직업 전리품이 없어요" or "여기선 내 BIS · 대체템이 안 나와요\n(오른쪽 위 버튼으로 전부 보기)") or "전리품 정보를 불러오는 중…")
 	body:SetHeight(math.max(10, y))
 end
 
@@ -836,7 +840,7 @@ function M:BuildBisPanel()
 	p.hint:SetPoint("BOTTOMLEFT", 186, 16)
 	p.hint:SetWidth(BP_W - 204)
 	p.hint:SetWordWrap(true)
-	p.hint:SetText("마우스를 올리면 툴팁 + 드랍 위치. 순위는 이번 확장팩 던전 전리품 기준 예시예요.")
+	p.hint:SetText("마우스를 올리면 툴팁 + 드랍 위치. 순위는 이번 확장팩 레이드 · 던전 전리품 기준 예시예요.")
 	p:SetScript("OnShow", function() M:PaintBis() end)
 	self.bisPanel = p
 end
@@ -925,7 +929,7 @@ function M:PaintBis()
 		row.itemID, row.link = nil, nil
 		row.badge:Hide(); row.rank:Hide(); row.state:SetText("")
 		row.icon:Set(nil, 0, "")
-		row.name:SetText("이 부위는 던전 전리품에 없어요")
+		row.name:SetText("이 부위는 레이드 · 던전 전리품에 없어요")
 		row.name:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
 		row.src:SetText("제작 · 평판 · 레이드 등은 진짜 BIS 데이터가 연결되면 같이 나와요")
 		row.bg:SetVertexColor(1, 1, 1, 0.02)
