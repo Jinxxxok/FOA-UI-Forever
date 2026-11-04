@@ -36,6 +36,9 @@ local QCOL = {
 	[4] = { 0.76, 0.42, 1 }, [5] = { 1, 0.55, 0.15 }, [6] = { 0.9, 0.8, 0.5 }, [7] = { 0, 0.8, 1 }, [8] = { 0, 0.8, 1 },
 }
 
+local FOREVER = (function() local b = select(4, GetBuildInfo()) or 0 return b >= 16001 and b < 20000 end)()
+M.forever = FOREVER
+
 local function Available()
 	return C_EncounterJournal and EJ_SelectInstance and EJ_GetNumLoot and C_EncounterJournal.GetLootInfoByIndex and true or false
 end
@@ -43,6 +46,21 @@ end
 -- 내 직업의 전문화 목록 { {id, name, icon}, ... }
 local function Specs()
 	local list = {}
+	if FOREVER then
+		-- 포에버: 전문화 대신 특성 트리 (FOA 아이템 점수와 같은 이름표)
+		local sc = ns.Score
+		local _, class = UnitClass("player")
+		local tabs = sc and sc.TABS and sc.TABS[class] or {}
+		for t, key in ipairs(tabs) do
+			local a, b, c, d = GetTalentTabInfo and GetTalentTabInfo(t)
+			local icon = (type(b) == "number" and b) or (type(d) == "number" and d) or nil
+			list[#list + 1] = { id = key, name = sc.SPEC_NAME[key] or key, icon = icon }
+			if class == "DRUID" and key == "feral" then
+				list[#list + 1] = { id = "guardian", name = sc.SPEC_NAME.guardian or "수호", icon = icon }
+			end
+		end
+		return list
+	end
 	local n = GetNumSpecializations and GetNumSpecializations() or 0
 	for i = 1, n do
 		local id, name, _, icon = GetSpecializationInfo(i)
@@ -52,6 +70,10 @@ local function Specs()
 end
 
 local function CurrentSpecID()
+	if FOREVER then
+		local _, spec = ns.Score and ns.Score:Spec()
+		return spec or ""
+	end
 	local idx = GetSpecialization and GetSpecialization()
 	return idx and GetSpecializationInfo(idx) or 0
 end
@@ -289,11 +311,62 @@ function M:SourceText(it)
 	return (inst and inst.name or "던전") .. " · " .. (it.boss or "?") .. "넴 " .. (it.bossName or "")
 end
 
+-- 포에버 획득처 (Method 공략 영어) → 한글로 짧게
+local SRC_KO = {
+	{ "Leatherworking", "가죽세공" }, { "Blacksmithing", "대장기술" }, { "Tailoring", "재봉술" }, { "Enchanting", "마법부여" },
+	{ "Engineering", "기계공학" }, { "World Drop", "월드 드랍" }, { "BoE", "착귀" }, { "Quest", "퀘스트" }, { "Unknown", "획득처 미확인" },
+	{ "No known source yet", "획득처 미확인" }, { "Exalted", "확고한 동맹" }, { "Revered", "매우 우호적" }, { "Friendly", "우호적" },
+	{ "Darkmoon Faire", "다크문 축제" }, { "Razorfen Downs", "가시덩굴 구릉" }, { "Lower Blackrock Spire", "검은바위 첨탑 하층" },
+	{ "Upper Blackrock Spire", "검은바위 첨탑 상층" }, { "Blackrock Depths", "검은바위 나락" }, { "Stratholme", "스트라솔름" },
+	{ "Dire Maul", "혈투의 전장" }, { "Tarnished Undermine Real", "빛바랜 언더마인 주화" }, { "rep", "평판" }, { " or ", " / " },
+	{ "Reputation:", "평판:" }, { "Drop:", "" },
+}
+local function KoSource(s)
+	if not s then return "기타" end
+	for _, r in ipairs(SRC_KO) do s = s:gsub(r[1], r[2]) end
+	return s
+end
+
+-- 포에버: 공략 BIS (g) = BIS, 공략 대체(alt) 순서 = 대체 1~3 (던전 도감이 없어서 전리품 표 대신 공략 목록)
+function M:BuildRanksForever()
+	local key = SpecKey()
+	if self.rankKey == key and not self.dirty then return end
+	self.rankKey, self.dirty = key, nil
+	wipe(self.ranks)
+	wipe(self.rankCount)
+	local spec = ns.BIS_FOREVER and ns.BIS_FOREVER.specs[key]
+	self.spec = spec and { src = ns.BIS_FOREVER.src, g = spec.g, fo = spec } or nil
+	self.isExample = false
+	if not spec then return end
+	local per = {}
+	for inv, id in pairs(spec.g) do
+		local slot = INV2EJ[inv]
+		if slot then
+			local it = LooseItem(id)
+			it.slot, it.srcText = slot, KoSource(spec.src[id])
+			self.ranks[id] = { rank = 0, slot = slot, it = it, inv = inv }
+		end
+	end
+	for _, a in ipairs(spec.alt) do
+		local inv, id = a[1], a[2]
+		local slot = INV2EJ[inv]
+		if slot and not self.ranks[id] then
+			per[slot] = (per[slot] or 0) + 1
+			if per[slot] <= 3 then
+				local it = LooseItem(id)
+				it.slot, it.srcText = slot, KoSource(spec.src[id])
+				self.ranks[id] = { rank = per[slot], slot = slot, it = it, inv = inv }
+			end
+		end
+	end
+end
+
 -- 순위 매기기
 --  BIS 자료가 있는 전문화: BIS = 자료의 장비, 대체 1~3 = 이번 확장팩 레이드 · 던전 전리품 중
 --  BIS 장비들의 2차 능력치 비중으로 점수를 매긴 상위 3개 (FOA 계산)
 --  자료가 없으면: 예시 (부위마다 품질 → 레이드 · 던전 → 보스 순)
 function M:BuildRanks(extra)
+	if FOREVER then return self:BuildRanksForever() end
 	local key = SpecKey()
 	if self.rankKey == key and not extra and not self.dirty then return end
 	self.rankKey, self.dirty = key, nil
@@ -383,6 +456,9 @@ end
 
 -- 자료 출처 한 줄
 function M:SourceLabel()
+	if FOREVER then
+		return self.spec and ("BIS · 대체: " .. self.spec.src .. " (레이드 전)") or "이 특성은 공략 자료 준비 중"
+	end
 	if self.spec then return "BIS: " .. self.spec.src .. " · 대체: FOA 계산" end
 	return "예시 순위 (BIS 자료 없음)"
 end
@@ -1033,6 +1109,10 @@ function M:BuildPrep(p)
 				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 				GameTooltip:SetItemByID(self.itemID)
 				GameTooltip:Show()
+			elseif self.spellID then
+				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+				GameTooltip:SetSpellByID(self.spellID)
+				GameTooltip:Show()
 			end
 		end)
 		r:SetScript("OnLeave", GameTooltip_Hide)
@@ -1080,10 +1160,83 @@ local function SetLine(r, id, label, name, quality)
 	r:Show()
 end
 
+local CONS_KO = { Flask = "영약", Elixir = "비약", Potion = "물약", Food = "음식", Weapon = "무기 강화", Other = "기타" }
+local SLOT_KO = { Head = "머리", Neck = "목", Shoulder = "어깨", Back = "등", Chest = "가슴", Wrist = "손목", Hands = "손",
+	Legs = "다리", Feet = "발", ["Main Hand"] = "주장비", ["Off Hand"] = "보조장비", Ranged = "원거리" }
+local STAT_KO = {
+	{ "Offense:", "공격:" }, { "Defense:", "방어:" },
+	{ "Shadow Spell Damage", "암흑 주문력" }, { "Fire Spell Damage", "화염 주문력" },
+	{ "Weapon Damage", "무기 공격력" }, { "Weapon DPS", "무기 초당 공격력" }, { "Healing Power", "치유량" }, { "Spell Damage", "주문 공격력" },
+	{ "Spell Piercing", "주문 관통" },
+	{ "Critical Strike Chance", "치명타" }, { "Critical Strike", "치명타" }, { "Crit Chance", "치명타" }, { "Crit", "치명타" },
+	{ "Hit Chance", "적중" }, { "Hit", "적중" }, { "Expertise", "숙련" }, { "Agility", "민첩" }, { "Strength", "힘" },
+	{ "Stamina", "체력" }, { "Intellect", "지능" }, { "Spirit", "정신력" }, { "MP5", "5초당 마나" }, { "Haste", "가속" },
+	{ "Defense", "방어 숙련" }, { "Block Chance", "방패 막기" }, { "Spell Power", "주문력" }, { "Armor", "방어도" }, { "Dodge", "회피" },
+	{ "Feral Combat Skill", "야성 전투 숙련" }, { "with Careful Aim", "신중한 조준 있을 때" }, { "without Careful Aim", "없을 때" },
+	{ "to Cap", "상한까지" }, { " and ", " · " },
+}
+local function KoStats(s)
+	if not s or s == "" then return "" end
+	for _, r in ipairs(STAT_KO) do s = s:gsub(r[1], r[2]) end
+	return s
+end
+
+-- 포에버 준비물: 소모품 · 마법부여 (공략 이름 그대로, 게임 언어로)
+function M:PaintPrepForever(f, fo)
+	f.h2:SetText("")
+	local rows = {}
+	for _, r in ipairs(f.cons) do rows[#rows + 1] = r end
+	for _, r in ipairs(f.gems) do rows[#rows + 1] = r end
+	local n = 0
+	local last
+	for _, c in ipairs(fo.co or {}) do
+		n = n + 1
+		local r = rows[n]
+		if r then
+			local label = CONS_KO[c[1]] or c[1]
+			SetLine(r, c[2], label ~= last and label or "")
+			last = label
+		end
+	end
+	if n == 0 then SetLine(rows[1], nil, "소모품", "자료 준비 중") end
+	local e = 0
+	for _, en in ipairs(fo.en or {}) do
+		e = e + 1
+		local r = f.ench[e]
+		if r then
+			local slot, kind, id = en[1], en[2], en[3]
+			if kind == "item" then
+				SetLine(r, id, SLOT_KO[slot] or slot)
+			else
+				local name = (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or (GetSpellInfo and GetSpellInfo(id))
+				local icon = (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)) or (GetSpellTexture and GetSpellTexture(id))
+				SetLine(r, nil, SLOT_KO[slot] or slot, name or "불러오는 중…")
+				if not name then self.prepMissing = true end
+				r.icon:Set(icon, 1, "")
+				r.spellID = id
+			end
+		end
+	end
+	if e == 0 then SetLine(f.ench[1], nil, "마법부여", "자료 준비 중") end
+	local st = KoStats(fo.stats)
+	f.hint:SetText((st ~= "" and ("능력치: " .. st .. "\n") or "") .. "자료: Method 공략 (포에버 1.60.1)")
+end
+
 function M:PaintPrep()
 	local p = self.bisPanel
 	local f = p.prep
 	local spec = self.spec
+	if FOREVER then
+		for _, list in ipairs({ f.cons, f.gems, f.ench }) do for _, r in ipairs(list) do r:Hide(); r.spellID = nil end end
+		self.prepMissing = nil
+		if not spec then f.hint:SetText("이 특성은 아직 준비물 자료가 없어요 (공략이 올라오는 대로 추가)."); return end
+		self:PaintPrepForever(f, spec.fo)
+		if self.prepMissing and (self.prepRetry or 0) < 12 then
+			self.prepRetry = (self.prepRetry or 0) + 1
+			C_Timer.After(0.6, function() if p:IsShown() and self.bisMode == "prep" then self:PaintPrep() end end)
+		end
+		return
+	end
 	for _, list in ipairs({ f.cons, f.gems, f.ench }) do for _, r in ipairs(list) do r:Hide() end end
 	self.prepMissing = nil
 	if not spec then
@@ -1321,7 +1474,34 @@ end
 
 -------------------------------------------------------------------------------
 function M:Init()
-	if Ink.db.dungeon == false or not Available() then return end
+	if Ink.db.dungeon == false then return end
+	if FOREVER then
+		-- 포에버: 던전 도감이 없어서 지도 옆 전리품 칸은 끄고, 캐릭터 창 BIS 탭(공략 BIS · 준비물)만
+		if not ns.BIS_FOREVER then return end
+		self:HookTooltip()
+		self:AttachBisTab()
+		local e = CreateFrame("Frame")
+		for _, ev in ipairs({ "ADDON_LOADED", "PLAYER_EQUIPMENT_CHANGED", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT",
+			"CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE" }) do pcall(e.RegisterEvent, e, ev) end
+		local pending
+		e:SetScript("OnEvent", function(_, event)
+			if event == "ADDON_LOADED" then
+				if not M.bisTab then M:AttachBisTab() end
+				return
+			end
+			if event == "CHARACTER_POINTS_CHANGED" or event == "PLAYER_TALENT_UPDATE" then M.dirty = true end
+			if pending then return end
+			pending = true
+			C_Timer.After(0.5, function()
+				pending = nil
+				if event ~= "PLAYER_EQUIPMENT_CHANGED" then M.dirty = true end
+				M:PaintBis()
+			end)
+		end)
+		C_Timer.After(8, function() pcall(M.BuildRanks, M) end)
+		return
+	end
+	if not Available() then return end
 	self:HookTooltip()
 	self:HookMap()
 	self:AttachBisTab()

@@ -36,40 +36,43 @@ local K = {
 	def = "ITEM_MOD_DEFENSE_SKILL_RATING_SHORT", dodge = "ITEM_MOD_DODGE_RATING_SHORT", parry = "ITEM_MOD_PARRY_RATING_SHORT",
 	block = "ITEM_MOD_BLOCK_RATING_SHORT", bv = "ITEM_MOD_BLOCK_VALUE_SHORT",
 	armor = "RESISTANCE0_NAME", dps = "ITEM_MOD_DAMAGE_PER_SECOND_SHORT",
+	-- 포에버에 새로 생긴 능력치 (Method 공략 우선순위에 나옴)
+	exp = "ITEM_MOD_EXPERTISE_RATING_SHORT", haste = "ITEM_MOD_HASTE_RATING_SHORT", spen = "ITEM_MOD_SPELL_PENETRATION_SHORT",
 }
 
-local MELEE = { str = 2.0, agi = 1.2, ap = 1, crit = 20, hit = 18, sta = 0.3, armor = 0.01, dps = 14 }
+local MELEE = { str = 2.0, agi = 1.2, ap = 1, crit = 20, hit = 18, exp = 4, haste = 12, sta = 0.3, armor = 0.01, dps = 14 }
 local W = {
 	["WARRIOR:arms"] = MELEE,
 	["WARRIOR:fury"] = MELEE,
-	["WARRIOR:prot"] = { sta = 1.5, def = 1.5, armor = 0.1, dodge = 12, parry = 12, block = 6, bv = 0.5, str = 1, agi = 1, ap = 0.4, hit = 8, dps = 6 },
-	["ROGUE:assassination"] = { agi = 2.0, str = 1, ap = 1, crit = 20, hit = 22, sta = 0.3, armor = 0.01, dps = 14 },
-	["ROGUE:combat"] = { agi = 2.0, str = 1, ap = 1, crit = 20, hit = 22, sta = 0.3, armor = 0.01, dps = 14 },
-	["ROGUE:subtlety"] = { agi = 2.0, str = 1, ap = 1, crit = 22, hit = 20, sta = 0.3, armor = 0.01, dps = 14 },
-	["HUNTER:bm"] = { agi = 2.2, rap = 1, ap = 0.3, int = 0.4, crit = 20, hit = 20, sta = 0.3, armor = 0.01, rdps = 12, dps = 1 },
-	["HUNTER:mm"] = { agi = 2.2, rap = 1, ap = 0.3, int = 0.4, crit = 22, hit = 20, sta = 0.3, armor = 0.01, rdps = 14, dps = 1 },
-	["HUNTER:sv"] = { agi = 2.4, rap = 1, ap = 0.5, int = 0.4, crit = 20, hit = 20, sta = 0.3, armor = 0.01, rdps = 12, dps = 3 },
-	["MAGE:arcane"] = { sp = 1, sdmg = 1, int = 0.6, spi = 0.3, scrit = 10, shit = 12, mp5 = 1.2, sta = 0.4 },
-	["MAGE:fire"] = { sp = 1, sdmg = 1, int = 0.5, spi = 0.2, scrit = 14, shit = 14, mp5 = 1, sta = 0.4 },
-	["MAGE:frost"] = { sp = 1, sdmg = 1, int = 0.5, spi = 0.25, scrit = 10, shit = 14, mp5 = 1, sta = 0.4 },
-	["WARLOCK:aff"] = { sp = 1, sdmg = 1, int = 0.4, spi = 0.3, scrit = 6, shit = 14, mp5 = 0.8, sta = 0.6 },
-	["WARLOCK:demo"] = { sp = 1, sdmg = 1, int = 0.4, spi = 0.25, scrit = 8, shit = 14, mp5 = 0.8, sta = 0.6 },
-	["WARLOCK:destro"] = { sp = 1, sdmg = 1, int = 0.4, spi = 0.2, scrit = 12, shit = 14, mp5 = 0.8, sta = 0.5 },
-	["PRIEST:disc"] = { heal = 1, sp = 1, int = 0.7, spi = 0.6, mp5 = 2, scrit = 8, sta = 0.3 },
-	["PRIEST:holy"] = { heal = 1, sp = 1, int = 0.6, spi = 0.8, mp5 = 2, scrit = 8, sta = 0.2 },
-	["PRIEST:shadow"] = { sp = 1, sdmg = 1, int = 0.4, spi = 0.5, shit = 12, scrit = 4, mp5 = 0.8, sta = 0.4 },
-	["DRUID:balance"] = { sp = 1, sdmg = 1, int = 0.6, spi = 0.3, scrit = 10, shit = 12, mp5 = 1.2, sta = 0.3 },
-	["DRUID:feral"] = { agi = 2.0, str = 2.0, ap = 1, fap = 1, crit = 20, hit = 18, sta = 0.4, armor = 0.02 },
-	["DRUID:guardian"] = { sta = 1.5, armor = 0.15, agi = 1.2, def = 1, dodge = 12, str = 1, ap = 0.4, fap = 0.4, hit = 6 },
-	["DRUID:resto"] = { heal = 1, sp = 1, int = 0.6, spi = 0.7, mp5 = 1.8, scrit = 6, sta = 0.2 },
-	["PALADIN:holy"] = { heal = 1, sp = 1, int = 0.8, mp5 = 1.5, scrit = 10, spi = 0.2, sta = 0.2 },
-	["PALADIN:prot"] = { sta = 1.5, def = 1.5, armor = 0.1, bv = 0.6, block = 6, sp = 0.5, int = 0.3, str = 0.6, dps = 4 },
-	["PALADIN:ret"] = { str = 2.0, agi = 1.0, ap = 1, crit = 20, hit = 18, int = 0.3, sp = 0.3, sta = 0.3, armor = 0.01, dps = 14 },
-	["SHAMAN:ele"] = { sp = 1, sdmg = 1, int = 0.6, mp5 = 1.2, scrit = 12, shit = 12, spi = 0.1, sta = 0.3 },
-	["SHAMAN:enh"] = { str = 2.0, agi = 1.2, ap = 1, crit = 20, hit = 18, int = 0.3, sta = 0.3, armor = 0.01, dps = 14 },
-	["SHAMAN:resto"] = { heal = 1, sp = 1, int = 0.7, mp5 = 1.8, spi = 0.3, scrit = 6, sta = 0.2 },
+	["WARRIOR:prot"] = { sta = 1.5, def = 1.5, armor = 0.1, dodge = 12, parry = 12, block = 6, bv = 0.5, str = 1, agi = 1, ap = 0.4, hit = 8, dps = 6, exp = 3 },
+	["ROGUE:assassination"] = { agi = 2.0, str = 1, ap = 1, crit = 20, hit = 22, sta = 0.3, armor = 0.01, dps = 14, exp = 4, haste = 12 },
+	["ROGUE:combat"] = { agi = 2.0, str = 1, ap = 1, crit = 20, hit = 22, sta = 0.3, armor = 0.01, dps = 14, exp = 4, haste = 12 },
+	["ROGUE:subtlety"] = { agi = 2.0, str = 1, ap = 1, crit = 22, hit = 20, sta = 0.3, armor = 0.01, dps = 14, exp = 4, haste = 12 },
+	["HUNTER:bm"] = { agi = 2.2, rap = 1, ap = 0.3, int = 0.4, crit = 20, hit = 20, sta = 0.3, armor = 0.01, rdps = 12, dps = 1, haste = 10 },
+	["HUNTER:mm"] = { agi = 2.2, rap = 1, ap = 0.3, int = 0.4, crit = 22, hit = 20, sta = 0.3, armor = 0.01, rdps = 14, dps = 1, haste = 10 },
+	["HUNTER:sv"] = { agi = 2.4, rap = 1, ap = 0.5, int = 0.4, crit = 20, hit = 20, sta = 0.3, armor = 0.01, rdps = 12, dps = 3, haste = 10 },
+	["MAGE:arcane"] = { sp = 1, sdmg = 1, int = 0.6, spi = 0.3, scrit = 10, shit = 12, mp5 = 1.2, sta = 0.4, haste = 10, spen = 0.6 },
+	["MAGE:fire"] = { sp = 1, sdmg = 1, int = 0.5, spi = 0.2, scrit = 14, shit = 14, mp5 = 1, sta = 0.4, haste = 10, spen = 0.6 },
+	["MAGE:frost"] = { sp = 1, sdmg = 1, int = 0.5, spi = 0.25, scrit = 10, shit = 14, mp5 = 1, sta = 0.4, haste = 10, spen = 0.6 },
+	["WARLOCK:aff"] = { sp = 1, sdmg = 1, int = 0.4, spi = 0.3, scrit = 6, shit = 14, mp5 = 0.8, sta = 0.6, haste = 10, spen = 0.8 },
+	["WARLOCK:demo"] = { sp = 1, sdmg = 1, int = 0.4, spi = 0.25, scrit = 8, shit = 14, mp5 = 0.8, sta = 0.6, haste = 10, spen = 0.8 },
+	["WARLOCK:destro"] = { sp = 1, sdmg = 1, int = 0.4, spi = 0.2, scrit = 12, shit = 14, mp5 = 0.8, sta = 0.5, haste = 10, spen = 0.8 },
+	["PRIEST:disc"] = { heal = 1, sp = 1, int = 0.7, spi = 0.6, mp5 = 2, scrit = 8, sta = 0.3, haste = 6 },
+	["PRIEST:holy"] = { heal = 1, sp = 1, int = 0.6, spi = 0.8, mp5 = 2, scrit = 8, sta = 0.2, haste = 6 },
+	["PRIEST:shadow"] = { sp = 1, sdmg = 1, int = 0.4, spi = 0.5, shit = 12, scrit = 4, mp5 = 0.8, sta = 0.4, haste = 10, spen = 0.6 },
+	["DRUID:balance"] = { sp = 1, sdmg = 1, int = 0.6, spi = 0.3, scrit = 10, shit = 12, mp5 = 1.2, sta = 0.3, haste = 10, spen = 0.6 },
+	["DRUID:feral"] = { agi = 2.0, str = 2.0, ap = 1, fap = 1, crit = 20, hit = 18, sta = 0.4, armor = 0.02, exp = 4, haste = 12 },
+	["DRUID:guardian"] = { sta = 1.5, armor = 0.15, agi = 1.2, def = 1, dodge = 12, str = 1, ap = 0.4, fap = 0.4, hit = 6, exp = 3 },
+	["DRUID:resto"] = { heal = 1, sp = 1, int = 0.6, spi = 0.7, mp5 = 1.8, scrit = 6, sta = 0.2, haste = 6 },
+	["PALADIN:holy"] = { heal = 1, sp = 1, int = 0.8, mp5 = 1.5, scrit = 10, spi = 0.2, sta = 0.2, haste = 6 },
+	["PALADIN:prot"] = { sta = 1.5, def = 1.5, armor = 0.1, bv = 0.6, block = 6, sp = 0.5, int = 0.3, str = 0.6, dps = 4, exp = 3 },
+	["PALADIN:ret"] = { str = 2.0, agi = 1.0, ap = 1, crit = 20, hit = 18, int = 0.3, sp = 0.3, sta = 0.3, armor = 0.01, dps = 14, exp = 4, haste = 12 },
+	["SHAMAN:ele"] = { sp = 1, sdmg = 1, int = 0.6, mp5 = 1.2, scrit = 12, shit = 12, spi = 0.1, sta = 0.3, haste = 10, spen = 0.6 },
+	["SHAMAN:enh"] = { str = 2.0, agi = 1.2, ap = 1, crit = 20, hit = 18, int = 0.3, sta = 0.3, armor = 0.01, dps = 14, exp = 4, haste = 12 },
+	["SHAMAN:resto"] = { heal = 1, sp = 1, int = 0.7, mp5 = 1.8, spi = 0.3, scrit = 6, sta = 0.2, haste = 6 },
 }
 M.W = W
+M.K = K
 
 -- PvP: 체력을 크게, 적중 · 정신력 · 마나 회복은 덜 (탄력도가 없는 클래식 PvP 관례)
 local function PvP(w)
@@ -101,6 +104,7 @@ local SPEC_ID = {
 	[262] = "ele", [263] = "enh", [264] = "resto",
 }
 -- 특성이 아직 없을 때 (레벨 10 전) 기본
+M.TABS = TABS
 local DEFAULT = { WARRIOR = "arms", ROGUE = "combat", HUNTER = "bm", MAGE = "frost", WARLOCK = "aff", PRIEST = "shadow", DRUID = "feral", PALADIN = "ret", SHAMAN = "enh" }
 local SPEC_NAME = {
 	arms = "무기", fury = "분노", prot = "방어", assassination = "암살", combat = "전투", subtlety = "잠행",
@@ -108,6 +112,8 @@ local SPEC_NAME = {
 	aff = "고통", demo = "악마", destro = "파괴", disc = "수양", holy = "신성", shadow = "암흑",
 	balance = "조화", feral = "야성", guardian = "수호", resto = "회복", ret = "징벌", ele = "정기", enh = "고양",
 }
+
+M.SPEC_NAME = SPEC_NAME
 
 function M:Spec()
 	local _, class = UnitClass("player")
@@ -252,7 +258,7 @@ function M:Score(link, asOffhand)
 				else total = total + v * (w.dps or 0) * (asOffhand and OFFHAND_FACTOR or 1) end
 			else
 				-- 클래식식 적중 · 치명타는 1% 단위. 혹시 등급 수치(큰 숫자)로 오면 대략 1% = 14 로 본다
-				if (short == "hit" or short == "crit" or short == "shit" or short == "scrit") and v > 5 then v = v / 14 end
+				if (short == "hit" or short == "crit" or short == "shit" or short == "scrit" or short == "haste") and v > 5 then v = v / 14 end
 				total = total + v * (w[short] or 0)
 			end
 		end
