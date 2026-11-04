@@ -1021,6 +1021,13 @@ function M:BuildPrep(p)
 		r.name:SetPoint("RIGHT", -24, -6)
 		r.mark = Ink:Text(r, F.latinB, 12, C.green, "RIGHT")
 		r.mark:SetPoint("RIGHT", -2, 0)
+		-- ✓ 는 글꼴에 없는 글자라(네모로 깨짐) 아이콘으로
+		r.check = r:CreateTexture(nil, "OVERLAY")
+		r.check:SetTexture(Ink.icon("Check"))
+		r.check:SetSize(14, 14)
+		r.check:SetPoint("RIGHT", -2, 0)
+		r.check:SetVertexColor(C.green[1], C.green[2], C.green[3])
+		r.check:Hide()
 		r:SetScript("OnEnter", function(self)
 			if self.itemID then
 				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -1054,7 +1061,10 @@ local function SetLine(r, id, label, name, quality)
 	if id then
 		local _, _, _, _, icon = C_Item.GetItemInfoInstant(id)
 		local nm = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
-		if not nm and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+		if not nm then
+			if C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+			M.prepMissing = true
+		end
 		local q = quality or (C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)) or 1
 		r.icon:Set(icon, q, "")
 		local c = QCOL[q] or QCOL[1]
@@ -1066,6 +1076,7 @@ local function SetLine(r, id, label, name, quality)
 		r.name:SetTextColor(C.text[1], C.text[2], C.text[3])
 	end
 	r.mark:SetText("")
+	r.check:Hide()
 	r:Show()
 end
 
@@ -1074,6 +1085,7 @@ function M:PaintPrep()
 	local f = p.prep
 	local spec = self.spec
 	for _, list in ipairs({ f.cons, f.gems, f.ench }) do for _, r in ipairs(list) do r:Hide() end end
+	self.prepMissing = nil
 	if not spec then
 		f.hint:SetText("이 전문화는 아직 준비물 자료가 없어요.")
 		return
@@ -1108,8 +1120,7 @@ function M:PaintPrep()
 			r.icon:Set(tex, GetInventoryItemQuality("player", inv) or 1, "")
 			local have = EquippedEnchant(inv)
 			if eid and eid > 0 and have == eid then
-				r.mark:SetText("✓")
-				r.mark:SetTextColor(C.green[1], C.green[2], C.green[3])
+				r.check:Show()
 				done = done + 1
 			elseif GetInventoryItemID("player", inv) then
 				r.mark:SetText(have and "다름" or "없음")
@@ -1118,6 +1129,15 @@ function M:PaintPrep()
 		end
 	end
 	f.hint:SetText(string.format("마법부여 %d / %d 적용 · 노란 글자 = 바꾸면 좋은 칸 · 자료: %s", done, e, spec.src))
+	-- 아이템 이름이 아직 안 온 칸이 있으면 잠깐 뒤 다시 (처음 열 때 "불러오는 중…" 이 남지 않게)
+	if self.prepMissing and (self.prepRetry or 0) < 12 then
+		self.prepRetry = (self.prepRetry or 0) + 1
+		C_Timer.After(0.6, function()
+			if p:IsShown() and (self.bisMode == "prep") then self:PaintPrep() end
+		end)
+	elseif not self.prepMissing then
+		self.prepRetry = 0
+	end
 end
 
 function M:PaintBis()
@@ -1309,7 +1329,7 @@ function M:Init()
 	C_Timer.After(8, function() pcall(M.BuildRanks, M) end)
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({ "PLAYER_ENTERING_WORLD", "EJ_LOOT_DATA_RECIEVED", "PLAYER_SPECIALIZATION_CHANGED",
-		"ADDON_LOADED", "PLAYER_EQUIPMENT_CHANGED", "ENCOUNTER_END", "GET_ITEM_INFO_RECEIVED" }) do
+		"ADDON_LOADED", "PLAYER_EQUIPMENT_CHANGED", "ENCOUNTER_END", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT" }) do
 		pcall(e.RegisterEvent, e, ev)
 	end
 	local pending
@@ -1321,7 +1341,7 @@ function M:Init()
 			if not M.bisTab then M:AttachBisTab() end
 		elseif event == "PLAYER_EQUIPMENT_CHANGED" then
 			M:PaintBis()
-		elseif event == "GET_ITEM_INFO_RECEIVED" then
+		elseif event == "GET_ITEM_INFO_RECEIVED" or event == "ITEM_DATA_LOAD_RESULT" then
 			-- 아이템 이름 · 능력치가 늦게 도착: 순위(대체템 점수)와 화면만 다시
 			if not (M.bisPanel and M.bisPanel:IsShown()) and not (M.sidebar and M.sidebar:IsShown()) then
 				M.dirty = true
