@@ -1103,7 +1103,7 @@ function M:SyncFontButton()
 	p.compare:SetActive(on)
 	local prof = ns.Score and ns.Score.forever and ns.Score:ProfileName() or nil
 	p.compareDesc:SetText("아이템 비교 · " .. (not on and "꺼짐" or
-		(prof and (prof .. " 기준 점수로 가방 · 퀘스트 보상에 화살표, 툴팁에 착용 대비 %") or "아이템 레벨로 가방 · 퀘스트 보상에 화살표, 툴팁에 착용 대비 차이")))
+		(prof and (prof .. " 기준 점수로 가방 · 퀘스트 보상에 화살표, 툴팁에 착용 대비 %") or "주 능력치 + 2차 능력치(전문화 BIS 비중) 점수로 가방 · 퀘스트 보상에 화살표, 툴팁에 착용 대비 % · 장신구는 BIS 여부")))
 end
 
 function M:NeedReload()
@@ -1297,6 +1297,7 @@ function M:BuildPanel()
 		{ "기본 창 / 글꼴 (실험)", "기본 창 껍데기와 글꼴 변경. 기본은 꺼짐.", "windows" },
 	})
 	local right = Column(p.compareDesc, 328, "편의 기능", {
+		{ "특성 가이드 (포에버)", "레벨업할 때 다음에 찍을 특성을 특성 창에서 강조하고, 포인트가 생기면 채팅으로 알려 줍니다.", "talentGuide" },
 		{ "잡동사니 자동 판매", "상인 창을 열면 회색 아이템을 팝니다.", "sellJunk" },
 		{ "자동 수리", "상인 창을 열면 장비를 수리합니다.", "autoRepair" },
 		{ "길드 자금으로 수리", "가능하면 길드 자금을 먼저 씁니다.", "guildRepair" },

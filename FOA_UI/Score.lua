@@ -1,7 +1,8 @@
 -- FOA UI · 아이템 점수 · 착용 비교
 --  아이템 점수 = Σ(능력치 × 가중치). 가중치는 직업 · 특성마다 PvE / PvP 따로 (아래 W 표, 모든 직업에 같은 규칙).
 --  가방 · 상인 · 퀘스트 보상 · 전리품 툴팁에 "착용 대비 +n%" 를 붙이고, 가방 칸에는 더 좋은 장비에 화살표.
---  포에버(클래식 능력치)는 가중치 점수, 본섭은 아이템 레벨로 비교한다 (본섭은 아이템 레벨이 거의 전부라서).
+--  포에버(클래식 능력치)는 직업 · 특성 가중치 점수, 본섭은 주 능력치 + 2차 능력치(전문화 BIS 비중) 점수.
+--  본섭 장신구는 사용 · 발동 효과가 핵심이라 점수 대신 BIS 여부와 아이템 레벨만 알려 준다.
 --  못 쓰는 장비(빨간 줄: 직업 · 방어구 · 무기 숙련)는 비교하지 않고, 레벨만 모자라면 "n레벨부터" 로 알려 준다.
 
 local ADDON, ns = ...
@@ -265,26 +266,107 @@ function M:Score(link, asOffhand)
 	return total
 end
 
--- 본섭: 아이템 레벨 (주 능력치가 내 특성 것이 아니면 비교하지 않음)
+local function Equipped(slot) return GetInventoryItemLink("player", slot) end
+
+-- 본섭: 주 능력치 + 2차 능력치(특화 · 가속 · 치명 · 유연)를 전문화마다 다른 비중으로
+--  비중은 그 전문화 BIS 장비(BISData)에 붙은 2차 능력치 합에서 뽑는다 → BIS 가 좋아하는 능력치가 높게.
+--  내 전문화 주 능력치가 아닌 장비는 비교하지 않는다. 장신구는 사용 · 발동 효과가 핵심이라 따로 본다.
 local PRIMARY = { [1] = "ITEM_MOD_STRENGTH_SHORT", [2] = "ITEM_MOD_AGILITY_SHORT", [4] = "ITEM_MOD_INTELLECT_SHORT" }
-local function RetailScore(link)
-	local ilvl = C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(link)
-	if not ilvl then return end
-	local stats = GetItemStats(link) or {}
-	local hasPrimary, mine = false, false
-	local my
-	if GetSpecialization and GetSpecializationInfo then
-		local i = GetSpecialization()
-		my = i and select(6, GetSpecializationInfo(i))
+local SECONDARY = { "ITEM_MOD_MASTERY_RATING_SHORT", "ITEM_MOD_HASTE_RATING_SHORT", "ITEM_MOD_CRIT_RATING_SHORT", "ITEM_MOD_VERSATILITY" }
+local SEC_NAME = { ITEM_MOD_MASTERY_RATING_SHORT = "특화", ITEM_MOD_HASTE_RATING_SHORT = "가속", ITEM_MOD_CRIT_RATING_SHORT = "치명", ITEM_MOD_VERSATILITY = "유연" }
+
+local function RetailSpec()
+	if not (GetSpecialization and GetSpecializationInfo) then return end
+	local i = GetSpecialization()
+	if not i then return end
+	local id, name, _, _, _, primary = GetSpecializationInfo(i)
+	local _, class = UnitClass("player")
+	return id, name, primary, class
+end
+
+local retailW = {}
+function M:RetailWeights()
+	local id, _, _, class = RetailSpec()
+	if not id then return end
+	local key = class .. ":" .. id
+	if retailW[key] then return retailW[key] end
+	local spec = ns.BIS and ns.BIS.specs and ns.BIS.specs[key]
+	local sum, total, missing = {}, 0, false
+	if spec and spec.g then
+		for _, itemID in pairs(spec.g) do
+			local st = GetItemStats("item:" .. itemID)
+			if st then
+				for _, k in ipairs(SECONDARY) do
+					local v = st[k] or 0
+					sum[k] = (sum[k] or 0) + v
+					total = total + v
+				end
+			else
+				missing = true
+				if C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, itemID) end
+			end
+		end
 	end
+	local w = { order = {} }
+	local top = 0
+	for _, k in ipairs(SECONDARY) do top = math.max(top, sum[k] or 0) end
+	for _, k in ipairs(SECONDARY) do
+		-- 가장 좋아하는 2차 = 0.6, 나머지는 비율대로 (최소 0.2). BIS 정보가 없으면 모두 0.4
+		w[k] = (top > 0) and math.max(0.2, 0.6 * (sum[k] or 0) / top) or 0.4
+		w.order[#w.order + 1] = k
+	end
+	table.sort(w.order, function(x, y) return w[x] > w[y] end)
+	w.bis = spec and spec.g
+	if total > 0 and not missing then retailW[key] = w end
+	return w
+end
+
+local function RetailScore(link)
+	local stats = GetItemStats(link)
+	if not stats then M.missed = true return end
+	local _, _, my = RetailSpec()
+	local hasPrimary, mine = false, 0
 	for id, k in pairs(PRIMARY) do
 		if stats[k] then
 			hasPrimary = true
-			if id == my then mine = true end
+			if id == my then mine = stats[k] end
 		end
 	end
-	if hasPrimary and my and not mine then return false end
-	return ilvl
+	if hasPrimary and my and mine == 0 then return false end
+	local w = M:RetailWeights() or {}
+	local sc = mine
+	for _, k in ipairs(SECONDARY) do sc = sc + (stats[k] or 0) * (w[k] or 0.4) end
+	sc = sc + (stats.ITEM_MOD_STAMINA_SHORT or 0) * 0.02
+	return sc
+end
+
+function M:RetailOrder()
+	local w = self:RetailWeights()
+	if not w then return "" end
+	local t = {}
+	for _, k in ipairs(w.order) do t[#t + 1] = SEC_NAME[k] end
+	return table.concat(t, " > ")
+end
+
+-- 본섭 장신구: 사용 · 발동 효과가 핵심이라 점수 대신 BIS 여부 + 아이템 레벨만
+local function RetailTrinket(link)
+	local itemID = GetItemInfoInstant(link)
+	local w = M:RetailWeights()
+	local isBis = false
+	if w and w.bis then
+		for slot, id in pairs(w.bis) do
+			if (slot == 13 or slot == 14) and id == itemID then isBis = true end
+		end
+	end
+	local function lvl(l) return l and C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(l) or 0 end
+	local a, b = Equipped(13), Equipped(14)
+	local sameID
+	for _, e in ipairs({ a, b }) do
+		if e and GetItemInfoInstant(e) == itemID then sameID = e end
+	end
+	local base = sameID and lvl(sameID) or math.min(lvl(a), lvl(b))
+	return { trinket = true, bis = isBis, ilvl = lvl(link) - base, same = sameID ~= nil, empty = not a or not b,
+		pct = (isBis and not sameID) and 1 or ((sameID and lvl(link) > lvl(sameID)) and 1 or 0) }
 end
 
 -------------------------------------------------------------------------------
@@ -299,7 +381,6 @@ local SLOTS = {
 	INVTYPE_RANGED = { 18 }, INVTYPE_RANGEDRIGHT = { 18 }, INVTYPE_THROWN = { 18 }, INVTYPE_RELIC = { 18 },
 }
 
-local function Equipped(slot) return GetInventoryItemLink("player", slot) end
 
 -- 결과: { pct, new, old, level, empty } 또는 nil (비교할 수 없음)
 function M:Compare(link)
@@ -309,6 +390,13 @@ function M:Compare(link)
 	if not slots then return end
 	local tip = ReadTooltip(link)
 	if tip.no then return end
+	if not FOREVER and loc == "INVTYPE_TRINKET" then
+		local r = RetailTrinket(link)
+		local lvl = tip.level
+		if lvl and lvl <= (UnitLevel("player") or 0) then lvl = nil end
+		r.level = lvl
+		return r
+	end
 	local score = FOREVER and function(l, oh) return self:Score(l, oh) end or function(l) return RetailScore(l) end
 	local new
 	local old
@@ -364,7 +452,6 @@ function M:Compare(link)
 	if new == nil or old == nil then return end
 	local empty = old == 0
 	local pct = empty and 100 or ((new - old) / math.max(math.abs(old), 1) * 100)
-	if not FOREVER then pct = new - old end -- 본섭은 아이템 레벨 차이
 	local lvl = tip.level
 	if lvl and lvl <= (UnitLevel("player") or 0) then lvl = nil end
 	return { pct = pct, new = new, old = old, level = lvl, empty = empty }
@@ -376,9 +463,9 @@ function M:BagUpgrade(bag, slot)
 	if not link then return end
 	local ok, r = pcall(self.Compare, self, link)
 	if not ok or not r then return end
-	if FOREVER then
-		if r.pct > 0.5 then return r end
-	elseif r.pct > 0 then
+	if r.trinket then
+		if r.pct > 0 then return r end
+	elseif r.empty or r.pct > 0.5 then
 		return r
 	end
 end
@@ -396,21 +483,27 @@ end
 -------------------------------------------------------------------------------
 local function Line(tt, r)
 	local txt
+	if r.trinket then
+		-- 본섭 장신구
+		if r.bis then txt = "|cffFFF468BIS 장신구|r"
+		else txt = "|cff9EA3AB장신구 · 사용/발동 효과로 판단|r" end
+		if r.same and r.ilvl > 0 then txt = txt .. string.format("  |cff6FD39A같은 장신구 아이템 레벨 +%d|r", r.ilvl)
+		elseif r.ilvl ~= 0 and not r.empty then txt = txt .. string.format("  |cff9EA3AB아이템 레벨 %+d|r", r.ilvl) end
+		if r.level then txt = txt .. string.format("  |cffFFF468%d레벨부터|r", r.level) end
+		tt:AddLine(txt)
+		return
+	end
 	if r.empty then
 		txt = "|cff6FD39A▲ 빈 칸에 착용 가능|r"
-	elseif FOREVER then
+	else
 		local p = math.floor(r.pct + (r.pct >= 0 and 0.5 or -0.5))
 		if p > 0 then txt = string.format("|cff6FD39A▲ 착용 대비 +%d%%|r", p)
 		elseif p < 0 then txt = string.format("|cffD9776B▼ 착용 대비 %d%%|r", p)
 		else txt = "|cff9EA3AB= 착용한 것과 비슷|r" end
-	else
-		local d = r.pct
-		if d > 0 then txt = string.format("|cff6FD39A▲ 아이템 레벨 +%d|r", d)
-		elseif d < 0 then txt = string.format("|cffD9776B▼ 아이템 레벨 %d|r", d)
-		else txt = "|cff9EA3AB= 같은 아이템 레벨|r" end
 	end
 	if r.level then txt = txt .. string.format("  |cffFFF468%d레벨부터|r", r.level) end
-	tt:AddDoubleLine(txt, FOREVER and string.format("|cff5E636B%s|r", M:ProfileName()) or " ")
+	local right = FOREVER and M:ProfileName() or M:RetailOrder()
+	tt:AddDoubleLine(txt, string.format("|cff5E636B%s|r", right or ""))
 end
 
 function M:HookTooltip()
@@ -461,7 +554,7 @@ function M:UpdateQuestRewards()
 				local icon = b.Icon or b.icon or _G[(b:GetName() or "") .. "IconTexture"]
 				b.foaUp:SetPoint("TOPLEFT", icon or b, "TOPLEFT", -2, 2)
 			end
-			local show = r and (r.empty or r.pct > (FOREVER and 0.5 or 0))
+			local show = r and ((r.trinket and r.pct > 0) or (not r.trinket and (r.empty or r.pct > 0.5)))
 			b.foaUp:SetShown(show and true or false)
 			if show then
 				if r.level then b.foaUp:SetVertexColor(C.accent[1], C.accent[2], C.accent[3]) else b.foaUp:SetVertexColor(0.44, 0.83, 0.6) end
