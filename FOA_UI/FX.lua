@@ -38,6 +38,7 @@ FX.LIST = {
 	{ "deathFade", "사망 · 부활", "파티원이 죽으면 가라앉고, 살아나면 빛" },
 	{ "readyCheck", "전투 준비 확인", "파티원 옆에 체크가 차례로 톡" },
 	{ "levelUp", "레벨업 연출", "화면 가운데 큰 숫자와 펼쳐지는 선" },
+	{ "questDone", "퀘스트 완료 알림", "퀘스트 목표를 다 채우면 소리와 함께 위에 카드" },
 	{ "lootToast", "전리품 알림", "희귀 이상 아이템을 얻으면 왼쪽에 알림" },
 	{ "mailRipple", "우편 잔물결", "새 우편이 오면 미니맵에 잔물결" },
 	{ "bossDrop", "보스 경고 등장", "보스 경고가 위에서 떨어지듯 + 선 펼침" },
@@ -1363,6 +1364,11 @@ Every("rangeDesat", 5, function(n)
 			pcall(icon.SetDesaturated, icon, false)
 		end
 	end)
+end)
+
+Every("questDone", 8, function()
+	local q = Ink.modules.Quest
+	if q and q.QuestDone then q:QuestDone("데피아즈단 소탕", true) end
 end)
 
 Every("levelUp", 9, function()

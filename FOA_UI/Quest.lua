@@ -399,8 +399,8 @@ function M:BuildToast()
 	self.toast = t
 end
 
-function M:QuestDone(title)
-	if Ink.db.questToast == false then return end
+function M:QuestDone(title, demo)
+	if Ink.db.questToast == false and not demo then return end
 	if not self.toast then self:BuildToast() end
 	local t = self.toast
 	t.title:SetText(title or "")
@@ -435,7 +435,6 @@ end
 function M:SetTest(on)
 	self.testing = on
 	self:Update()
-	if on and not Ink.modules.Config.testFromEdit then self:QuestDone("데피아즈단 소탕") end
 end
 
 -------------------------------------------------------------------------------

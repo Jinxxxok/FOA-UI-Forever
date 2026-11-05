@@ -45,6 +45,31 @@ local function Available()
 end
 
 -- 내 직업의 전문화 목록 { {id, name, icon}, ... }
+-- 포에버: 특성 트리 아이콘 (GetTalentTabInfo 가 없어서 전문화 번호로 아이콘을 찾는다)
+local FOREVER_SPEC_ID = {
+	WARRIOR = { arms = 71, fury = 72, prot = 73 }, ROGUE = { assassination = 259, combat = 260, subtlety = 261 },
+	HUNTER = { bm = 253, mm = 254, sv = 255 }, MAGE = { arcane = 62, fire = 63, frost = 64 },
+	WARLOCK = { aff = 265, demo = 266, destro = 267 }, PRIEST = { disc = 256, holy = 257, shadow = 258 },
+	DRUID = { balance = 102, feral = 103, guardian = 104, resto = 105 }, PALADIN = { holy = 65, prot = 66, ret = 70 },
+	SHAMAN = { ele = 262, enh = 263, resto = 264 },
+}
+local SPEC_ICON = {
+	[71] = 132355, [72] = 132347, [73] = 132341, [259] = 236270, [260] = 236286, [261] = 132320,
+	[253] = 461112, [254] = 236179, [255] = 461113, [62] = 135932, [63] = 135810, [64] = 135846,
+	[265] = 136145, [266] = 136172, [267] = 136186, [256] = 135940, [257] = 237542, [258] = 136207,
+	[102] = 136096, [103] = 132115, [104] = 132276, [105] = 136041, [65] = 135920, [66] = 236264, [70] = 135873,
+	[262] = 136048, [263] = 237581, [264] = 136052,
+}
+local function ForeverSpecIcon(class, key)
+	local id = FOREVER_SPEC_ID[class] and FOREVER_SPEC_ID[class][key]
+	if not id then return end
+	if GetSpecializationInfoByID then
+		local ok, _, _, _, icon = pcall(GetSpecializationInfoByID, id)
+		if ok and icon then return icon end
+	end
+	return SPEC_ICON[id]
+end
+
 local function Specs()
 	local list = {}
 	if FOREVER then
@@ -53,11 +78,15 @@ local function Specs()
 		local _, class = UnitClass("player")
 		local tabs = sc and sc.TABS and sc.TABS[class] or {}
 		for t, key in ipairs(tabs) do
-			local a, b, c, d = GetTalentTabInfo and GetTalentTabInfo(t)
-			local icon = (type(b) == "number" and b) or (type(d) == "number" and d) or nil
+			local icon
+			if GetTalentTabInfo then
+				local _, b, _, d = GetTalentTabInfo(t)
+				icon = (type(b) == "number" and b) or (type(d) == "number" and d) or nil
+			end
+			icon = icon or ForeverSpecIcon(class, key)
 			list[#list + 1] = { id = key, name = sc.SPEC_NAME[key] or key, icon = icon }
 			if class == "DRUID" and key == "feral" then
-				list[#list + 1] = { id = "guardian", name = sc.SPEC_NAME.guardian or "수호", icon = icon }
+				list[#list + 1] = { id = "guardian", name = sc.SPEC_NAME.guardian or "수호", icon = ForeverSpecIcon(class, "guardian") or icon }
 			end
 		end
 		return list
