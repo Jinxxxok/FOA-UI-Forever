@@ -1286,7 +1286,13 @@ function M:SyncFontButton()
 		p.chatFont.text:SetText("채팅 글꼴: " .. (CF[ck] or ck))
 		p.chatFont:SetActive(ck ~= "set")
 		p.chatLine:SetActive(Ink.db.chatOutline and true or false)
-		p.chatDesc:SetText("채팅 · 바로 바뀌어요. 무빅은 글꼴 파일을 넣어 둔 경우에만 · 테두리를 켜면 밝은 배경에서도 또렷해요")
+		local Q = Ink.modules.Quest
+		if p.qSound and Q and Q.SOUND_NAME then
+			local qk = Ink.db.questSound or "random"
+			p.qSound.text:SetText("퀘스트 완료 소리: " .. (Q.SOUND_NAME[qk] or qk))
+			p.qSound:SetActive(qk ~= "off")
+		end
+		p.chatDesc:SetText("채팅 · 바로 바뀌어요. 무빅은 글꼴 파일을 넣어 둔 경우에만 · 테두리를 켜면 밝은 배경에서도 또렷해요 · 완료 소리는 누르면 미리 들려줘요")
 	end
 	local mode = Ink.db.renderMode or "auto"
 	local auto = Ink.autoTier or "1x"
@@ -1481,6 +1487,15 @@ function M:BuildPanel()
 		M:SyncFontButton()
 	end)
 	p.chatLine:SetPoint("LEFT", p.chatFont, "RIGHT", 8, 0)
+	-- 퀘스트 완료 소리 (누를 때마다 다음 소리 + 미리 듣기)
+	p.qSound = Button(p, "완료 소리", 230, function()
+		local Q = Ink.modules.Quest
+		if not Q or not Q.SOUNDS then return end
+		Ink.db.questSound = Cycle(Q.SOUNDS, Ink.db.questSound or "random")
+		Q:PlayDoneSound()
+		M:SyncFontButton()
+	end)
+	p.qSound:SetPoint("LEFT", p.chatLine, "RIGHT", 8, 0)
 	p.chatDesc = Ink:Text(p, F.sans, 11, C.dim, "LEFT")
 	p.chatDesc:SetPoint("TOPLEFT", p.chatFont, "BOTTOMLEFT", 2, -8)
 	p.chatDesc:SetWidth(620)

@@ -408,8 +408,26 @@ function M:QuestDone(title, demo)
 	t:Show()
 	t.ag:Stop()
 	t.ag:Play()
-	local kit = (SOUNDKIT and (SOUNDKIT.UI_QUEST_COMPLETE or SOUNDKIT.IG_QUEST_LIST_COMPLETE)) or 878
-	pcall(PlaySound, kit, "Master")
+	M:PlayDoneSound()
+end
+
+-- 완료 소리: random(목소리 셋 중 하나) / done("완료~") / gg("GG~") / next("다음은 어디야?") / game(게임 효과음) / off
+local VOICE = { done = "QuestDone_done", gg = "QuestDone_gg", next = "QuestDone_next" }
+M.SOUNDS = { "random", "done", "gg", "next", "game", "off" }
+M.SOUND_NAME = { random = "목소리 랜덤", done = "완료~", gg = "GG~", next = "다음은 어디야?", game = "게임 효과음", off = "끔" }
+function M:PlayDoneSound(which)
+	local k = which or Ink.db.questSound or "random"
+	if k == "off" then return end
+	if k == "random" then
+		local keys = { "done", "gg", "next" }
+		k = keys[math.random(#keys)]
+	end
+	if VOICE[k] then
+		pcall(PlaySoundFile, "Interface\\AddOns\\FOA_UI\\Media\\Sounds\\" .. VOICE[k] .. ".ogg", "Master")
+	else
+		local kit = (SOUNDKIT and (SOUNDKIT.UI_QUEST_COMPLETE or SOUNDKIT.IG_QUEST_LIST_COMPLETE)) or 878
+		pcall(PlaySound, kit, "Master")
+	end
 end
 
 -- 퀘스트 로그를 훑어서 "방금 완료 상태가 된" 퀘스트를 찾는다
