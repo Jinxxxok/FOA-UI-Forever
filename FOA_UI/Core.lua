@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.34.0"
+Ink.version = "0.34.1"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -50,10 +50,17 @@ function Ink:FontExists(path)
 	return cur ~= nil and cur:lower() == path:lower()
 end
 
-function Ink:FindUserFont(base)
-	for _, ext in ipairs({ ".ttf", ".otf", ".TTF", ".OTF" }) do
-		local p = USER .. base .. ext
-		if self:FontExists(p) then return p end
+-- 사용자가 넣은 글꼴 찾기: FOA_Fonts 폴더 (업데이트해도 안 지워짐) → FOA_UI\Media\Fonts (업데이트하면 지워짐)
+local USER_DIRS = { USER, MEDIA .. "Fonts\\" }
+function Ink:FindUserFont(...)
+	for _, dir in ipairs(USER_DIRS) do
+		for i = 1, select("#", ...) do
+			local base = select(i, ...)
+			for _, ext in ipairs({ ".ttf", ".otf", ".TTF", ".OTF" }) do
+				local p = dir .. base .. ext
+				if self:FontExists(p) then return p end
+			end
+		end
 	end
 end
 
@@ -76,10 +83,12 @@ function Ink:ApplyFontSet()
 		self.fontSetActive = "pretendard"
 	elseif set == "mubig" then
 		local ys = MEDIA .. "Fonts\\YSpotlight.ttf"
-		local kr = self:FindUserFont("MUBIG")
+		-- 한글: 직접 넣은 무빅 · 세방고딕 파일 → 게임 Fonts 폴더의 2002 (무빅UI를 깔았으면 세방고딕)
+		local kr = self:FindUserFont("MUBIG", "2002", "SEBANG Gothic Bold", "SEBANGGothicBold", "SebangGothicBold", "세방고딕")
+		self.mubigFile = kr
 		if not kr and self:FontExists("Fonts\\2002.ttf") then kr = "Fonts\\2002.ttf" end
 		kr = kr or ys
-		local krB = self:FindUserFont("MUBIG-Bold") or (kr == "Fonts\\2002.ttf" and self:FontExists("Fonts\\2002B.ttf") and "Fonts\\2002B.ttf") or kr
+		local krB = self:FindUserFont("MUBIG-Bold", "2002b", "2002B") or (kr == "Fonts\\2002.ttf" and self:FontExists("Fonts\\2002B.ttf") and "Fonts\\2002B.ttf") or kr
 		F.sans, F.semi, F.bold = kr, krB, krB
 		F.num, F.numR, F.latin, F.latinB = ys, ys, ys, ys
 		self.fontSetActive = "mubig"

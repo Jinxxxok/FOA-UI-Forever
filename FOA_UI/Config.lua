@@ -1270,7 +1270,16 @@ function M:SyncFontButton()
 	local set = Ink.db.fontSet or "foa"
 	p.font.text:SetText("글꼴: " .. (Ink.FONT_NAME[set] or set))
 	p.font:SetActive(set ~= "foa")
-	p.fontDesc:SetText("글꼴 · " .. (FONT_DESC[set] or ""))
+	local desc = FONT_DESC[set] or ""
+	if set == "mubig" then
+		local f = Ink.mubigFile
+		if f and f:find("FOA_Fonts", 1, true) then
+			desc = desc .. "  |cff6FD39A직접 넣은 글꼴 사용 중|r"
+		elseif f then
+			desc = desc .. "  |cffFFB75AFOA_UI 폴더 안 글꼴 사용 중 · 애드온을 업데이트하면 지워지니 AddOns\\FOA_Fonts 폴더로 옮기세요|r"
+		end
+	end
+	p.fontDesc:SetText("글꼴 · " .. desc)
 	local mode = Ink.db.renderMode or "auto"
 	local auto = Ink.autoTier or "1x"
 	local tier = mode == "auto" and auto or mode
