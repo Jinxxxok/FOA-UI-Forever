@@ -2012,12 +2012,15 @@ function M:BoardFloors(key, data)
 	local fl = dm and dm.floors and dm.floors[key]
 	if not (fl and #fl > 0) then return end
 	local withBoss, any = {}, false
+	local nMain, nPos = 0, 0
 	for _, u in ipairs(fl) do withBoss[u] = 0 end
 	for _, x in ipairs(data.bosses) do
 		local ps = x.npc and dm.pos[x.npc]
+		if not x.rare then nMain = nMain + 1; if ps then nPos = nPos + 1 end end
 		if ps and withBoss[ps[1]] then withBoss[ps[1]] = withBoss[ps[1]] + 1; any = true end
 	end
-	if not any then return end
+	-- 보스 위치를 절반도 모르면(개편된 던전 등) 지도 대신 순서 그림
+	if not any or nPos < math.max(1, nMain / 2) then return end
 	local list = {}
 	for _, u in ipairs(fl) do if withBoss[u] > 0 then list[#list + 1] = u end end
 	return list
