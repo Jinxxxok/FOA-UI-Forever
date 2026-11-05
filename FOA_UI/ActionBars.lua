@@ -484,7 +484,7 @@ function M:KeybindOverlay(b)
 		GameTooltip:AddLine("단축키 설정", C.accent[1], C.accent[2], C.accent[3])
 		local keys = { GetBindingKey(b.foaCmd) }
 		GameTooltip:AddLine(#keys > 0 and ("지금: " .. table.concat(keys, ", ")) or "지금: 없음", 1, 1, 1)
-		GameTooltip:AddLine("키를 누르면 연결 · 오른쪽 클릭으로 지우기 · ESC 끝내기", 0.7, 0.7, 0.7, true)
+		GameTooltip:AddLine("키를 누르면 연결 · ESC 또는 오른쪽 클릭으로 지우기", 0.7, 0.7, 0.7, true)
 		GameTooltip:Show()
 	end)
 	o:SetScript("OnLeave", function(self)
@@ -511,7 +511,7 @@ function M:SetKeybindMode(on, force)
 	if not self.kbFrame then
 		local k = CreateFrame("Frame", "FOAKeybindMode", UIParent)
 		k:SetFrameStrata("FULLSCREEN_DIALOG")
-		k:SetSize(560, 46)
+		k:SetSize(700, 46)
 		k:SetPoint("TOP", UIParent, "TOP", 0, -120)
 		k.bg = Ink:Round(k, "BACKGROUND", false, false)
 		k.bg:SetAllPoints()
@@ -521,12 +521,34 @@ function M:SetKeybindMode(on, force)
 		k.bd:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.6)
 		k.text = Ink:Text(k, F.semi, 13, C.text, "CENTER")
 		k.text:SetPoint("CENTER", 0, 0)
-		k.text:SetText("단축키 설정 · 버튼에 마우스를 올리고 키를 누르세요 · 오른쪽 클릭 지우기 · ESC 끝")
+		k.text:SetText("단축키 설정 · 버튼에 마우스를 올리고 키를 누르세요 · 올린 채 ESC = 지우기 · 바깥에서 ESC = 끝")
+		k.text:ClearAllPoints()
+		k.text:SetPoint("CENTER", -34, 0)
+		-- 마우스로도 끝낼 수 있게 (버튼 위에서 ESC 는 지우기라서)
+		k.done = CreateFrame("Button", nil, k)
+		k.done:SetSize(56, 26)
+		k.done:SetPoint("RIGHT", -10, 0)
+		k.done.bg = Ink:Round(k.done, "BACKGROUND", true, false)
+		k.done.bg:SetAllPoints()
+		k.done.bg:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.18)
+		k.done.t = Ink:Text(k.done, F.semi, 12, C.accent, "CENTER")
+		k.done.t:SetPoint("CENTER")
+		k.done.t:SetText("완료")
+		k.done:SetScript("OnClick", function() M:SetKeybindMode(false) end)
 		k:EnableKeyboard(true)
 		k:SetPropagateKeyboardInput(false)
 		k:SetScript("OnKeyDown", function(self, key)
-			if key == "ESCAPE" then M:SetKeybindMode(false) return end
 			local b = M.kbHover
+			-- ESC: 버튼 위에 마우스가 있으면 그 칸 단축키 지우기, 아니면 설정 끝내기
+			if key == "ESCAPE" then
+				if b then
+					M:Bind(b.foaCmd)
+					if b.foaKB then b.foaKB:GetScript("OnEnter")(b.foaKB) end
+				else
+					M:SetKeybindMode(false)
+				end
+				return
+			end
 			local ks = KeyString(key)
 			if b and ks then
 				M:Bind(b.foaCmd, ks)
