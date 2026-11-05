@@ -648,6 +648,9 @@ function M:LayoutAnchors()
 				end)
 			end
 			hooksecurefunc(ChatFrame1, "SetPoint", refit)
+			-- 블리자드 편집 모드는 SetPoint 대신 따로 떼어 둔 SetPointBase 로 옮겨서 위 훅을 피해 갔다
+			--  (가만히 있어도 채팅창 자리가 바뀌던 원인)
+			if type(ChatFrame1.SetPointBase) == "function" then hooksecurefunc(ChatFrame1, "SetPointBase", refit) end
 			hooksecurefunc(ChatFrame1, "SetSize", refit)
 			if ChatFrame1.SetWidth then hooksecurefunc(ChatFrame1, "SetWidth", refit) end
 			if ChatFrame1.SetHeight then hooksecurefunc(ChatFrame1, "SetHeight", refit) end
@@ -714,15 +717,18 @@ local function SkinAura(b)
 	if b.Symbol then b.Symbol:SetAlpha(0) end
 	local d = b.Duration or b.duration
 	if d then
-		d:SetFont(F.sans, 10, "")
+		-- 남은 시간 글자: 배경에 묻히지 않게 밝은 색 + 진한 그림자
+		d:SetFont(F.semi, 11, "")
 		d:SetShadowOffset(1, -1)
+		d:SetShadowColor(0, 0, 0, 1)
 		d:ClearAllPoints()
 		d:SetPoint("TOP", icon, "BOTTOM", 0, -3)
+		local BUFF_TXT = { 0.96, 0.95, 0.90 }
 		local function mute()
 			if d.inkColoring then return end
 			d.inkColoring = true
-			d:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
-			d:SetVertexColor(C.muted[1], C.muted[2], C.muted[3])
+			d:SetTextColor(BUFF_TXT[1], BUFF_TXT[2], BUFF_TXT[3])
+			d:SetVertexColor(BUFF_TXT[1], BUFF_TXT[2], BUFF_TXT[3])
 			d.inkColoring = nil
 		end
 		mute()
@@ -891,6 +897,29 @@ local function SkinEditBox(eb, cf)
 	end
 end
 
+-- 채팅 글꼴: 설정(db.chatFont) = set(FOA 글꼴 묶음) / game(게임 기본) / pretendard / mubig, 테두리(db.chatOutline)
+local CHAT_GAME = ChatFontNormal and ChatFontNormal:GetFont() or "Fonts\\2002.ttf"
+function M:ChatFont()
+	local k = Ink.db and Ink.db.chatFont or "set"
+	local path = F.sans
+	if k == "game" then path = CHAT_GAME
+	elseif k == "pretendard" then path = "Interface\\AddOns\\FOA_UI\\Media\\Fonts\\Pretendard-SemiBold.ttf"
+	elseif k == "mubig" then path = Ink.mubigFile or (Ink:FontExists("Fonts\\2002.ttf") and "Fonts\\2002.ttf") or F.sans end
+	return path, (Ink.db and Ink.db.chatOutline) and "OUTLINE" or ""
+end
+function M:ApplyChatFont()
+	local path, flags = self:ChatFont()
+	for _, n in ipairs(CHAT_FRAMES or {}) do
+		local cf = _G[n]
+		if cf and cf.GetFont then
+			local _, size = cf:GetFont()
+			pcall(cf.SetFont, cf, path, (size and size > 0) and size or 13, flags)
+			local eb = cf.editBox or _G[n .. "EditBox"]
+			if eb then pcall(eb.SetFont, eb, path, 13, flags) end
+		end
+	end
+end
+
 local function SkinChatFrame(cf)
 	if not cf or cf.inkSkinned then return end
 	cf.inkSkinned = true
@@ -915,7 +944,8 @@ local function SkinChatFrame(cf)
 	cf.inkBg:SetPoint("BOTTOMRIGHT", 10, -40)
 	cf.inkBg:SetVertexColor(0, 0, 0, 0.28)
 	local _, size = cf:GetFont()
-	cf:SetFont(F.sans, (size and size > 0) and size or 13, "")
+	local cpath, cflags = M:ChatFont()
+	cf:SetFont(cpath, (size and size > 0) and size or 13, cflags)
 	cf:SetShadowOffset(1, -1)
 	cf:SetShadowColor(0, 0, 0, 0.8)
 	SkinTab(_G[name .. "Tab"])
@@ -940,7 +970,10 @@ function M:SkinChat()
 		if FCF_SetChatWindowFontSize then
 			hooksecurefunc("FCF_SetChatWindowFontSize", function(_, cf, size)
 				cf = cf or (FCF_GetCurrentChatFrame and FCF_GetCurrentChatFrame())
-				if cf and size then cf:SetFont(F.sans, size, "") end
+				if cf and size then
+					local cpath, cflags = M:ChatFont()
+					cf:SetFont(cpath, size, cflags)
+				end
 			end)
 		end
 	end

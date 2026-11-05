@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.35.0"
+Ink.version = "0.35.1"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1011,7 +1011,15 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 		-- 원인 추적용: InkUI 때문에 막힌 동작이 있으면 어떤 함수인지 남긴다
 		if arg1 == ADDON then
 			Ink.blocked = Ink.blocked or {}
-			table.insert(Ink.blocked, (arg2 or "?") .. " · " .. date("%H:%M:%S") .. (InCombatLockdown() and " (전투 중)" or ""))
+			local line = (arg2 or "?") .. " · " .. date("%H:%M:%S") .. (InCombatLockdown() and " (전투 중)" or "") .. (IsInInstance() and " (인스턴스)" or "")
+			table.insert(Ink.blocked, line)
+			-- 다음 접속 때도 볼 수 있게 저장 (최근 40개)
+			if Ink.db then
+				Ink.db.blockedLog = Ink.db.blockedLog or {}
+				local bl = Ink.db.blockedLog
+				bl[#bl + 1] = date("%m-%d ") .. line .. " · " .. event:gsub("ADDON_ACTION_", "")
+				while #bl > 40 do table.remove(bl, 1) end
+			end
 			-- FOA 가 숨겨 둔 블리자드 행동단축바를 블리자드가 전투 중에 다시 배치하려다 막힌 것은
 			-- 화면에 영향이 없으니 채팅에는 안 띄운다 (/foa log 에는 남김)
 			local fn = tostring(arg2)

@@ -20,9 +20,15 @@ M.plates = plates
 -------------------------------------------------------------------------------
 local hookedUF = setmetatable({}, { __mode = "k" })
 
+-- 던전 · 파티에서는 블리자드 이름표 값이 비공개(secret)라서 바로 참/거짓을 따지면 오류가 난다.
+--  plain() 으로 꺼내 보고 모르면 건드리지 않는다.
 local function KillMouse(f)
 	if not f or f:IsForbidden() then return end
-	if f.EnableMouse and f:IsMouseEnabled() and not f:IsProtected() then f:EnableMouse(false) end
+	if f.EnableMouse then
+		local okM, m = pcall(f.IsMouseEnabled, f)
+		local okP, pr = pcall(f.IsProtected, f)
+		if okM and okP and plain(m) == true and plain(pr) == false then pcall(f.EnableMouse, f, false) end
+	end
 	for _, c in ipairs({ f:GetChildren() }) do KillMouse(c) end
 end
 
@@ -31,7 +37,13 @@ local function HideBlizzard(plate, unit)
 	if not uf or uf:IsForbidden() then return end
 	uf:SetAlpha(0)
 	if uf.castBar then uf.castBar:UnregisterAllEvents() end
-	if uf.AurasFrame then KillMouse(uf.AurasFrame) end
+	if uf.AurasFrame then pcall(KillMouse, uf.AurasFrame) end
+	-- 징표는 블리자드 것을 그대로 보이게 한다 (파티 · 던전에서도 블리자드는 값을 읽을 수 있다)
+	local rt = uf.RaidTargetFrame
+	if rt and rt.SetIgnoreParentAlpha then
+		pcall(rt.SetIgnoreParentAlpha, rt, true)
+		if plate.ink then plate.ink.blizzRaid = rt; plate.ink.raid:Hide() end
+	end
 	if not hookedUF[uf] then
 		hookedUF[uf] = true
 		local busy
@@ -570,7 +582,9 @@ function M:UpdateInfo(f)
 	end
 	local okI, idx = pcall(GetRaidTargetIndex, u)
 	idx = okI and plain(idx) or nil
-	if idx then
+	if f.blizzRaid then
+		f.raid:Hide()         -- 블리자드 징표가 대신 보인다
+	elseif idx then
 		SetRaidTargetIconTexture(f.raid, idx)
 		f.raid:Show()
 	else

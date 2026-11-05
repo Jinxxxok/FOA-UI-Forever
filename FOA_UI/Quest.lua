@@ -6,7 +6,7 @@ local M = Ink:Module("Quest")
 local F, C = Ink.font, Ink.c
 local safe, plain = Ink.safe, Ink.plain
 
-local W, MAX_QUESTS, MAX_OBJ = 240, 6, 3
+local W, MAX_QUESTS, MAX_OBJ = 240, 8, 3
 
 local function CleanObjective(text)
 	if not text then return "" end
@@ -34,7 +34,24 @@ function M:Build()
 	f.line:SetPoint("TOPLEFT", 0, -20)
 	f.line:SetPoint("TOPRIGHT", 0, -20)
 	f.rows = {}
+	-- 8개보다 많으면 휠로 넘겨 보기
+	f.more = Ink:Text(f, F.sans, 10, C.muted, "LEFT")
+	f.more:Hide()
+	f:EnableMouseWheel(true)
+	f:SetScript("OnMouseWheel", function(_, delta)
+		if InCombatLockdown() then return end
+		M.offset = math.max(0, (M.offset or 0) - delta)
+		M:Update()
+	end)
 	self.frame = f
+end
+
+-- 퀘스트 종류 표시: (정예) (던전) (공격대) …
+local TAG_COLOR = { 1.00, 0.72, 0.35 }
+local function QuestTag(id)
+	if type(id) ~= "number" or not C_QuestLog.GetQuestTagInfo then return end
+	local ok, info = pcall(C_QuestLog.GetQuestTagInfo, id)
+	if ok and info and info.tagName and info.tagName ~= "" then return info.tagName end
 end
 
 local function ObjectiveLine(row, i)
@@ -143,10 +160,16 @@ function M:Update()
 
 	local y = -32
 	local shown = 0
+	local total = #quests
+	local offset = math.max(0, math.min(self.offset or 0, total - MAX_QUESTS))
+	if combat then offset = self.shownOffset or offset end
+	self.offset, self.shownOffset = offset, offset
 	for qi, id in ipairs(quests) do
-		if qi > MAX_QUESTS then break end
-		shown = qi
-		local r = Row(qi)
+		if qi > offset + MAX_QUESTS then break end
+		if qi > offset then
+		local idx = qi - offset
+		shown = idx
+		local r = Row(idx)
 		if not combat then
 			r:ClearAllPoints()
 			r:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
@@ -166,7 +189,12 @@ function M:Update()
 			objs = C_QuestLog.GetQuestObjectives(id) or {}
 			complete = C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(id) or C_QuestLog.IsComplete(id)
 		end
-		r.title:SetText(title)
+		local tag = QuestTag(id)
+		if tag then
+			r.title:SetText(string.format("%s |cff%02x%02x%02x(%s)|r", title, TAG_COLOR[1] * 255, TAG_COLOR[2] * 255, TAG_COLOR[3] * 255, tag))
+		else
+			r.title:SetText(title)
+		end
 		local isSuper = (super == id)
 		r.title:SetTextColor(isSuper and C.accent[1] or C.text[1], isSuper and C.accent[2] or C.text[2], isSuper and C.accent[3] or C.text[3])
 		r.mark:SetShown(isSuper)
@@ -250,6 +278,21 @@ function M:Update()
 		end
 		r:Show()
 		y = y + oy - 10
+		end
+	end
+	-- 위 · 아래에 더 있으면 안내
+	local above, below = offset, math.max(0, total - offset - MAX_QUESTS)
+	if (above > 0 or below > 0) and not combat then
+		f.more:ClearAllPoints()
+		f.more:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y + 4)
+		local parts = {}
+		if above > 0 then parts[#parts + 1] = "위에 " .. above .. "개" end
+		if below > 0 then parts[#parts + 1] = "아래 " .. below .. "개 더" end
+		f.more:SetText(table.concat(parts, "  ·  ") .. "  (휠로 넘기기)")
+		f.more:Show()
+		y = y - 14
+	elseif not combat then
+		f.more:Hide()
 	end
 	if not combat then
 		for i = shown + 1, #f.rows do
@@ -272,9 +315,27 @@ function M:UpdateMode()
 	local scenario = C_Scenario and C_Scenario.IsInScenario and C_Scenario.IsInScenario()
 	local useBlizzard = (inInstance and kind ~= "none") or scenario
 	local otf = ObjectiveTrackerFrame
+	M.hideOTF = not useBlizzard
+	if otf and not M.otfAlphaHook then
+		-- 파티에 들어가거나 블리자드가 다시 보이게 해도 FOA 목록을 쓰는 동안은 투명하게
+		M.otfAlphaHook = true
+		hooksecurefunc(otf, "SetAlpha", function(self, a)
+			if M.hideOTF and a and a > 0 and not M.otfBusy then
+				M.otfBusy = true; self:SetAlpha(0); M.otfBusy = nil
+			end
+		end)
+		otf:HookScript("OnShow", function(self)
+			if M.hideOTF then
+				M.otfBusy = true; self:SetAlpha(0); M.otfBusy = nil
+				if InCombatLockdown() then M.modeDirty = true end
+			end
+		end)
+	end
 	if otf then
 		if useBlizzard then
+			M.otfBusy = true
 			otf:SetAlpha(1)
+			M.otfBusy = nil
 			if not otf:IsShown() then safe(otf.Show, otf) end
 		else
 			otf:SetAlpha(0)

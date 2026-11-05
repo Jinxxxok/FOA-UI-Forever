@@ -1280,6 +1280,14 @@ function M:SyncFontButton()
 		end
 	end
 	p.fontDesc:SetText("글꼴 · " .. desc)
+	if p.chatFont then
+		local CF = { set = "FOA 글꼴 따라감", game = "게임 기본", pretendard = "선명한 글꼴 (굵게)", mubig = "무빅 (세방고딕)" }
+		local ck = Ink.db.chatFont or "set"
+		p.chatFont.text:SetText("채팅 글꼴: " .. (CF[ck] or ck))
+		p.chatFont:SetActive(ck ~= "set")
+		p.chatLine:SetActive(Ink.db.chatOutline and true or false)
+		p.chatDesc:SetText("채팅 · 바로 바뀌어요. 무빅은 글꼴 파일을 넣어 둔 경우에만 · 테두리를 켜면 밝은 배경에서도 또렷해요")
+	end
 	local mode = Ink.db.renderMode or "auto"
 	local auto = Ink.autoTier or "1x"
 	local tier = mode == "auto" and auto or mode
@@ -1458,6 +1466,25 @@ function M:BuildPanel()
 	p.compareDesc:SetPoint("TOPLEFT", p.renderDesc, "BOTTOMLEFT", 0, -4)
 	p.compareDesc:SetWidth(620)
 	p.compareDesc:SetWordWrap(true)
+	-- 채팅 글꼴 (바로 적용)
+	p.chatFont = Button(p, "채팅 글꼴", 230, function()
+		Ink.db.chatFont = Cycle({ "set", "game", "pretendard", "mubig" }, Ink.db.chatFont or "set")
+		local bz = Ink.modules.Blizzard
+		if bz and bz.ApplyChatFont then bz:ApplyChatFont() end
+		M:SyncFontButton()
+	end)
+	p.chatFont:SetPoint("TOPLEFT", p.compareDesc, "BOTTOMLEFT", -2, -10)
+	p.chatLine = Button(p, "글자 테두리", 130, function()
+		Ink.db.chatOutline = not Ink.db.chatOutline or nil
+		local bz = Ink.modules.Blizzard
+		if bz and bz.ApplyChatFont then bz:ApplyChatFont() end
+		M:SyncFontButton()
+	end)
+	p.chatLine:SetPoint("LEFT", p.chatFont, "RIGHT", 8, 0)
+	p.chatDesc = Ink:Text(p, F.sans, 11, C.dim, "LEFT")
+	p.chatDesc:SetPoint("TOPLEFT", p.chatFont, "BOTTOMLEFT", 2, -8)
+	p.chatDesc:SetWidth(620)
+	p.chatDesc:SetWordWrap(true)
 
 	-- 두 칸으로: 왼쪽 = 화면 구성, 오른쪽 = 편의 기능 + 명령어
 	local function Column(anchor, x, header, list)
@@ -1474,7 +1501,7 @@ function M:BuildPanel()
 		end
 		return prev
 	end
-	local left = Column(p.compareDesc, -2, "화면 구성 (바꾸면 /reload 필요)", {
+	local left = Column(p.chatDesc, -2, "화면 구성 (바꾸면 /reload 필요)", {
 		{ "파티 프레임", "FOA 파티 프레임을 씁니다.", "party" },
 		{ "레이드 프레임", "FOA 레이드 프레임을 씁니다.", "raid" },
 		{ "경험치 바", "얇은 FOA 경험치 바를 씁니다.", "xp" },
@@ -1488,7 +1515,7 @@ function M:BuildPanel()
 		{ "던전 전리품 · BIS", "지도 옆 보스별 전리품, 캐릭터 창 BIS 탭 (본섭 예시).", "dungeon" },
 		{ "기본 창 / 글꼴 (실험)", "기본 창 껍데기와 글꼴 변경. 기본은 꺼짐.", "windows" },
 	})
-	local right = Column(p.compareDesc, 328, "편의 기능", {
+	local right = Column(p.chatDesc, 328, "편의 기능", {
 		{ "사거리 표시", "대상까지 거리를 작게 표시. 빨강 = 사거리 밖 · 노랑 = 끝자락 · 초록 = 안 · 주황 = 근접. 편집 모드에서 옮길 수 있어요.", "range" },
 		{ "특성 가이드 (포에버)", "레벨업할 때 다음에 찍을 특성을 특성 창에서 강조하고, 포인트가 생기면 채팅으로 알려 줍니다.", "talentGuide" },
 		{ "잡동사니 자동 판매", "상인 창을 열면 회색 아이템을 팝니다.", "sellJunk" },
@@ -1749,10 +1776,12 @@ SlashCmdList.INKUI = function(msg)
 	elseif msg == "debug" then
 		print("|cffFFF468FOA|r 마지막 오라 오류: " .. tostring(Ink.auraErr or "없음"))
 	elseif msg == "log" then
-		if not Ink.blocked or #Ink.blocked == 0 then
+		local bl = Ink.db.blockedLog
+		if not bl or #bl == 0 then
 			print("|cffFFF468FOA|r 막힌 동작 기록이 없어요.")
 		else
-			for _, line in ipairs(Ink.blocked) do print("|cffFFF468FOA|r " .. line) end
+			print("|cffFFF468FOA|r 막힌 동작 (최근 " .. math.min(#bl, 12) .. "개):")
+			for i = math.max(1, #bl - 11), #bl do print("|cffFFF468FOA|r " .. bl[i]) end
 		end
 		local errs = Ink.db and Ink.db.errors
 		if errs and #errs > 0 then
