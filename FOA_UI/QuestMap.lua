@@ -244,9 +244,10 @@ end
 -------------------------------------------------------------------------------
 function M:BuildLegend()
 	local wm = WorldMapFrame
-	local b = CreateFrame("Button", nil, wm.ScrollContainer)
+	-- 지도 위 핀을 가리지 않게 지도 창 바로 아래 오른쪽에
+	local b = CreateFrame("Button", nil, wm)
 	b:SetSize(10, 24)
-	b:SetPoint("TOPRIGHT", wm.ScrollContainer, "TOPRIGHT", -10, -10)
+	b:SetPoint("TOPRIGHT", wm, "BOTTOMRIGHT", 0, -6)
 	b:SetFrameStrata("HIGH")
 	b.bg = Ink:Round(b, "BACKGROUND", true, false)
 	b.bg:SetAllPoints()
@@ -279,6 +280,13 @@ end
 function M:PaintLegend(nOn, nSoon, nRep)
 	local b = self.legend
 	if not b then return end
+	local wm = WorldMapFrame
+	b:ClearAllPoints()
+	if wm.IsMaximized and wm:IsMaximized() then
+		b:SetPoint("BOTTOMRIGHT", wm.ScrollContainer, "BOTTOMRIGHT", -10, 10)
+	else
+		b:SetPoint("TOPRIGHT", wm, "BOTTOMRIGHT", 0, -6)
+	end
 	if nOn + nSoon + nRep == 0 and not Ink.db.questMapHide then b:Hide() return end
 	local parts
 	if Ink.db.questMapHide then
@@ -357,9 +365,10 @@ function M:Refresh()
 			n = n + 1
 			local p = self:Pin(n)
 			p:ClearAllPoints()
-			p:SetPoint("CENTER", cv, "TOPLEFT", g.x * W, -g.y * H)
 			p.baseScale = pinScale * (g.state == 2 and 0.85 or 1)
 			p:SetScale(p.baseScale)
+			-- 크기를 바꾼 틀의 위치 값은 그 크기만큼 곱해지므로 나눠서 제자리에
+			p:SetPoint("CENTER", cv, "TOPLEFT", g.x * W / p.baseScale, -g.y * H / p.baseScale)
 			p.list, p.giver, p.state, p.mapID, p.wx, p.wy = g.list, g.giver, g.state, mapID, g.x, g.y
 			local col = (g.state == 2) and SOON or (g.rep and BLUE or GOLD)
 			Paint(p, col, g.state == 2, #g.list)

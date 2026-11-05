@@ -151,8 +151,9 @@ function M:Refresh()
 		n = n + 1
 		local p = self:Pin(n)
 		p:ClearAllPoints()
-		p:SetPoint("CENTER", cv, "TOPLEFT", x * W, -y * H)
 		p:SetScale(pinScale)
+		-- 크기를 바꾼 틀의 위치 값은 그 크기만큼 곱해져서, 미리 나눠 둬야 제자리에 찍힌다
+		p:SetPoint("CENTER", cv, "TOPLEFT", x * W / pinScale, -y * H / pinScale)
 		p.icon:SetTexture(Ink.icon(iconName))
 		p.icon:SetVertexColor(color[1], color[2], color[3])
 		p.ring:SetVertexColor(color[1], color[2], color[3], dim and 0.45 or 0.95)
@@ -386,16 +387,35 @@ function M:PaintBookPin(p, done, lib)
 	a:SetSize(lib and 30 or 26, lib and 30 or 26)
 end
 
+-- 다른 지도(대륙 · 세계 · 도시를 품은 지역) 위치로 바꾸기
+local rectCache = {}
+local function ToMap(fromID, x, y, toID)
+	if fromID == toID then return x, y end
+	local key = fromID .. ">" .. toID
+	local r = rectCache[key]
+	if r == nil then
+		local ok, minX, maxX, minY, maxY = pcall(C_Map.GetMapRectOnMap, fromID, toID)
+		r = (ok and minX and maxX and maxX > minX and maxY > minY) and { minX, maxX, minY, maxY } or false
+		rectCache[key] = r
+	end
+	if not r then return end
+	local nx, ny = r[1] + x * (r[2] - r[1]), r[3] + y * (r[4] - r[3])
+	if nx < 0 or nx > 1 or ny < 0 or ny > 1 then return end
+	return nx, ny
+end
+M.ToMap = ToMap
+
 function M:DrawBooks(mapID, cv, pinScale)
 	local n = 0
 	local W, H = cv:GetWidth(), cv:GetHeight()
 	local fac = MyFaction()
-	local function put(x, y)
+	local function put(x, y, small)
 		n = n + 1
 		local p = self:BookPin(n)
+		local sc = pinScale * (small and 0.62 or 1)
 		p:ClearAllPoints()
-		p:SetPoint("CENTER", cv, "TOPLEFT", x * W, -y * H)
-		p:SetScale(pinScale)
+		p:SetScale(sc)
+		p:SetPoint("CENTER", cv, "TOPLEFT", x * W / sc, -y * H / sc)
 		p:SetFrameLevel(self.layer:GetFrameLevel() + 20)
 		p.wx, p.wy = x, y
 		p:Show()
@@ -403,17 +423,24 @@ function M:DrawBooks(mapID, cv, pinScale)
 	end
 	if Ink.db.mapBooks ~= false and mapID then
 		for _, b in ipairs(BOOKS) do
-			if b[1] == mapID and (b[8] == 0 or b[8] == fac) then
-				local p = put(b[2] / 100, b[3] / 100)
-				p.book, p.lib = b, nil
-				self:PaintBookPin(p, BookState(b) and true or false, false)
+			if b[8] == 0 or b[8] == fac then
+				local x, y = ToMap(b[1], b[2] / 100, b[3] / 100, mapID)
+				if x then
+					local p = put(x, y, b[1] ~= mapID)
+					p.book, p.lib = b, nil
+					self:PaintBookPin(p, BookState(b) and true or false, false)
+				end
 			end
 		end
-		local lib = LIBRARIANS[mapID]
-		if lib and (lib[5] == fac or fac == 0) then
-			local p = put(lib[1] / 100, lib[2] / 100)
-			p.book, p.lib = nil, lib
-			self:PaintBookPin(p, false, true)
+		for libMap, lib in pairs(LIBRARIANS) do
+			if lib[5] == fac or fac == 0 then
+				local x, y = ToMap(libMap, lib[1] / 100, lib[2] / 100, mapID)
+				if x then
+					local p = put(x, y, libMap ~= mapID)
+					p.book, p.lib = nil, lib
+					self:PaintBookPin(p, false, true)
+				end
+			end
 		end
 	end
 	for i = n + 1, #(self.bookPins or {}) do self.bookPins[i]:Hide() end
@@ -437,6 +464,14 @@ function M:PaintBooks(mapID)
 	end
 	local lib = LIBRARIANS[mapID]
 	if #lines == 0 and not lib then box:Hide() return end
+	-- 지도를 크게(최대화) 띄우면 아래 칸이 화면 밖이라 지도 안 왼쪽 아래로
+	local wm = WorldMapFrame
+	box:ClearAllPoints()
+	if wm.IsMaximized and wm:IsMaximized() then
+		box:SetPoint("BOTTOMLEFT", wm.ScrollContainer, "BOTTOMLEFT", 10, 10)
+	else
+		box:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", 0, -6)
+	end
 	local have, total = self:BookCount()
 	local nextR
 	for _, r in ipairs(REWARDS) do if have < r[1] then nextR = r break end end
@@ -452,9 +487,10 @@ end
 
 function M:BuildBooks()
 	local wm = WorldMapFrame
-	local box = CreateFrame("Frame", nil, wm.ScrollContainer)
+	-- 지도를 가리지 않게 지도 창 바로 아래에 붙인다
+	local box = CreateFrame("Frame", nil, wm)
 	box:SetWidth(290)
-	box:SetPoint("BOTTOMLEFT", wm.ScrollContainer, "BOTTOMLEFT", 10, 10)
+	box:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", 0, -6)
 	box:SetFrameStrata("HIGH")
 	box.bg = Ink:Round(box, "BACKGROUND", false, false)
 	box.bg:SetAllPoints()
@@ -526,10 +562,49 @@ function M:Remember(event)
 end
 
 -------------------------------------------------------------------------------
+-- 지도 창 옮기기: 위쪽 제목 줄을 끌면 옮겨지고, 다음에 열 때도 그 자리 (최대화 상태는 제외)
+function M:MakeMovable()
+	local wm = WorldMapFrame
+	if self.moveHandle or not wm then return end
+	wm:SetMovable(true)
+	wm:SetClampedToScreen(true)
+	local h = CreateFrame("Frame", nil, wm)
+	h:SetPoint("TOPLEFT", wm, "TOPLEFT", 60, 0)
+	h:SetPoint("TOPRIGHT", wm, "TOPRIGHT", -60, 0)
+	h:SetHeight(22)
+	h:SetFrameLevel(wm:GetFrameLevel() + 600)
+	h:EnableMouse(true)
+	h:RegisterForDrag("LeftButton")
+	h:SetScript("OnDragStart", function()
+		if InCombatLockdown() or (wm.IsMaximized and wm:IsMaximized()) then return end
+		wm:StartMoving()
+	end)
+	h:SetScript("OnDragStop", function()
+		wm:StopMovingOrSizing()
+		local l, t = wm:GetLeft(), wm:GetTop()
+		if l and t then Ink.db.mapPos = { l, t } end
+	end)
+	h:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:AddLine("끌어서 지도 옮기기", 1, 1, 1)
+		GameTooltip:Show()
+	end)
+	h:SetScript("OnLeave", GameTooltip_Hide)
+	self.moveHandle = h
+	local function restore()
+		local pos = Ink.db.mapPos
+		if not pos or InCombatLockdown() or (wm.IsMaximized and wm:IsMaximized()) then return end
+		wm:ClearAllPoints()
+		wm:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pos[1], pos[2])
+	end
+	wm:HookScript("OnShow", function() C_Timer.After(0, restore) end)
+end
+
 function M:Hook()
 	local wm = WorldMapFrame
 	if not wm or self.hooked or not Canvas() then return end
 	self.hooked = true
+	pcall(self.MakeMovable, self)
 	self.layer = CreateFrame("Frame", nil, Canvas())
 	self.layer:SetAllPoints()
 	self.layer:SetFrameLevel(Canvas():GetFrameLevel() + 2500)
