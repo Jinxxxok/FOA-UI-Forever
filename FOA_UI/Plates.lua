@@ -735,6 +735,10 @@ function M:SetFriendly(f, friendly)
 		f.nameAlpha = (role or InInstance() or self:NearFriendly(f.unit, f)) and 0.9 or 0
 		f.name:SetAlpha(f.nameAlpha)
 		f.markL:Hide(); f.markR:Hide(); f.elite:Hide()
+		-- 아군(파티원 등) 징표는 이름 바로 위에 크게
+		f.raid:ClearAllPoints()
+		f.raid:SetPoint("BOTTOM", f.name, "TOP", 0, 3)
+		f.raid:SetSize(22, 22)
 		SetRank(f, nil)
 		f.questInfo = nil
 		f.qicon:Hide(); f.qtext:Hide()
@@ -747,6 +751,9 @@ function M:SetFriendly(f, friendly)
 		f.name:SetWidth(W - 34)
 		f.name:SetAlpha(1)
 		f.nameAlpha = nil
+		f.raid:ClearAllPoints()
+		f.raid:SetPoint("RIGHT", f.back, "LEFT", -12, 0)
+		f.raid:SetSize(16, 16)
 	end
 end
 

@@ -105,6 +105,34 @@ local function UpdateTargetMark(f)
 end
 M.UpdateTargetMark = UpdateTargetMark
 
+-- 징표 (해골 · 별 …): 파티 칸은 이름 왼쪽, 레이드 칸은 가운데 위
+local function RaidIcon(f, parent, size)
+	local t = (parent or f):CreateTexture(nil, "OVERLAY", nil, 3)
+	t:SetSize(size, size)
+	t:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+	t:Hide()
+	f.ricon = t
+	return t
+end
+
+local function UpdateRaidIcon(f)
+	local t = f.ricon
+	if not t then return end
+	local u = f.unit
+	local idx
+	if u and UnitExists(u) then
+		local ok, v = pcall(GetRaidTargetIndex, u)
+		idx = ok and Ink.plain(v) or nil
+	end
+	if idx then
+		SetRaidTargetIconTexture(t, idx)
+		t:Show()
+	else
+		t:Hide()
+	end
+end
+M.UpdateRaidIcon = UpdateRaidIcon
+
 local function BuildPartyVisual(f)
 	f.aggro = f:CreateTexture(nil, "OVERLAY")
 	f.aggro:SetColorTexture(C.red[1], C.red[2], C.red[3], 1)
@@ -119,6 +147,8 @@ local function BuildPartyVisual(f)
 	f.level:SetPoint("LEFT", f.name, "RIGHT", 5, -1)
 	f.role = RoleIcon(f, 13)
 	f.role:SetPoint("LEFT", f.level, "RIGHT", 5, 1)
+	RaidIcon(f, f, 18)
+	f.ricon:SetPoint("RIGHT", f.name, "LEFT", -14, 0)
 
 	f.spec = CreateFrame("Frame", nil, f)
 	f.spec:SetHeight(16)
@@ -206,6 +236,7 @@ function M:UpdateParty(f)
 	self:UpdatePartyAuras(f)
 	self:UpdatePartyRange(f)
 	UpdateTargetMark(f)
+	UpdateRaidIcon(f)
 end
 
 function M:UpdatePartyHealth(f)
@@ -415,6 +446,8 @@ local function BuildRaidVisual(f)
 	f.status:SetPoint("BOTTOMRIGHT", -5, 5)
 	f.role = RoleIcon(f.top, 10)
 	f.role:SetPoint("TOPRIGHT", -5, -5)
+	RaidIcon(f, f.top, 14)
+	f.ricon:SetPoint("TOP", f, "TOP", 0, -3)
 	TargetMark(f, true)
 end
 
@@ -456,6 +489,7 @@ function M:UpdateRaid(f)
 	local u = f:GetAttribute("unit")
 	f.unit = u
 	UpdateTargetMark(f)
+	UpdateRaidIcon(f)
 	if not u or not UnitExists(u) then return end
 	f.name:SetText((UnitName(u)))
 	local cr, cg, cb = ns.ClassColor(u)
@@ -826,7 +860,7 @@ function M:Init()
 		"UNIT_NAME_UPDATE", "UNIT_CONNECTION", "UNIT_THREAT_SITUATION_UPDATE", "UNIT_FLAGS", "UNIT_IN_RANGE_UPDATE",
 		"GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "INSPECT_READY", "PLAYER_REGEN_ENABLED",
 		"UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED",
-		"READY_CHECK", "READY_CHECK_CONFIRM", "READY_CHECK_FINISHED", "PLAYER_TARGET_CHANGED",
+		"READY_CHECK", "READY_CHECK_CONFIRM", "READY_CHECK_FINISHED", "PLAYER_TARGET_CHANGED", "RAID_TARGET_UPDATE",
 	}) do
 		pcall(e.RegisterEvent, e, ev)
 	end
@@ -836,6 +870,10 @@ function M:Init()
 			return
 		elseif event:find("^READY_CHECK") then
 			M:ReadyCheck(event, arg)
+			return
+		elseif event == "RAID_TARGET_UPDATE" then
+			for _, f in ipairs(M.party or {}) do UpdateRaidIcon(f) end
+			for _, f in ipairs(M.raidButtons or {}) do UpdateRaidIcon(f) end
 			return
 		elseif event == "PLAYER_TARGET_CHANGED" then
 			for _, f in ipairs(M.party or {}) do UpdateTargetMark(f) end
