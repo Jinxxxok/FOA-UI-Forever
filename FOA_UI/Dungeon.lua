@@ -246,12 +246,12 @@ local function ReadInstance(jid)
 	return data
 end
 
-function M:Scan(jid)
+function M:Scan(jid, quiet)
 	if FOREVER then
 		if not jid then return end
 		local cached = self.cache[jid]
 		if cached and cached.missing == 0 then return cached end
-		local data = ForeverScan(jid)
+		local data = ForeverScan(jid, quiet)
 		if data then self.cache[jid] = data end
 		return data or cached
 	end
@@ -372,11 +372,32 @@ local function LooseItem(id)
 end
 
 -- 아이템 출처 글자
+-- 포에버: 아이템 → 어느 던전 어느 보스 (처음 물어볼 때 한 번 만든다)
+function M:DropSource(id)
+	if not self.dropIndex then
+		local idx = {}
+		for _, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
+			for _, b in ipairs(d.bosses or {}) do
+				for _, iid in ipairs(b[2]) do
+					if not idx[iid] then idx[iid] = { d, b } end
+				end
+			end
+		end
+		self.dropIndex = idx
+	end
+	local e = self.dropIndex[id]
+	if not e then return end
+	local d, b = e[1], e[2]
+	local bn = M.BossName and M.BossName({ npc = b[3], name = b[1] }) or b[1]
+	return d.ko .. " · " .. bn
+end
+
 function M:SourceText(it)
 	if it.srcText then return it.srcText end
 	if FOREVER and it.inst then
 		local d = FLoot(it.inst)
-		return (d and (d.ko or d.en) or "던전") .. " · " .. (it.boss or "?") .. "넴 " .. (it.bossName or "")
+		local bn = M.BossName and M.BossName({ npc = it.npc, name = it.bossName }) or it.bossName
+		return (d and (d.ko or d.en) or "던전") .. " · " .. (bn or "")
 	end
 	local inst = self.cache[it.inst]
 	return (inst and inst.name or "던전") .. " · " .. (it.boss or "?") .. "넴 " .. (it.bossName or "")
@@ -412,12 +433,13 @@ FLoot = function(key)
 end
 M.FLoot = FLoot
 
-ForeverScan = function(key)
+-- quiet: 이름이 없어도 서버에 요청하지 않는다 (추천 계산용으로 모든 던전을 훑을 때)
+ForeverScan = function(key, quiet)
 	local d = FLoot(key)
 	if not d then return end
-	local data = { id = key, name = d.ko or d.en, lo = d.lo, hi = d.hi, bosses = {}, missing = 0 }
+	local data = { id = key, name = d.ko or d.en, lo = d.lo, hi = d.hi, bosses = {}, missing = 0, d = d }
 	for bi, b in ipairs(d.bosses) do
-		local boss = { index = bi, name = b[1], items = {} }
+		local boss = { index = bi, name = b[1], npc = b[3], rare = b[4] == 1, en = b[5], items = {} }
 		for _, id in ipairs(b[2]) do
 			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
 			-- 게임 자료에 없는 아이템(패치로 바뀐 번호)은 건너뛴다. 안 그러면 영원히 "불러오는 중"
@@ -430,12 +452,12 @@ ForeverScan = function(key)
 				end
 				if not name then
 					data.missing = data.missing + 1
-					RequestItem(id)
+					if not quiet then RequestItem(id) end
 				end
 				local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
 				table.insert(boss.items, {
 					id = id, name = name, link = link, icon = icon, slot = loc and EQUIP_EJ[loc], quality = q or 2,
-					inst = key, boss = bi, bossName = b[1],
+					inst = key, boss = bi, bossName = b[1], npc = b[3],
 				})
 			end
 		end
@@ -446,23 +468,27 @@ end
 
 -- 포에버: 공략 BIS (g) = BIS, 공략 대체(alt) 순서 = 대체 1~3 (던전 도감이 없어서 전리품 표 대신 공략 목록)
 function M:BuildRanksForever()
-	local key = SpecKey()
+	local lvl = UnitLevel("player") or 60
+	local skey = SpecKey()
+	local key = skey .. ":" .. lvl
 	if self.rankKey == key and not self.dirty then return end
 	self.rankKey, self.dirty = key, nil
 	wipe(self.ranks)
 	wipe(self.rankCount)
-	local spec = ns.BIS_FOREVER and ns.BIS_FOREVER.specs[key]
+	local spec = ns.BIS_FOREVER and ns.BIS_FOREVER.specs[skey]
 	self.spec = spec and { src = ns.BIS_FOREVER.src, g = spec.g, fo = spec } or nil
 	self.isExample = false
 	local per = {}
 	-- 던전 전리품 모음 (아이템 → 어느 던전 몇 넴)
 	local pool, byId = {}, {}
+	-- 만렙 전에는 지금 갈 수 있는 던전(권장 최저 레벨 ≤ 내 레벨 + 4)만 대체템 후보로
 	for _, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
-		local data = self:Scan(d.key)
+		local data = (not d.soon) and self:Scan(d.key, true)
+		local open = lvl >= 60 or d.lo <= lvl + 4
 		for _, b in ipairs(data and data.bosses or {}) do
 			for _, it in ipairs(b.items) do
 				byId[it.id] = byId[it.id] or it
-				if it.slot then
+				if it.slot and open then
 					pool[it.slot] = pool[it.slot] or {}
 					table.insert(pool[it.slot], it)
 				end
@@ -731,26 +757,11 @@ function M:BuildSidebar()
 	f.title:SetPoint("TOPLEFT", f.tag, "BOTTOMLEFT", 0, -4)
 	f.title:SetWidth(SB_W - 32)
 	if FOREVER then
-		-- 포에버: 던전 고르기 (◀ ▶) · 권장 레벨
-		f.title:SetWidth(SB_W - 96)
-		local function Arrow(dir)
-			local b = CreateFrame("Button", nil, f)
-			b:SetSize(24, 22)
-			b.bg = Ink:Round(b, "BACKGROUND", true, false)
-			b.bg:SetAllPoints()
-			b.bg:SetVertexColor(1, 1, 1, 0.06)
-			b.t = Ink:Text(b, F.semi, 12, C.text, "CENTER")
-			b.t:SetPoint("CENTER")
-			b.t:SetText(dir < 0 and "<" or ">")
-			b:SetScript("OnClick", function() M:StepForever(dir) end)
-			return b
-		end
-		f.next = Arrow(1)
-		f.next:SetPoint("TOPRIGHT", -16, -12)
-		f.prev = Arrow(-1)
-		f.prev:SetPoint("RIGHT", f.next, "LEFT", -4, 0)
-		f.lvl = Ink:Text(f, F.sans, 10, C.dim, "RIGHT")
-		f.lvl:SetPoint("TOPRIGHT", f.next, "BOTTOMRIGHT", 0, -6)
+		-- 포에버: 던전 고르기(펼치기) · 진행 경로 · 보기 방식은 따로 (아래 BuildForeverTop)
+		self:BuildForeverTop(f)
+		self:BuildList(f)
+		self.sidebar = f
+		return
 	end
 	-- 요약: 큰 숫자 BIS · 대체 + 직업/전문화
 	f.nBis = Ink:Text(f, F.num, 34, C.accent, "LEFT")
@@ -783,14 +794,19 @@ function M:BuildSidebar()
 		Ink.db.dungeonAll = not Ink.db.dungeonAll
 		M:PaintSidebar()
 	end)
+	self:BuildList(f)
+	self.sidebar = f
+end
+
+-- 구분선 + 보스별 목록 (휠로 스크롤)
+function M:BuildList(f)
 	f.line = f:CreateTexture(nil, "ARTWORK")
 	f.line:SetColorTexture(1, 1, 1, 0.06)
 	f.line:SetHeight(1)
 	f.line:SetPoint("TOPLEFT", 12, -150)
 	f.line:SetPoint("TOPRIGHT", -12, -150)
-	-- 목록 (휠로 스크롤)
 	local sf = CreateFrame("ScrollFrame", nil, f)
-	sf:SetPoint("TOPLEFT", 8, -156)
+	sf:SetPoint("TOPLEFT", f.line, "BOTTOMLEFT", -4, -5)
 	sf:SetPoint("BOTTOMRIGHT", -8, 10)
 	local body = CreateFrame("Frame", nil, sf)
 	body:SetSize(SB_W - 16, 10)
@@ -806,7 +822,784 @@ function M:BuildSidebar()
 	f.empty:SetPoint("TOP", 0, -30)
 	f.empty:SetWidth(SB_W - 40)
 	f.empty:SetWordWrap(true)
-	self.sidebar = f
+end
+
+-------------------------------------------------------------------------------
+-- 포에버: 던전 고르기 · 진행 경로 · 보기 방식 (내 직업 / 추천 / 전부)
+-------------------------------------------------------------------------------
+local RARE_C = { 0.78, 0.64, 1 }
+local DOWN_C = { 0.44, 0.83, 0.6 }
+
+-- 보스 이름: 게임 클라이언트가 알려 주는 이름(언어별 정확한 이름) → 없으면 자료의 한글 이름
+local npcNames = {}
+local function NpcName(id)
+	if not id or id == 0 then return end
+	local v = npcNames[id]
+	if v then return v ~= false and v or nil end
+	local db = Ink.db
+	local loc = GetLocale and GetLocale() or "?"
+	if db then
+		db.npcNames = db.npcNames or {}
+		if db.npcNames.loc ~= loc then db.npcNames = { loc = loc } end
+		if db.npcNames[id] then npcNames[id] = db.npcNames[id] return db.npcNames[id] end
+	end
+	if C_TooltipInfo and C_TooltipInfo.GetHyperlink then
+		local ok, data = pcall(C_TooltipInfo.GetHyperlink, "unit:Creature-0-0-0-0-" .. id .. "-0000000000")
+		local line = ok and data and data.lines and data.lines[1]
+		local t = line and plain(line.leftText)
+		if type(t) == "string" and t ~= "" and not t:find("Creature%-") and t ~= _G.UNKNOWNOBJECT and t ~= _G.UNKNOWN then
+			npcNames[id] = t
+			if db then db.npcNames[id] = t end
+			return t
+		end
+	end
+end
+local function BossName(b)
+	return NpcName(b.npc) or b.name
+end
+M.BossName = BossName
+
+-- 보기 방식: 만렙 전엔 "내 직업" 이 기본 (공략 BIS 는 만렙 기준이라)
+local function ViewMode()
+	if not FOREVER then return Ink.db.dungeonAll and "all" or "rec" end
+	local v = Ink.db.dungeonView
+	if v == "rec" or v == "class" or v == "all" then return v end
+	return (UnitLevel("player") or 1) >= 60 and "rec" or "class"
+end
+M.ViewMode = ViewMode
+
+-- 내 직업이 실제로 쓰는 장비인지: 방어구는 직업 주력 재질만 (망토 · 장신구 등은 통과), 무기 · 레벨 · 직업 제한은 툴팁의 빨간 글씨로
+local ARMOR_OK = {
+	WARRIOR = { [3] = true, [4] = true }, PALADIN = { [3] = true, [4] = true },
+	HUNTER = { [2] = true, [3] = true }, SHAMAN = { [2] = true, [3] = true },
+	ROGUE = { [2] = true }, DRUID = { [2] = true },
+	MAGE = { [1] = true }, PRIEST = { [1] = true }, WARLOCK = { [1] = true },
+}
+local usableCache = {}
+local function ForMyClass(it)
+	local _, cls = UnitClass("player")
+	local key = it.id .. cls .. (UnitLevel("player") or 0)
+	if usableCache[key] ~= nil then return usableCache[key] end
+	local _, _, _, loc, _, classID, subID = C_Item.GetItemInfoInstant(it.id)
+	local ok = true
+	if classID == 4 and loc ~= "INVTYPE_CLOAK" and subID and subID >= 1 and subID <= 4 then
+		ok = (ARMOR_OK[cls] or {})[subID] and true or false
+	end
+	if ok and ns.Score and ns.Score.Usable then
+		local cached = not C_Item.IsItemDataCachedByID or C_Item.IsItemDataCachedByID(it.id)
+		local good, u = pcall(ns.Score.Usable, ns.Score, "item:" .. it.id)
+		if good and u == false then ok = false end
+		if not cached then return ok end -- 아직 정보가 없으면 저장하지 않는다
+	end
+	usableCache[key] = ok
+	return ok
+end
+M.ForMyClass = ForMyClass
+
+-- 권장 레벨 색: 높음(빨강) · 조금 높음(주황) · 적정(초록) · 낮음(회색)
+local function LevelColor(lo, hi)
+	local lv = UnitLevel("player") or 1
+	if lv < lo - 2 then return C.red, "높음" end
+	if lv < lo then return C.orange, "조금 높음" end
+	if lv <= hi then return DOWN_C, "적정" end
+	return C.muted, "낮음"
+end
+
+-- 처치 기록 (캐릭터별 · 던전마다 · 마지막 처치 후 90분이 지나 다시 들어가면 새로 시작)
+local function KillSet(key)
+	local cdb = Ink.cdb
+	if not (cdb and key) then return {} end
+	cdb.dKills = cdb.dKills or {}
+	local k = cdb.dKills[key]
+	if not k then k = { t = 0 }; cdb.dKills[key] = k end
+	return k
+end
+M.KillSet = KillSet
+
+function M:MarkKill(key, npc)
+	if not (key and npc) then return end
+	local k = KillSet(key)
+	if k[npc] then return end
+	k[npc], k.t = true, time()
+	if self.sidebar and self.sidebar:IsShown() then self:PaintSidebar() end
+end
+
+-- 지금 들어와 있는 포에버 던전 (인스턴스 번호 · 지도 번호 · 이름. 날개가 여러 개면 마지막에 고른 날개 → 레벨)
+function M:MatchInstance()
+	if not IsInInstance() then return end
+	local name, _, _, _, _, _, _, instID = GetInstanceInfo()
+	local ui = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	local list = ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}
+	local byUi, cands = {}, {}
+	for _, d in ipairs(list) do
+		if not d.soon then
+			local hit = (d.inst and d.inst == instID) or (name and (name == d.ko or name == d.en or name == d.groupKo))
+			if d.ui and ui and d.ui == ui then byUi[#byUi + 1] = d; hit = true end
+			if hit then cands[#cands + 1] = d end
+		end
+	end
+	if #byUi == 1 then return byUi[1].key end
+	if #cands <= 1 then return cands[1] and cands[1].key end
+	local sel = Ink.cdb and Ink.cdb.fDungeon
+	for _, d in ipairs(cands) do if d.key == sel then return d.key end end
+	local lv, best, bestD = UnitLevel("player") or 1, nil, 999
+	for _, d in ipairs(cands) do
+		local dist = math.abs((d.lo + d.hi) / 2 - lv)
+		if dist < bestD then best, bestD = d.key, dist end
+	end
+	return best
+end
+
+function M:SelectForever(key)
+	if not FLoot(key) then return end
+	if Ink.cdb then Ink.cdb.fDungeon = key end
+	self.showing = key
+	self.manualIn = IsInInstance() and (GetInstanceInfo()) or nil
+	if self.sidebar then
+		self.sidebar.sf:SetVerticalScroll(0)
+		if self.sidebar.menu then self.sidebar.menu:Hide() end
+	end
+	self:PaintSidebar()
+end
+
+-- 작은 버튼 (둥근 바탕 + 글자/아이콘)
+local function Chip(parent, h)
+	local b = CreateFrame("Button", nil, parent)
+	b:SetHeight(h or 20)
+	b.bg = Ink:Round(b, "BACKGROUND", true, false)
+	b.bg:SetAllPoints()
+	b.bg:SetVertexColor(1, 1, 1, 0.04)
+	b.bd = Ink:Round(b, "BORDER", true, true)
+	b.bd:SetAllPoints()
+	b.bd:SetVertexColor(1, 1, 1, 0.09)
+	b.text = Ink:Text(b, F.semi, 10, C.soft, "CENTER")
+	b.text:SetPoint("CENTER")
+	return b
+end
+
+function M:BuildForeverTop(f)
+	f.title:ClearAllPoints()
+	-- 던전 이름 = 펼치기 버튼
+	local pick = CreateFrame("Button", nil, f)
+	pick:SetPoint("TOPLEFT", 8, -26)
+	pick:SetPoint("TOPRIGHT", -8, -26)
+	pick:SetHeight(28)
+	pick.hl = Ink:Round(pick, "BACKGROUND", true, false)
+	pick.hl:SetAllPoints()
+	pick.hl:SetVertexColor(1, 1, 1, 0)
+	f.title:SetParent(pick)
+	f.title:SetPoint("LEFT", 8, 0)
+	f.title:SetWidth(0)
+	f.title:SetWordWrap(false)
+	pick.chev = pick:CreateTexture(nil, "OVERLAY")
+	pick.chev:SetTexture(Ink.icon("Chevron"))
+	pick.chev:SetSize(14, 14)
+	pick.chev:SetPoint("LEFT", f.title, "RIGHT", 6, -1)
+	pick.chev:SetVertexColor(C.soft[1], C.soft[2], C.soft[3], 0.9)
+	pick:SetScript("OnEnter", function(self) self.hl:SetVertexColor(1, 1, 1, 0.05) end)
+	pick:SetScript("OnLeave", function(self) self.hl:SetVertexColor(1, 1, 1, 0) end)
+	pick:SetScript("OnClick", function() M:ToggleMenu() end)
+	f.pick = pick
+	-- 권장 레벨 (내 레벨 기준 색)
+	f.lvl = Chip(f, 18)
+	f.lvl:SetPoint("TOPRIGHT", -14, -7)
+	f.lvl.text:SetFont(F.numR or F.semi, Ink:BoostSize(10), "")
+	f.lvl:SetScript("OnEnter", function(self)
+		if not self.tip then return end
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
+		GameTooltip:AddLine(self.tip, 1, 1, 1)
+		GameTooltip:Show()
+	end)
+	f.lvl:SetScript("OnLeave", GameTooltip_Hide)
+	-- 입구 길 안내
+	f.entr = Chip(f, 18)
+	f.entr:SetPoint("RIGHT", f.lvl, "LEFT", -5, 0)
+	f.entr:SetWidth(44)
+	f.entr.text:ClearAllPoints()
+	f.entr.text:SetPoint("CENTER", 6, 0)
+	f.entr.text:SetText("입구")
+	f.entr.icon = f.entr:CreateTexture(nil, "OVERLAY")
+	f.entr.icon:SetTexture(Ink.icon("MapPin"))
+	f.entr.icon:SetSize(11, 11)
+	f.entr.icon:SetPoint("RIGHT", f.entr.text, "LEFT", -3, 0)
+	f.entr.icon:SetVertexColor(C.soft[1], C.soft[2], C.soft[3])
+	f.entr:SetScript("OnClick", function(self)
+		local e = self.e
+		if not e then return end
+		if C_Map.CanSetUserWaypointOnMap and not C_Map.CanSetUserWaypointOnMap(e[1]) then return end
+		C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(e[1], e[2] / 100, e[3] / 100))
+		if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
+		if WorldMapFrame and WorldMapFrame:IsShown() and WorldMapFrame.SetMapID then WorldMapFrame:SetMapID(e[1]) end
+	end)
+	f.entr:SetScript("OnEnter", function(self)
+		self.bg:SetVertexColor(1, 1, 1, 0.09)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
+		GameTooltip:AddLine("던전 입구로 길 안내", 1, 1, 1)
+		if self.where then GameTooltip:AddLine(self.where, 0.7, 0.72, 0.75) end
+		GameTooltip:Show()
+	end)
+	f.entr:SetScript("OnLeave", function(self) self.bg:SetVertexColor(1, 1, 1, 0.04); GameTooltip:Hide() end)
+	-- 보스 수 · 처치 진행 (오른쪽 클릭: 처치 기록 지우기)
+	f.meta = CreateFrame("Button", nil, f)
+	f.meta:SetPoint("TOPLEFT", pick, "BOTTOMLEFT", 8, -2)
+	f.meta:SetSize(SB_W - 120, 16)
+	f.meta:RegisterForClicks("RightButtonUp")
+	f.meta.text = Ink:Text(f.meta, F.sans, 10, C.muted, "LEFT")
+	f.meta.text:SetPoint("LEFT")
+	f.meta:SetScript("OnClick", function()
+		if Ink.cdb and Ink.cdb.dKills and M.showing then Ink.cdb.dKills[M.showing] = nil end
+		M:PaintSidebar()
+	end)
+	f.meta:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+		GameTooltip:AddLine("진행 경로", 1, 1, 1)
+		GameTooltip:AddLine("보스를 잡으면 경로에 체크가 붙어요", 0.7, 0.72, 0.75)
+		GameTooltip:AddLine("오른쪽 클릭: 처치 기록 지우기", 0.7, 0.72, 0.75)
+		GameTooltip:Show()
+	end)
+	f.meta:SetScript("OnLeave", GameTooltip_Hide)
+	-- 경로 접기/펼치기
+	f.fold = CreateFrame("Button", nil, f)
+	f.fold:SetSize(60, 16)
+	f.fold:SetPoint("TOPRIGHT", pick, "BOTTOMRIGHT", -6, -2)
+	f.fold.text = Ink:Text(f.fold, F.sans, 10, C.muted, "RIGHT")
+	f.fold.text:SetPoint("RIGHT", -14, 0)
+	f.fold.icon = f.fold:CreateTexture(nil, "OVERLAY")
+	f.fold.icon:SetTexture(Ink.icon("Chevron"))
+	f.fold.icon:SetSize(11, 11)
+	f.fold.icon:SetPoint("RIGHT")
+	f.fold:SetScript("OnClick", function()
+		Ink.db.dRouteHide = not Ink.db.dRouteHide
+		M:PaintSidebar()
+	end)
+	f.fold:SetScript("OnEnter", function(self) self.text:SetTextColor(C.text[1], C.text[2], C.text[3]) end)
+	f.fold:SetScript("OnLeave", function(self) self.text:SetTextColor(C.muted[1], C.muted[2], C.muted[3]) end)
+	-- 진행 경로 그림
+	local route = CreateFrame("Frame", nil, f)
+	route:SetPoint("TOPLEFT", 16, -78)
+	route:SetSize(SB_W - 32, 10)
+	route.nodes, route.segs, route.chips = {}, {}, {}
+	f.route = route
+	-- 전문화 · 보기 방식
+	f.pills = SpecPills(f, 20)
+	f.seg = CreateFrame("Frame", nil, f)
+	f.seg:SetSize(10, 22)
+	f.seg.btns = {}
+	for i, m in ipairs({ { "class", "내 직업" }, { "rec", "추천" }, { "all", "전부" } }) do
+		local b = Chip(f.seg, 22)
+		b.mode, b.label = m[1], m[2]
+		b:SetScript("OnClick", function(self)
+			Ink.db.dungeonView = self.mode
+			M:PaintSidebar()
+		end)
+		b:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			if self.mode == "class" then
+				GameTooltip:AddLine("내 직업이 쓰는 장비", 1, 1, 1)
+				GameTooltip:AddLine("주력 방어구 재질 · 쓸 수 있는 무기만", 0.7, 0.72, 0.75)
+			elseif self.mode == "rec" then
+				GameTooltip:AddLine("추천 (BIS · 대체)", 1, 1, 1)
+				GameTooltip:AddLine(M:SourceLabel(), 0.7, 0.72, 0.75, true)
+			else
+				GameTooltip:AddLine("전리품 전부", 1, 1, 1)
+			end
+			GameTooltip:Show()
+		end)
+		b:SetScript("OnLeave", GameTooltip_Hide)
+		f.seg.btns[i] = b
+	end
+	f.spec = Ink:Text(f, F.semi, 10, C.text, "LEFT")
+	f.spec:SetPoint("LEFT", f.pills, "RIGHT", 8, 0)
+	f.spec:SetWidth(70)
+	self:BuildMenu(f)
+end
+
+-- 던전 펼치기 목록 (레벨 순 · 구간별 · 날개는 묶음 이름과 함께)
+local MENU_ROW, MENU_HEAD = 30, 22
+function M:BuildMenu(f)
+	local m = CreateFrame("Frame", nil, f)
+	m:SetPoint("TOPLEFT", f.pick, "BOTTOMLEFT", 0, -4)
+	m:SetPoint("BOTTOMRIGHT", -8, 8)
+	m:SetFrameLevel(f:GetFrameLevel() + 30)
+	m:EnableMouse(true)
+	m:Hide()
+	m.bg = Ink:Round(m, "BACKGROUND", false, false)
+	m.bg:SetAllPoints()
+	m.bg:SetVertexColor(0.045, 0.05, 0.064, 0.985)
+	m.bd = Ink:Round(m, "BORDER", false, true)
+	m.bd:SetAllPoints()
+	m.bd:SetVertexColor(1, 1, 1, 0.1)
+	local sf = CreateFrame("ScrollFrame", nil, m)
+	sf:SetPoint("TOPLEFT", 6, -6)
+	sf:SetPoint("BOTTOMRIGHT", -6, 6)
+	local body = CreateFrame("Frame", nil, sf)
+	body:SetSize(SB_W - 28, 10)
+	sf:SetScrollChild(body)
+	sf:EnableMouseWheel(true)
+	sf:SetScript("OnMouseWheel", function(self, d)
+		local r = self:GetVerticalScrollRange() or 0
+		self:SetVerticalScroll(math.max(0, math.min(r, self:GetVerticalScroll() - d * 60)))
+	end)
+	m.sf, m.body, m.rows, m.heads = sf, body, {}, {}
+	m:SetScript("OnShow", function() f.pick.chev:SetRotation(math.pi) end)
+	m:SetScript("OnHide", function() f.pick.chev:SetRotation(0) end)
+	f.menu = m
+end
+
+function M:ToggleMenu()
+	local f = self.sidebar
+	if not (f and f.menu) then return end
+	if f.menu:IsShown() then f.menu:Hide() return end
+	self:PaintMenu()
+	f.menu:Show()
+end
+
+local function MenuRow(body)
+	local r = CreateFrame("Button", nil, body)
+	r:SetSize(SB_W - 28, MENU_ROW)
+	r.hl = Ink:Round(r, "BACKGROUND", true, false)
+	r.hl:SetAllPoints()
+	r.hl:SetVertexColor(1, 1, 1, 0)
+	r.bar = r:CreateTexture(nil, "ARTWORK")
+	r.bar:SetSize(2, 16)
+	r.bar:SetPoint("LEFT", 2, 0)
+	r.bar:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+	r.name = Ink:Text(r, F.semi, 12, C.text, "LEFT")
+	r.name:SetPoint("LEFT", 12, 0)
+	r.lvl = Ink:Text(r, F.numR or F.semi, 11, C.soft, "RIGHT")
+	r.lvl:SetPoint("RIGHT", -10, 0)
+	r.dot = r:CreateTexture(nil, "OVERLAY")
+	r.dot:SetTexture(Ink.tex.disc)
+	r.dot:SetSize(6, 6)
+	r.dot:SetPoint("RIGHT", r.lvl, "LEFT", -8, 0)
+	r.sub = Ink:Text(r, F.sans, 10, C.dim, "RIGHT")
+	r.sub:SetPoint("RIGHT", r.dot, "LEFT", -6, 0)
+	r:SetScript("OnEnter", function(self) if not self.soon then self.hl:SetVertexColor(1, 1, 1, 0.06) end end)
+	r:SetScript("OnLeave", function(self) self.hl:SetVertexColor(1, 1, 1, self.sel and 0.035 or 0) end)
+	r:SetScript("OnClick", function(self) if not self.soon then M:SelectForever(self.key) end end)
+	return r
+end
+
+function M:PaintMenu()
+	local f = self.sidebar
+	local m = f and f.menu
+	if not m then return end
+	local list = ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}
+	local lv = UnitLevel("player") or 1
+	local cur = self.showing
+	local here = self:MatchInstance()
+	local sections = {
+		{ "초반", "13–30", function(d) return not d.raid and d.lo < 26 end },
+		{ "중반", "29–46", function(d) return not d.raid and d.lo >= 26 and d.lo < 41 end },
+		{ "후반", "41–60", function(d) return not d.raid and d.lo >= 41 end },
+		{ "레이드", "60", function(d) return d.raid end },
+	}
+	for _, r in ipairs(m.rows) do r:Hide() end
+	for _, h in ipairs(m.heads) do h:Hide() end
+	local y, nr, nh, selY = 4, 0, 0, nil
+	for _, sec in ipairs(sections) do
+		local items = {}
+		for _, d in ipairs(list) do if sec[3](d) then items[#items + 1] = d end end
+		if #items > 0 then
+			nh = nh + 1
+			local h = m.heads[nh]
+			if not h then
+				h = CreateFrame("Frame", nil, m.body)
+				h:SetSize(SB_W - 28, MENU_HEAD)
+				h.t = Ink:Text(h, F.latinB or F.semi, 9, C.muted, "LEFT")
+				h.t:SetPoint("BOTTOMLEFT", 12, 4)
+				h.r = Ink:Text(h, F.sans, 9, C.dim, "LEFT")
+				h.r:SetPoint("LEFT", h.t, "RIGHT", 6, 0)
+				h.line = h:CreateTexture(nil, "ARTWORK")
+				h.line:SetColorTexture(1, 1, 1, 0.06)
+				h.line:SetHeight(1)
+				h.line:SetPoint("LEFT", h.r, "RIGHT", 8, 0)
+				h.line:SetPoint("RIGHT", -10, 0)
+				m.heads[nh] = h
+			end
+			h.t:SetText(sec[1])
+			h.r:SetText(sec[2])
+			h:ClearAllPoints()
+			h:SetPoint("TOPLEFT", 0, -y)
+			h:Show()
+			y = y + MENU_HEAD + 2
+			for _, d in ipairs(items) do
+				nr = nr + 1
+				local r = m.rows[nr] or MenuRow(m.body)
+				m.rows[nr] = r
+				r.key, r.soon = d.key, d.soon
+				r.sel = d.key == cur
+				if d.group then
+					r.name:SetText("|cff8E939B" .. d.groupKo .. "|r  " .. d.wing)
+				else
+					r.name:SetText(d.ko)
+				end
+				local col = LevelColor(d.lo, d.hi)
+				r.lvl:SetText(d.lo == d.hi and tostring(d.lo) or (d.lo .. "–" .. d.hi))
+				r.lvl:SetTextColor(col[1], col[2], col[3])
+				local fit = not d.soon and lv >= d.lo - 1 and lv <= d.hi
+				r.dot:SetShown(fit or d.key == here)
+				local dc = d.key == here and C.accent or DOWN_C
+				r.dot:SetVertexColor(dc[1], dc[2], dc[3])
+				r.sub:SetText(d.soon and "개방 예정" or (d.key == here and "지금 여기" or ""))
+				r.bar:SetShown(r.sel)
+				r.hl:SetVertexColor(1, 1, 1, r.sel and 0.035 or 0)
+				r:SetAlpha(d.soon and 0.42 or 1)
+				r:ClearAllPoints()
+				r:SetPoint("TOPLEFT", 0, -y)
+				r:Show()
+				if r.sel then selY = y end
+				y = y + MENU_ROW
+			end
+			y = y + 4
+		end
+	end
+	m.body:SetHeight(y + 4)
+	-- 고른 던전이 보이게
+	C_Timer.After(0, function()
+		local range = m.sf:GetVerticalScrollRange() or 0
+		m.sf:SetVerticalScroll(math.max(0, math.min(range, (selY or 0) - 80)))
+	end)
+end
+
+-- 진행 경로: 보스를 순서대로 뱀 모양(ㄹ자)으로 잇는다. 입구 → 1 → 2 … → 막보(해골)
+--  처치한 보스 = 초록 체크 · 다음 보스 = 노란 테 · 내 추천템이 나오는 보스 = 노란 점
+local RT_ROW = 54
+local function RouteNode(route)
+	local n = CreateFrame("Button", nil, route)
+	n:SetSize(30, 30)
+	n.glow = n:CreateTexture(nil, "BACKGROUND")
+	n.glow:SetTexture(Ink.tex.glow)
+	n.glow:SetSize(44, 44)
+	n.glow:SetPoint("CENTER")
+	n.glow:SetBlendMode("ADD")
+	n.disc = n:CreateTexture(nil, "ARTWORK")
+	n.disc:SetTexture(Ink.tex.disc)
+	n.disc:SetSize(22, 22)
+	n.disc:SetPoint("CENTER")
+	n.ring = n:CreateTexture(nil, "OVERLAY")
+	n.ring:SetTexture(Ink.tex.ring)
+	n.ring:SetAllPoints(n.disc)
+	n.num = Ink:Text(n, F.numR or F.semi, 10, C.text, "CENTER")
+	n.num:SetPoint("CENTER", n.disc, "CENTER", 0, 0)
+	n.icon = n:CreateTexture(nil, "OVERLAY", nil, 2)
+	n.icon:SetSize(12, 12)
+	n.icon:SetPoint("CENTER", n.disc, "CENTER")
+	n.dot = n:CreateTexture(nil, "OVERLAY", nil, 3)
+	n.dot:SetTexture(Ink.tex.disc)
+	n.dot:SetSize(7, 7)
+	n.dot:SetPoint("CENTER", n.disc, "TOPRIGHT", -2, -2)
+	n.dot:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
+	n.label = Ink:Text(route, F.sans, 9, C.soft, "CENTER")
+	n.label:SetWordWrap(true)
+	if n.label.SetMaxLines then n.label:SetMaxLines(2) end
+	n.label:SetJustifyV("TOP")
+	local ag = n.glow:CreateAnimationGroup()
+	ag:SetLooping("BOUNCE")
+	local a = ag:CreateAnimation("Alpha")
+	a:SetFromAlpha(0.15); a:SetToAlpha(0.55); a:SetDuration(1.1); a:SetSmoothing("IN_OUT")
+	n.pulse = ag
+	n:SetScript("OnClick", function(self) M:JumpToBoss(self.bi) end)
+	n:SetScript("OnEnter", function(self)
+		self.disc:SetSize(25, 25)
+		M:BossTooltip(self, self.bi)
+	end)
+	n:SetScript("OnLeave", function(self)
+		self.disc:SetSize(22, 22)
+		GameTooltip:Hide()
+	end)
+	return n
+end
+
+local function Seg(route)
+	local t = route:CreateTexture(nil, "BORDER")
+	t:SetColorTexture(1, 1, 1, 1)
+	return t
+end
+
+function M:BossTooltip(owner, bi)
+	local data = self.showing and self:Scan(self.showing)
+	local b = data and data.bosses[bi]
+	if not b then return end
+	local mode = ViewMode()
+	local nAll, nCls, nRec = #b.items, 0, 0
+	for _, it in ipairs(b.items) do
+		if self.ranks[it.id] then nRec = nRec + 1 end
+		if ForMyClass(it) then nCls = nCls + 1 end
+	end
+	GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+	GameTooltip:AddLine((b.rare and "희귀 · " or (b.order and (b.order .. ". ") or "")) .. BossName(b), 1, 1, 1)
+	if b.killed then GameTooltip:AddLine("처치함", DOWN_C[1], DOWN_C[2], DOWN_C[3]) end
+	GameTooltip:AddDoubleLine("전리품", nAll .. "개", 0.7, 0.72, 0.75, 1, 1, 1)
+	GameTooltip:AddDoubleLine("내 직업", nCls .. "개", 0.7, 0.72, 0.75, 1, 1, 1)
+	if nRec > 0 then GameTooltip:AddDoubleLine("추천 (BIS · 대체)", nRec .. "개", 0.7, 0.72, 0.75, 1, 0.96, 0.41) end
+	GameTooltip:AddLine("클릭: 목록에서 이 보스로", 0.55, 0.57, 0.6)
+	GameTooltip:Show()
+end
+
+function M:JumpToBoss(bi)
+	local f = self.sidebar
+	local y = f and f.headY and f.headY[bi]
+	if not y then return end
+	local range = f.sf:GetVerticalScrollRange() or 0
+	f.sf:SetVerticalScroll(math.max(0, math.min(range, y)))
+	local h = f.headFor and f.headFor[bi]
+	if h and h.flash then h.flash:Stop(); h.flash:Play() end
+end
+
+-- 경로 그리기 → 높이 돌려줌
+function M:PaintRoute(f, data)
+	local route = f.route
+	for _, n in ipairs(route.nodes) do n:Hide(); n.label:Hide() end
+	for _, t in ipairs(route.segs) do t:Hide() end
+	for _, c in ipairs(route.chips) do c:Hide() end
+	if route.door then route.door:Hide() end
+	if route.rareT then route.rareT:Hide() end
+	if not data or Ink.db.dRouteHide then route:SetHeight(1) return 0 end
+	local main, rares = {}, {}
+	for bi, b in ipairs(data.bosses) do
+		if b.rare then rares[#rares + 1] = bi else main[#main + 1] = bi end
+	end
+	local n = #main
+	local W = SB_W - 32
+	local cols = (n <= 4) and math.max(n, 1) or (n <= 12 and 4 or 5)
+	local colW = W / cols
+	local PAD = 0
+	local rowH = (cols >= 5) and (RT_ROW - 4) or RT_ROW
+	local pos = {}
+	for i = 1, n do
+		local r = math.floor((i - 1) / cols)
+		local c = (i - 1) % cols
+		if r % 2 == 1 then c = cols - 1 - c end
+		pos[i] = { x = PAD + colW * (c + 0.5), y = -(r * rowH + 13), r = r }
+	end
+	-- 다음 보스 = 순서대로 봤을 때 처음으로 안 잡은 보스 (지금 이 던전 안일 때만)
+	local inside = self:MatchInstance() == self.showing
+	local nextI
+	for i = 1, n do
+		if not data.bosses[main[i]].killed then nextI = i break end
+	end
+	local nseg = 0
+	local px = Ink:Px(2)
+	local function Line(x1, y1, x2, y2, done)
+		nseg = nseg + 1
+		local t = route.segs[nseg] or Seg(route)
+		route.segs[nseg] = t
+		t:ClearAllPoints()
+		if y1 == y2 then
+			t:SetPoint("TOPLEFT", route, "TOPLEFT", math.min(x1, x2), y1 + px / 2)
+			t:SetSize(math.max(1, math.abs(x2 - x1)), px)
+		else
+			t:SetPoint("TOPLEFT", route, "TOPLEFT", x1 - px / 2, math.max(y1, y2))
+			t:SetSize(px, math.max(1, math.abs(y2 - y1)))
+		end
+		if done then t:SetVertexColor(DOWN_C[1], DOWN_C[2], DOWN_C[3], 0.75) else t:SetVertexColor(1, 1, 1, 0.13) end
+		t:Show()
+	end
+	local GAP = 13
+	-- 입구 → 1번
+	if n > 0 then
+		if not route.door then
+			route.door = route:CreateTexture(nil, "OVERLAY")
+			route.door:SetTexture(Ink.icon("Door"))
+			route.door:SetSize(12, 12)
+		end
+		route.door:ClearAllPoints()
+		route.door:SetPoint("CENTER", route, "TOPLEFT", 6, pos[1].y)
+		route.door:SetVertexColor(C.muted[1], C.muted[2], C.muted[3])
+		route.door:Show()
+		if pos[1].x - GAP > 14 then Line(13, pos[1].y, pos[1].x - GAP, pos[1].y, data.bosses[main[1]].killed) end
+	end
+	for i = 1, n - 1 do
+		local a, b = pos[i], pos[i + 1]
+		local done = data.bosses[main[i]].killed and data.bosses[main[i + 1]].killed
+		if a.r == b.r then
+			local dir = b.x > a.x and 1 or -1
+			Line(a.x + dir * GAP, a.y, b.x - dir * GAP, b.y, done)
+		else
+			-- 줄 끝에서 바깥으로 돌아 다음 줄로 (ㄹ자)
+			local right = a.r % 2 == 0
+			local ex = right and (W - 3) or 3
+			Line(a.x + (right and GAP or -GAP), a.y, ex, a.y, done)
+			Line(ex, a.y, ex, b.y, done)
+			Line(ex, b.y, b.x + (right and GAP or -GAP), b.y, done)
+		end
+	end
+	for i = 1, n do
+		local bi = main[i]
+		local b = data.bosses[bi]
+		local nd = route.nodes[i] or RouteNode(route)
+		route.nodes[i] = nd
+		nd.bi = bi
+		nd:ClearAllPoints()
+		nd:SetPoint("CENTER", route, "TOPLEFT", pos[i].x, pos[i].y)
+		local last = i == n and n > 1
+		local isNext = inside and i == nextI
+		local rec = false
+		for _, it in ipairs(b.items) do if self.ranks[it.id] then rec = true break end end
+		nd.dot:SetShown(rec and not b.killed)
+		nd.disc:SetVertexColor(0.07, 0.075, 0.09, 1)
+		if b.killed then
+			nd.disc:SetVertexColor(DOWN_C[1] * 0.22, DOWN_C[2] * 0.22, DOWN_C[3] * 0.22, 1)
+			nd.ring:SetVertexColor(DOWN_C[1], DOWN_C[2], DOWN_C[3], 0.95)
+			nd.icon:SetTexture(Ink.icon("Check")); nd.icon:SetVertexColor(DOWN_C[1], DOWN_C[2], DOWN_C[3]); nd.icon:Show()
+			nd.num:SetText("")
+		elseif last then
+			local c = isNext and C.accent or C.red
+			nd.ring:SetVertexColor(c[1], c[2], c[3], isNext and 1 or 0.75)
+			nd.icon:SetTexture(Ink.icon("Skull")); nd.icon:SetVertexColor(c[1], c[2], c[3]); nd.icon:Show()
+			nd.num:SetText("")
+		else
+			local c = isNext and C.accent or { 0.78, 0.8, 0.84 }
+			nd.ring:SetVertexColor(c[1], c[2], c[3], isNext and 1 or 0.55)
+			nd.icon:Hide()
+			nd.num:SetText(i)
+			nd.num:SetTextColor(c[1], c[2], c[3])
+		end
+		nd.glow:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
+		nd.glow:SetShown(isNext)
+		if isNext then nd.pulse:Play() else nd.pulse:Stop() end
+		nd:Show()
+		nd.label:ClearAllPoints()
+		nd.label:SetWidth(math.max(40, colW - 6))
+		nd.label:SetPoint("TOP", route, "TOPLEFT", pos[i].x, pos[i].y - 14)
+		nd.label:SetText(BossName(b))
+		local lc = b.killed and C.dim or (isNext and C.text or C.soft)
+		nd.label:SetTextColor(lc[1], lc[2], lc[3])
+		nd.label:Show()
+	end
+	local rows = math.ceil(n / cols)
+	local h = math.max(0, rows * rowH - 4)
+	-- 희귀 · 선택 보스 (경로 아래 칩)
+	if #rares > 0 then
+		if not route.rareT then
+			route.rareT = Ink:Text(route, F.sans, 9, C.muted, "LEFT")
+			route.rareT:SetText("희귀 · 선택")
+		end
+		route.rareT:ClearAllPoints()
+		route.rareT:SetPoint("TOPLEFT", route, "TOPLEFT", 0, -h - 4)
+		route.rareT:Show()
+		local x, y = route.rareT:GetStringWidth() + 8, h + 1
+		for k, bi in ipairs(rares) do
+			local b = data.bosses[bi]
+			local c = route.chips[k]
+			if not c then
+				c = Chip(route, 18)
+				c.dot = c:CreateTexture(nil, "OVERLAY")
+				c.dot:SetTexture(Ink.tex.disc)
+				c.dot:SetSize(5, 5)
+				c.dot:SetPoint("LEFT", 7, 0)
+				c.text:ClearAllPoints()
+				c.text:SetPoint("LEFT", 16, 0)
+				c.text:SetFont(F.sans, Ink:BoostSize(9), "")
+				c:SetScript("OnClick", function(self) M:JumpToBoss(self.bi) end)
+				c:SetScript("OnEnter", function(self) self.bg:SetVertexColor(1, 1, 1, 0.09); M:BossTooltip(self, self.bi) end)
+				c:SetScript("OnLeave", function(self) self.bg:SetVertexColor(1, 1, 1, 0.04); GameTooltip:Hide() end)
+				route.chips[k] = c
+			end
+			c.bi = bi
+			c.text:SetText(BossName(b))
+			local dc = b.killed and DOWN_C or RARE_C
+			c.dot:SetVertexColor(dc[1], dc[2], dc[3])
+			c.text:SetTextColor(b.killed and C.dim[1] or C.soft[1], b.killed and C.dim[2] or C.soft[2], b.killed and C.dim[3] or C.soft[3])
+			local w = math.ceil(c.text:GetStringWidth()) + 24
+			c:SetWidth(w)
+			if x + w > W and x > 0 then x, y = 0, y + 22 end
+			c:ClearAllPoints()
+			c:SetPoint("TOPLEFT", route, "TOPLEFT", x, -y)
+			c:Show()
+			x = x + w + 5
+		end
+		h = y + 18
+	end
+	route:SetHeight(math.max(1, h))
+	return h
+end
+
+-- 머리 부분 그리기 → 목록이 시작할 y 돌려줌
+function M:PaintForeverTop(f, data)
+	local d = data and data.d or FLoot(self.showing)
+	f.tag:SetText(d and d.raid and "RAID LOOT" or "DUNGEON LOOT")
+	f.title:SetText(d and d.ko or "던전")
+	f.title:SetWidth(0)
+	if f.title:GetStringWidth() > SB_W - 64 then f.title:SetWidth(SB_W - 64) end
+	-- 레벨
+	if d then
+		local col, word = LevelColor(d.lo, d.hi)
+		f.lvl.text:SetText(d.lo == d.hi and ("Lv " .. d.lo) or ("Lv " .. d.lo .. "–" .. d.hi))
+		f.lvl.text:SetTextColor(col[1], col[2], col[3])
+		f.lvl.bd:SetVertexColor(col[1], col[2], col[3], 0.35)
+		f.lvl:SetWidth(math.ceil(f.lvl.text:GetStringWidth()) + 16)
+		f.lvl.tip = "권장 " .. d.lo .. "–" .. d.hi .. " 레벨 · 지금 내 레벨에는 " .. word
+		f.lvl:Show()
+	else
+		f.lvl:Hide()
+	end
+	f.entr.e = d and d.entr
+	f.entr.where = d and d.entr and C_Map.GetMapInfo and (C_Map.GetMapInfo(d.entr[1]) or {}).name
+	f.entr:SetShown(d and d.entr and true or false)
+	-- 처치 표시
+	local k = KillSet(self.showing)
+	local nMain, nDown = 0, 0
+	for _, b in ipairs(data and data.bosses or {}) do
+		b.killed = b.npc and k[b.npc] or false
+		if not b.rare then
+			nMain = nMain + 1
+			b.order = nMain
+			if b.killed then nDown = nDown + 1 end
+		end
+	end
+	local nRare = data and (#data.bosses - nMain) or 0
+	local txt = "보스 " .. nMain .. (nRare > 0 and ("  ·  희귀 " .. nRare) or "")
+	if nDown > 0 then txt = txt .. "  ·  |cff6FD39A처치 " .. nDown .. "/" .. nMain .. "|r" end
+	f.meta.text:SetText(txt)
+	local hidden = Ink.db.dRouteHide
+	f.fold.text:SetText(hidden and "경로 보기" or "경로 접기")
+	f.fold.icon:SetRotation(hidden and 0 or math.pi)
+	f.fold.icon:SetVertexColor(C.muted[1], C.muted[2], C.muted[3])
+	local rh = self:PaintRoute(f, data)
+	local y = 78 + (rh > 0 and (rh + 12) or 0)
+	-- 전문화 · 보기 방식
+	f.pills:ClearAllPoints()
+	f.pills:SetPoint("TOPLEFT", 16, -y - 1)
+	f.pills:Refresh()
+	local mode = ViewMode()
+	local cnt = { class = 0, rec = 0, all = 0 }
+	for _, b in ipairs(data and data.bosses or {}) do
+		for _, it in ipairs(b.items) do
+			cnt.all = cnt.all + 1
+			if self.ranks[it.id] then cnt.rec = cnt.rec + 1 end
+			if ForMyClass(it) then cnt.class = cnt.class + 1 end
+		end
+	end
+	local x = 0
+	local a = C.accent
+	for _, b in ipairs(f.seg.btns) do
+		local on = b.mode == mode
+		b.text:SetText(b.label .. "  " .. (cnt[b.mode] or 0))
+		b.text:SetTextColor(on and a[1] or C.soft[1], on and a[2] or C.soft[2], on and a[3] or C.soft[3])
+		b.bg:SetVertexColor(on and a[1] or 1, on and a[2] or 1, on and a[3] or 1, on and 0.1 or 0.03)
+		b.bd:SetVertexColor(on and a[1] or 1, on and a[2] or 1, on and a[3] or 1, on and 0.55 or 0.08)
+		local w = math.ceil(b.text:GetStringWidth()) + 16
+		b:SetWidth(w)
+		b:ClearAllPoints()
+		b:SetPoint("LEFT", f.seg, "LEFT", x, 0)
+		x = x + w + 4
+	end
+	f.seg:SetWidth(math.max(10, x - 4))
+	f.seg:ClearAllPoints()
+	f.seg:SetPoint("TOPRIGHT", -14, -y)
+	local _, _, _, specName, class = SpecKey()
+	local cr, cg, cb = ns.ClassTint(class)
+	f.spec:SetText(specName or "")
+	f.spec:SetTextColor(cr, cg, cb)
+	f.spec:SetShown(SB_W - 32 - f.seg:GetWidth() - f.pills:GetWidth() > 60)
+	y = y + 30
+	f.line:ClearAllPoints()
+	f.line:SetPoint("TOPLEFT", 12, -y)
+	f.line:SetPoint("TOPRIGHT", -12, -y)
+	if f.menu:IsShown() then self:PaintMenu() end
+	return y
 end
 
 local function Head(body, i)
@@ -827,6 +1620,24 @@ local function Head(body, i)
 	h.name:SetWidth(SB_W - 130)
 	h.sum = Ink:Text(h, F.sans, 10, C.muted, "RIGHT")
 	h.sum:SetPoint("RIGHT", -8, -2)
+	-- 희귀 보스: 번호 대신 작은 점
+	h.rdot = h:CreateTexture(nil, "OVERLAY", nil, 2)
+	h.rdot:SetTexture(Ink.tex.disc)
+	h.rdot:SetSize(6, 6)
+	h.rdot:SetPoint("CENTER", h.disc, "CENTER")
+	h.rdot:Hide()
+	-- 경로에서 눌렀을 때 잠깐 빛나기
+	h.glow = Ink:Round(h, "BACKGROUND", true, false)
+	h.glow:SetAllPoints()
+	h.glow:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0)
+	local ag = h:CreateAnimationGroup()
+	local a1 = ag:CreateAnimation("Alpha")
+	a1:SetTarget(h.glow); a1:SetFromAlpha(0); a1:SetToAlpha(1); a1:SetDuration(0.18); a1:SetOrder(1)
+	local a2 = ag:CreateAnimation("Alpha")
+	a2:SetTarget(h.glow); a2:SetFromAlpha(1); a2:SetToAlpha(0); a2:SetDuration(0.9); a2:SetOrder(2); a2:SetSmoothing("OUT")
+	ag:SetScript("OnPlay", function() h.glow:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.12) end)
+	ag:SetScript("OnFinished", function() h.glow:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0) end)
+	h.flash = ag
 	return h
 end
 
@@ -873,6 +1684,16 @@ function M:PaintSidebar()
 	if self.sbFor ~= jid then self.sbFor, self.sbRetry = jid, 0 end
 	local data = jid and self:Scan(jid)
 	self:BuildRanks(jid)
+	local mode = ViewMode()
+	if FOREVER then
+		self:PaintForeverTop(f, data)
+	else
+		self:PaintRetailTop(f, data, jid)
+	end
+	self:PaintList(f, data, mode)
+end
+
+function M:PaintRetailTop(f, data, jid)
 	local key, _, _, specName, class = SpecKey()
 	local cr, cg, cb = ns.ClassTint(class)
 	f.tag:SetText((self.isRaid and self.isRaid[jid]) and "RAID LOOT" or "DUNGEON LOOT")
@@ -892,8 +1713,13 @@ function M:PaintSidebar()
 	local a = C.accent
 	f.mine.bg:SetVertexColor(a[1], a[2], a[3], all and 0.02 or 0.1)
 	f.mine.bd:SetVertexColor(a[1], a[2], a[3], all and 0.3 or 0.6)
+end
 
+function M:PaintList(f, data, mode)
+	local a = C.accent
 	local body = f.body
+	f.headY, f.headFor = f.headY or {}, f.headFor or {}
+	wipe(f.headY); wipe(f.headFor)
 	for _, h in ipairs(f.heads) do h:Hide() end
 	for _, r in ipairs(f.rows) do r:Hide() end
 	local y, nh, nr = 0, 0, 0
@@ -904,7 +1730,7 @@ function M:PaintSidebar()
 			for _, it in ipairs(b.items) do
 				local r = self.ranks[it.id]
 				if r then if r.rank == 0 then nb = nb + 1 else na = na + 1 end end
-				if all or r then list[#list + 1] = it end
+				if mode == "all" or (mode == "rec" and r) or (mode == "class" and ForMyClass(it)) then list[#list + 1] = it end
 			end
 			table.sort(list, function(x, z)
 				local rx, rz = self.ranks[x.id], self.ranks[z.id]
@@ -917,18 +1743,24 @@ function M:PaintSidebar()
 			f.heads[nh] = h
 			h:ClearAllPoints()
 			h:SetPoint("TOPLEFT", 0, -y)
-			local done = false
-			if C_EncounterJournal and C_EncounterJournal.IsEncounterComplete and b.id then
+			f.headY[b.index], f.headFor[b.index] = y, h
+			local done = b.killed and true or false
+			if not FOREVER and C_EncounterJournal and C_EncounterJournal.IsEncounterComplete and b.id then
 				local ok, v = pcall(C_EncounterJournal.IsEncounterComplete, b.id)
 				done = ok and plain(v) and true or false
 			end
-			local col = done and C.green or (nb > 0 and a or { 0.75, 0.77, 0.8 })
+			local col = done and C.green or (nb > 0 and a or (b.rare and RARE_C) or { 0.75, 0.77, 0.8 })
 			h.ring:SetVertexColor(col[1], col[2], col[3], 1)
-			h.num:SetText(b.index)
+			h.num:SetText(FOREVER and (b.rare and "" or (b.order or "")) or b.index)
 			h.num:SetTextColor(col[1], col[2], col[3])
-			h.name:SetText(b.name)
-			h.sum:SetText(done and "처치함" or ((nb > 0 and ("BIS " .. nb) or "") .. ((nb > 0 and na > 0) and " · " or "") .. (na > 0 and ("대체 " .. na) or "")))
-			h:SetAlpha(done and 0.55 or 1)
+			h.rdot:SetShown(b.rare and true or false)
+			h.rdot:SetVertexColor(col[1], col[2], col[3])
+			h.name:SetText(FOREVER and BossName(b) or b.name)
+			local sum = (nb > 0 and ("BIS " .. nb) or "") .. ((nb > 0 and na > 0) and " · " or "") .. (na > 0 and ("대체 " .. na) or "")
+			if sum == "" and FOREVER then sum = (#list > 0) and (#list .. "개") or (mode == "class" and "내 직업 없음" or "") end
+			if b.rare and FOREVER then sum = "희귀" .. (sum ~= "" and (" · " .. sum) or "") end
+			h.sum:SetText(done and "처치함" or sum)
+			h:SetAlpha((done or (FOREVER and #list == 0)) and 0.55 or 1)
 			h:Show()
 			y = y + HEAD_H
 			for _, it in ipairs(list) do
@@ -945,12 +1777,19 @@ function M:PaintSidebar()
 				row.name:SetTextColor(q[1], q[2], q[3])
 				local sub = it.slotText or SLOT_NAME[it.slot or -1] or ""
 				if it.armor and it.armor ~= "" then sub = sub .. " · " .. it.armor end
+				local cant = FOREVER and mode == "all" and not ForMyClass(it)
+				if FOREVER and not it.slotText then
+					local _, _, st = C_Item.GetItemInfoInstant(it.id)
+					if st and st ~= "" and it.slot and it.slot ~= 1 and it.slot ~= 3 and it.slot ~= 12 and it.slot ~= 13 then sub = sub .. " · " .. st end
+					if sub == "" then sub = st or "" end
+				end
+				if cant then sub = sub .. "  |cff8E939B· 내 직업 X|r" end
 				row.sub:SetText(sub)
 				row.badge:Set(r)
 				row.isBis = r and r.rank == 0
 				row.hl:SetVertexColor(1, 1, 1, row.isBis and 0.04 or 0)
 				row.bisBd:SetVertexColor(a[1], a[2], a[3], row.isBis and 0.4 or 0)
-				row:SetAlpha(done and 0.55 or 1)
+				row:SetAlpha((done or cant) and 0.5 or 1)
 				row:Show()
 				y = y + ROW_H + 2
 			end
@@ -967,7 +1806,18 @@ function M:PaintSidebar()
 		self.sbRetry = 0
 	end
 	f.empty:SetShown(nr == 0)
-	f.empty:SetText(data and (all and "여기에는 내 직업 전리품이 없어요" or "여기선 내 BIS · 대체템이 안 나와요\n(오른쪽 위 버튼으로 전부 보기)") or "전리품 정보를 불러오는 중…")
+	local emptyText
+	if not data or (data.d and data.d.soon) then
+		local d = FOREVER and FLoot(self.showing)
+		emptyText = (d and d.soon) and "아직 열리지 않은 던전이에요\n열리면 전리품이 여기 나와요" or "전리품 정보를 불러오는 중…"
+	elseif mode == "all" then
+		emptyText = "전리품 정보가 없어요"
+	elseif mode == "class" then
+		emptyText = "여기에는 내 직업이 쓰는 장비가 없어요\n(전부 보기에서 다른 아이템 확인)"
+	else
+		emptyText = FOREVER and "여기선 추천(BIS · 대체)템이 안 나와요\n(내 직업 · 전부 보기로 바꿔 보세요)" or "여기선 내 BIS · 대체템이 안 나와요\n(오른쪽 위 버튼으로 전부 보기)"
+	end
+	f.empty:SetText(emptyText)
 	body:SetHeight(math.max(10, y))
 end
 
@@ -992,7 +1842,10 @@ function M:ShowFor(jid, anchor)
 end
 
 function M:HideSidebar()
-	if self.sidebar then self.sidebar:Hide() end
+	if self.sidebar then
+		self.sidebar:Hide()
+		if self.sidebar.menu then self.sidebar.menu:Hide() end
+	end
 	self.showing = nil
 end
 
@@ -1016,36 +1869,35 @@ function M:CurrentInstance()
 	end
 end
 
--- 포에버: 지금 던전 (안에 있으면 그 던전, 아니면 고른 것 / 내 레벨에 맞는 것)
+-- 포에버: 지금 던전 (안에 있으면 그 던전 — 안에서 직접 다른 던전을 골랐으면 그것, 아니면 고른 것 / 내 레벨에 맞는 것)
 function M:ForeverCurrent()
 	local list = ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}
-	local inInst = IsInInstance()
-	if inInst then
-		local name, _, _, _, _, _, _, instID = GetInstanceInfo()
-		for _, d in ipairs(list) do
-			if (d.inst and d.inst == instID) or (name and (name == d.en or name == d.ko)) then return d.key end
-		end
-	end
+	local here = self:MatchInstance()
 	local sel = Ink.cdb and Ink.cdb.fDungeon
+	if here then
+		local iname = GetInstanceInfo()
+		if not (self.manualIn and self.manualIn == iname and sel and FLoot(sel)) then return here end
+	end
 	if sel and FLoot(sel) then return sel end
 	local lv, best, bestD = UnitLevel("player") or 1, nil, 999
 	for _, d in ipairs(list) do
-		local mid = (d.lo + d.hi) / 2
-		local dist = math.abs(mid - lv)
-		if dist < bestD then best, bestD = d.key, dist end
+		if not d.soon then
+			local dist = math.abs((d.lo + d.hi) / 2 - lv)
+			if dist < bestD then best, bestD = d.key, dist end
+		end
 	end
 	return best
 end
 
+-- 예전 ◀ ▶ (단축키 등에서 부를 수 있게 남겨 둠): 열린 던전만 순서대로
 function M:StepForever(dir)
-	local list = ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}
+	local list = {}
+	for _, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do if not d.soon then list[#list + 1] = d end end
 	if #list == 0 then return end
-	local _, i = FLoot(self.showing or self:ForeverCurrent())
-	i = ((i or 1) - 1 + dir) % #list + 1
-	if Ink.cdb then Ink.cdb.fDungeon = list[i].key end
-	self.showing = list[i].key
-	if self.sidebar then self.sidebar.sf:SetVerticalScroll(0) end
-	self:PaintSidebar()
+	local cur, i = self.showing or self:ForeverCurrent(), 1
+	for k, d in ipairs(list) do if d.key == cur then i = k end end
+	i = (i - 1 + dir) % #list + 1
+	self:SelectForever(list[i].key)
 end
 
 function M:UpdateMap()
@@ -1101,15 +1953,68 @@ function M:BuildToast()
 	self.toast = t
 end
 
-function M:Toast(name, nb, na)
+function M:Toast(name, nb, na, sub)
 	if not self.toast then self:BuildToast() end
 	local t = self.toast
 	t.title:SetText((name or "던전") .. " 입장")
-	t.sub:SetText(string.format("내 장비  |cffFFF468BIS %d|r  ·  대체 %d  ·  지도(M)에서 보스별로 보기", nb or 0, na or 0))
+	t.sub:SetText(sub or string.format("내 장비  |cffFFF468BIS %d|r  ·  대체 %d  ·  지도(M)에서 보스별로 보기", nb or 0, na or 0))
+	t:SetWidth(math.max(380, math.ceil(t.sub:GetStringWidth()) + 70))
 	t:SetAlpha(1)
 	t:Show()
 	t.ag:Stop()
 	t.ag:Play()
+end
+
+-- 포에버: 던전에 들어가면 알림 (보스 수 · 내 직업 장비 · 추천) + 오래된 처치 기록 정리
+function M:OnForeverEnter()
+	local key = self:MatchInstance()
+	self.hereKey = key
+	if not key then self.lastToast, self.manualIn = nil, nil return end
+	local k = KillSet(key)
+	if k.t and k.t > 0 and time() - k.t > 90 * 60 and Ink.cdb and Ink.cdb.dKills then Ink.cdb.dKills[key] = nil end
+	if key == self.lastToast then return end
+	self.lastToast = key
+	C_Timer.After(2.5, function()
+		local data = M:Scan(key)
+		if not data then return end
+		pcall(M.BuildRanks, M)
+		local nCls, nRec, nMain = 0, 0, 0
+		for _, b in ipairs(data.bosses) do
+			if not b.rare then nMain = nMain + 1 end
+			for _, it in ipairs(b.items) do
+				if M.ranks[it.id] then nRec = nRec + 1 end
+				if ForMyClass(it) then nCls = nCls + 1 end
+			end
+		end
+		M:Toast(data.name, nil, nil, string.format("보스 %d  ·  내 직업 장비 %d  ·  |cffFFF468추천 %d|r  ·  지도(M)에서 진행 경로", nMain, nCls, nRec))
+	end)
+end
+
+-- 보스 처치: 전투 종료 이벤트의 이름 / 대상이 죽은 걸 보고 NPC 번호로
+function M:OnBossKilled(name)
+	local key = self.hereKey or self:MatchInstance()
+	name = plain(name)
+	if not key or type(name) ~= "string" then return end
+	local data = self:Scan(key, true)
+	for _, b in ipairs(data and data.bosses or {}) do
+		if b.npc and (BossName(b) == name or b.name == name or b.en == name) then return self:MarkKill(key, b.npc) end
+	end
+end
+
+function M:CheckDead(unit)
+	local key = self.hereKey
+	if not key then return end
+	local ok, dead = pcall(UnitIsDead, unit)
+	if not (ok and plain(dead)) then return end
+	local ok2, guid = pcall(UnitGUID, unit)
+	guid = ok2 and plain(guid)
+	if type(guid) ~= "string" then return end
+	local npc = tonumber((select(6, strsplit("-", guid))))
+	if not npc then return end
+	local d = FLoot(key)
+	for _, b in ipairs(d and d.bosses or {}) do
+		if b[3] == npc then return self:MarkKill(key, npc) end
+	end
 end
 
 function M:OnEnterWorld()
@@ -1136,7 +2041,12 @@ function M:HookTooltip()
 		if not Ink.db.dungeon or not tt.AddLine then return end
 		local id = data and plain(data.id)
 		local r = id and M.ranks[id]
-		if not r then return end
+		if not r then
+			-- 포에버: 순위가 없어도 던전 드랍템이면 어디서 나오는지 한 줄
+			local src = FOREVER and id and M:DropSource(id)
+			if src then tt:AddDoubleLine("|cff9EA3AB드랍|r", src, 1, 1, 1, 0.85, 0.87, 0.9) end
+			return
+		end
 		local _, _, _, specName = SpecKey()
 		tt:AddLine(" ")
 		tt:AddLine("|cffFFF468—|r  |cff8E939BFOA · " .. (UnitClass("player") or "") .. " " .. (specName or "") .. (M.isExample and " · 예시 순위" or "") .. "|r")
@@ -1736,7 +2646,24 @@ function M:Init()
 		if ns.FOREVER_LOOT then self:HookMap() end
 		local e = CreateFrame("Frame")
 		for _, ev in ipairs({ "ADDON_LOADED", "PLAYER_EQUIPMENT_CHANGED", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT",
-			"CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE" }) do pcall(e.RegisterEvent, e, ev) end
+			"CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE", "PLAYER_LEVEL_UP" }) do pcall(e.RegisterEvent, e, ev) end
+		-- 던전 입장 · 보스 처치 (진행 경로)
+		local w = CreateFrame("Frame")
+		for _, ev in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ENCOUNTER_END", "BOSS_KILL", "PLAYER_TARGET_CHANGED" }) do
+			pcall(w.RegisterEvent, w, ev)
+		end
+		pcall(w.RegisterUnitEvent, w, "UNIT_HEALTH", "target")
+		w:SetScript("OnEvent", function(_, event, a1, a2, _, _, a5)
+			if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+				C_Timer.After(1, function() pcall(M.OnForeverEnter, M) end)
+			elseif event == "ENCOUNTER_END" then
+				if plain(a5) == 1 then pcall(M.OnBossKilled, M, a2) end
+			elseif event == "BOSS_KILL" then
+				pcall(M.OnBossKilled, M, a2)
+			elseif M.hereKey then
+				pcall(M.CheckDead, M, "target")
+			end
+		end)
 		local pending
 		e:SetScript("OnEvent", function(_, event)
 			if event == "ADDON_LOADED" then
