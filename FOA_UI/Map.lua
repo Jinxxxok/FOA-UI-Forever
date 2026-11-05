@@ -1056,7 +1056,28 @@ function M:LayoutUnder()
 				box:SetPoint("BOTTOMLEFT", wm.ScrollContainer, "BOTTOMLEFT", 10, 44)
 			end
 		else
-			box:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", 0, row and -38 or -6)
+			box:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", 0, -6)
+		end
+	end
+	-- 창 지도: 책 상자는 지도 바로 아래 왼쪽(원래 자리), 범례는 가운데, 퀘스트는 오른쪽.
+	--  지도 폭이 모자라면 범례를 책 상자 오른쪽으로, 그래도 안 되면 범례를 위 줄에 두고 책 상자를 한 줄 아래로
+	if not big and bar and bar:IsShown() then
+		local W = wm:GetWidth() or 0
+		local bw = bar:GetWidth() or 0
+		local left = (box and box:IsShown()) and ((box:GetWidth() or 290) + 8) or 0
+		local right = W - ((leg and leg:IsShown()) and ((leg:GetWidth() or 0) + 8) or 0)
+		local cx = (W - bw) / 2
+		bar:ClearAllPoints()
+		if cx >= left and cx + bw <= right then
+			bar:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", cx, -6)
+		elseif left + bw <= right then
+			bar:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", left, -6)
+		else
+			bar:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", 0, -6)
+			if box and box:IsShown() then
+				box:ClearAllPoints()
+				box:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", 0, -38)
+			end
 		end
 	end
 end
@@ -1250,7 +1271,9 @@ function M:MakeMovable()
 	h:SetScript("OnDragStop", function()
 		wm:StopMovingOrSizing()
 		local l, t = wm:GetLeft(), wm:GetTop()
-		if l and t then Ink.db.mapPos = { l, t } end
+		-- 지도 크기(배율)를 바꿔도 같은 자리에 오게 화면 기준 좌표로 저장
+		local sc = wm:GetScale() or 1
+		if l and t then Ink.db.mapPos = { l * sc, t * sc, ui = true } end
 	end)
 	h:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -1260,12 +1283,28 @@ function M:MakeMovable()
 	h:SetScript("OnLeave", GameTooltip_Hide)
 	self.moveHandle = h
 	local function restore()
+		M:ApplyScale()
 		local pos = Ink.db.mapPos
 		if not pos or InCombatLockdown() or (wm.IsMaximized and wm:IsMaximized()) then return end
+		local sc = pos.ui and (wm:GetScale() or 1) or 1
 		wm:ClearAllPoints()
-		wm:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pos[1], pos[2])
+		wm:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pos[1] / sc, pos[2] / sc)
 	end
+	self.restorePos = restore
 	wm:HookScript("OnShow", function() C_Timer.After(0, restore) end)
+	for _, fn in ipairs({ "Maximize", "Minimize" }) do
+		if wm[fn] then hooksecurefunc(wm, fn, function() C_Timer.After(0, function() restore(); M:LayoutUnder() end) end) end
+	end
+end
+
+-- 창 지도 크기: 기본 지도가 너무 작아서 1.3배 (큰 지도로 최대화했을 때는 그대로)
+M.MAP_SCALE = 1.3
+function M:ApplyScale()
+	local wm = WorldMapFrame
+	if not wm or InCombatLockdown() then return end
+	local want = 1
+	if Ink.db.mapBig ~= false and not (wm.IsMaximized and wm:IsMaximized()) then want = M.MAP_SCALE end
+	if math.abs((wm:GetScale() or 1) - want) > 0.001 then wm:SetScale(want) end
 end
 
 function M:Hook()

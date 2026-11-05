@@ -1551,6 +1551,7 @@ function M:BuildPanel()
 		{ "퀘스트 목록에 직업 퀘스트 (포에버)", "지금 받을 수 있는 내 직업 퀘스트와 다음에 열리는 직업 퀘스트를 목록 맨 위에. 받은 직업 퀘스트는 자동으로 추적해서 맨 위로. 클릭하면 길 안내.", "questClass" },
 		{ "미니맵에 퀘스트 (포에버)", "받을 수 있는 퀘스트 · 보고할 퀘스트를 미니맵에. 범위 밖은 가까운 3개만 테두리에 작게.", "questMinimap" },
 		{ "보고할 퀘스트 물음표", "다 끝낸 퀘스트의 보고 위치를 지도 · 미니맵에 물음표로.", "questTurnIn" },
+		{ "지도 크게", "창으로 띄운 세계 지도를 1.3배로 크게. 지도 아래 칸(도서관 책 · 범례 · 퀘스트)도 겹치지 않게 다시 자리 잡아요.", "mapBig" },
 		{ "지도 밝히기 (포에버)", "안 가 본 곳도 지역 지도를 다 보여 줘요. 가 본 곳은 밝게, 안 가 본 곳은 살짝 어둡게.", "mapReveal" },
 		{ "경매장 자동 가격 스캔", "경매장에 들어가면 자동으로 전체 가격을 받아요 (15분마다).", "ahAuto" },
 		{ "지도에 던전 입구", "지역 지도에만 던전 입구를 차원문 모양으로. 누르면 전리품 · 진행 경로.", "mapEntrances" },
@@ -1580,9 +1581,10 @@ function M:BuildPanel()
 		for i, d in ipairs(ns.FX.LIST) do
 			local key, label, desc, needReload = d[1], d[2], d[3], d[4]
 			local c = CreateFrame("Button", nil, p)
-			c:SetSize(200, 22)
-			local col, row = (i - 1) % 3, math.floor((i - 1) / 3)
-			c:SetPoint("TOPLEFT", hfx, "BOTTOMLEFT", col * 215, -10 - row * 26)
+			-- 왼쪽 칸 폭 안에서 두 줄로 (오른쪽 "편의 기능" 칸과 겹치지 않게)
+			c:SetSize(150, 22)
+			local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
+			c:SetPoint("TOPLEFT", hfx, "BOTTOMLEFT", col * 158, -10 - row * 26)
 			c.box = CreateFrame("Frame", nil, c)
 			c.box:SetSize(14, 14)
 			c.box:SetPoint("LEFT")
@@ -1595,7 +1597,8 @@ function M:BuildPanel()
 			c.box.fill:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
 			c.label = Ink:Text(c, F.semi, 12, C.text, "LEFT")
 			c.label:SetPoint("LEFT", c.box, "RIGHT", 8, 0)
-			c.label:SetWidth(176)
+			c.label:SetWidth(126)
+			c.label:SetWordWrap(false)
 			c.label:SetText(label)
 			local function refresh() c.box.fill:SetShown(ns.FX.on(key)) end
 			c:SetScript("OnShow", refresh)
@@ -1623,8 +1626,8 @@ function M:BuildPanel()
 	cmds:SetPoint("TOPLEFT", h3, "BOTTOMLEFT", 0, -8)
 	cmds:SetSpacing(4)
 	cmds:SetWordWrap(true)
-	cmds:SetWidth(340)
-	cmds:SetText("/foa 설정 창  ·  /foa edit 편집 모드  ·  /foa test 테스트\n/foa kb 단축키 설정  ·  /foa reset 위치 초기화\n/foa log 오류 기록  ·  /foa layout 배치 다시 적용")
+	cmds:SetWidth(300)
+	cmds:SetText("/foa 설정 창  ·  /foa edit 편집 모드\n/foa test 테스트  ·  /foa kb 단축키 설정\n/foa reset 위치 초기화  ·  /foa log 오류 기록\n/foa layout 배치 다시 적용")
 
 	p:SetScript("OnShow", function() M:SyncButtons() end)
 

@@ -470,8 +470,37 @@ local function Ready(id)
 	if C_QuestLog.ReadyForTurnIn then return C_QuestLog.ReadyForTurnIn(id) end
 	return C_QuestLog.IsComplete and C_QuestLog.IsComplete(id)
 end
+-- 게임이 보고 위치를 알려 주는 퀘스트 (어느 지역 지도에든 표시가 있으면)
+--  → 그런 퀘스트는 "받은 곳" 대신 게임 표시만 쓴다 (받은 곳과 보고하는 곳이 다른 퀘스트에서 엉뚱한 물음표가 뜨던 문제)
+local zoneMaps
+local function ZoneMaps()
+	if zoneMaps then return zoneMaps end
+	zoneMaps = {}
+	if C_Map.GetMapChildrenInfo then
+		for _, cont in ipairs({ 1414, 1415, 1945, 113 }) do
+			local ok, kids = pcall(C_Map.GetMapChildrenInfo, cont, 3, true)
+			for _, k in ipairs(ok and kids or {}) do zoneMaps[#zoneMaps + 1] = k.mapID end
+		end
+	end
+	return zoneMaps
+end
+function M:PoiQuests()
+	if self.poiSet and not self.poiDirty then return self.poiSet end
+	self.poiDirty = nil
+	local set = {}
+	if C_QuestLog.GetQuestsOnMap then
+		for _, m in ipairs(ZoneMaps()) do
+			local ok, list = pcall(C_QuestLog.GetQuestsOnMap, m)
+			for _, q in ipairs(ok and list or {}) do if q.questID and q.x then set[q.questID] = true end end
+		end
+	end
+	self.poiSet = set
+	return set
+end
+
 function M:TurnIns(mapID)
 	local out, seen = {}, {}
+	local poi = self:PoiQuests()
 	if not mapID then return out end
 	if C_QuestLog.GetQuestsOnMap then
 		local ok, list = pcall(C_QuestLog.GetQuestsOnMap, mapID)
@@ -486,7 +515,7 @@ function M:TurnIns(mapID)
 	for i = 1, n do
 		local info = C_QuestLog.GetInfo and C_QuestLog.GetInfo(i)
 		local id = info and not info.isHeader and info.questID
-		if id and not seen[id] and Ready(id) then
+		if id and not seen[id] and not poi[id] and Ready(id) then
 			local r = QuestRow(id)
 			local pts = r and r[2] or {}
 			for k = 1, #pts, 3 do
@@ -791,6 +820,7 @@ function M:Init()
 			return
 		end
 		M.miniDirty = true
+		M.poiDirty = true
 		M:Queue()
 	end)
 end
