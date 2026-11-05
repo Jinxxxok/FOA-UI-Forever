@@ -316,10 +316,37 @@ local function BlizzBarShown(n)
 	if ok and v ~= nil then return v and true or false end
 end
 
+-- 2 · 3번 바를 1번 바와 같은 크기 · 간격으로 맞추고, 1번 바 바로 위에 차례로 쌓는다.
+--  (처음 FOA 바로 바꿀 때 꺼져 있던 바는 기본 크기 36이라 1번 바와 달라진다)
+function M:MatchBar1(keys)
+	if InCombatLockdown() then return end
+	local b1 = Settings("bar1")
+	for _, key in ipairs(keys) do
+		-- 바로 아래 바: 3번은 2번이 켜져 있으면 2번 위, 아니면 1번 위
+		local prev = (key == "bar3" and Settings("bar2").on ~= false) and "bar2" or "bar1"
+		local s = Settings(key)
+		s.size, s.gap, s.sized = b1.size, b1.gap, true
+		local d
+		for _, x in ipairs(self.list or {}) do if x.key == key then d = x end end
+		if d then
+			d.cfgDirty = true
+			self:LayoutBar(d)
+			local lx, top = Ink:FrameBox(prev)
+			if lx and d.header then
+				local h = d.header:GetHeight()
+				d.header:ClearAllPoints()
+				d.header:SetPoint("TOPLEFT", Ink.root, "TOPLEFT", lx, -(top - h - (b1.gap or 4) - 4))
+				Ink:SavePos(key)
+				Ink:ApplyPos(key)
+			end
+		end
+	end
+end
+
 function M:SyncBlizzToggles()
 	if not Ink.cdb.barsImported then return end
 	local seen = Ink.cdb.bars.blizzSeen or {}
-	local changed, any
+	local changed, any, adopted
 	for n = 2, 8 do
 		local v = BlizzBarShown(n)
 		local key = "bar" .. n
@@ -328,7 +355,10 @@ function M:SyncBlizzToggles()
 			local s = Settings(key)
 			if seen[n] == nil then
 				-- 처음 보는 값: 블리자드 설정에서 켜 둔 바는 FOA 에서도 켠다 (끄지는 않는다)
-				if v and s.on == false then s.on = true; changed = true end
+				if v and s.on == false then
+					s.on = true; changed = true
+					if n <= 3 then adopted = adopted or {}; adopted[#adopted + 1] = key end
+				end
 			elseif seen[n] ~= v then
 				s.on = v
 				changed = true
@@ -340,6 +370,7 @@ function M:SyncBlizzToggles()
 	if changed then
 		self:LayoutAll()
 		for _, d in ipairs(self.list) do Ink:ApplyPos(d.key) end
+		if adopted then self:MatchBar1(adopted) end
 		if Ink.modules.Config and Ink.modules.Config.SyncOpts then pcall(Ink.modules.Config.SyncOpts, Ink.modules.Config) end
 	end
 	return any
@@ -357,6 +388,7 @@ function M:Options(d)
 		return function(v)
 			if InCombatLockdown() then return end
 			Settings(d.key)[k] = v
+			if k == "size" or k == "gap" then Settings(d.key).sized = true end
 			if cfg then d.cfgDirty = true end
 			M:LayoutBar(d)
 			Ink:ApplyPos(d.key)
@@ -366,10 +398,14 @@ function M:Options(d)
 	local max = #(d.buttons or {}) > 0 and #d.buttons or (d.count or 12)
 	local o = {
 		{ kind = "toggle", label = "켜기", get = function() return Settings(d.key).on ~= false end,
-			set = function(v) set("on")(v) end },
+			set = function(v)
+				set("on")(v)
+				-- 처음 켜는 2 · 3번 바는 1번 바 크기에 맞춰서 1번 바 위에 놓는다
+				if v and (d.key == "bar2" or d.key == "bar3") and not Settings(d.key).sized then M:MatchBar1({ d.key }) end
+			end },
 		{ kind = "step", label = "버튼 수", get = get("num"), set = set("num"), min = 1, max = max, step = 1 },
 		{ kind = "step", label = "한 줄", get = get("per"), set = set("per"), min = 1, max = max, step = 1 },
-		{ kind = "step", label = "크기", get = get("size"), set = set("size", true), min = 20, max = 64, step = 2 },
+		{ kind = "step", label = "크기", get = get("size"), set = set("size", true), min = 20, max = 64, step = 1 },
 		{ kind = "step", label = "간격", get = get("gap"), set = set("gap"), min = 0, max = 16, step = 1 },
 	}
 	if d.bind and not d.count then
@@ -556,6 +592,19 @@ function M:Init()
 	end
 	retry()
 	C_Timer.After(5, function() if InCombatLockdown() then M.pendingSync = true else M:SyncBlizzToggles() end end)
+	-- 예전 버전: 나중에 켠 2 · 3번 바가 기본 크기(36)로 남아 1번 바와 크기가 다른 경우 한 번 맞춘다
+	C_Timer.After(7, function()
+		if not Ink.cdb.barsImported or Ink.cdb.barsSizeFix or InCombatLockdown() then return end
+		Ink.cdb.barsSizeFix = true
+		local b1 = Settings("bar1")
+		if b1.size == 36 and b1.gap == 4 then return end
+		local keys = {}
+		for _, key in ipairs({ "bar2", "bar3" }) do
+			local s = Settings(key)
+			if s.on ~= false and not s.sized and s.size == 36 and s.gap == 4 then keys[#keys + 1] = key end
+		end
+		if #keys > 0 then M:MatchBar1(keys) end
+	end)
 	if MultiActionBar_Update then
 		hooksecurefunc("MultiActionBar_Update", function()
 			C_Timer.After(0, function()
@@ -628,6 +677,7 @@ function M:FirstImport()
 	for key, r in pairs(imported) do
 		local s = Settings(key)
 		for _, k in ipairs({ "on", "num", "per", "size", "gap" }) do if r[k] ~= nil then s[k] = r[k] end end
+		if r.size then s.sized = true end
 	end
 	Ink.cdb.barsImported = true
 	self:HideAllBlizz()
