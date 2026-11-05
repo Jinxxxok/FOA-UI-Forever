@@ -189,6 +189,172 @@ end
 local FLIGHT_ON = { 0.53, 0.87, 0.95 }
 local FLIGHT_OFF = { 0.55, 0.57, 0.60 }
 
+-- 다른 지도(대륙 · 세계 · 도시를 품은 지역) 위치로 바꾸기
+local rectCache = {}
+local function ToMap(fromID, x, y, toID)
+	if fromID == toID then return x, y end
+	local key = fromID .. ">" .. toID
+	local r = rectCache[key]
+	if r == nil then
+		local ok, minX, maxX, minY, maxY = pcall(C_Map.GetMapRectOnMap, fromID, toID)
+		r = (ok and minX and maxX and maxX > minX and maxY > minY) and { minX, maxX, minY, maxY } or false
+		rectCache[key] = r
+	end
+	if not r then return end
+	local nx, ny = r[1] + x * (r[2] - r[1]), r[3] + y * (r[4] - r[3])
+	if nx < 0 or nx > 1 or ny < 0 or ny > 1 then return end
+	return nx, ny
+end
+M.ToMap = ToMap
+
+-------------------------------------------------------------------------------
+-- 대도시 · 비행 핀 모양
+--  서비스(은행 · 경매장 · 여관 · 우편 · 비행 · 수리): 각자 색과 아이콘 + 이름 알약
+--  전문기술 상급자: 그 전문기술의 게임 아이콘(동그랗게) + 보라 테두리
+--  직업 상급자: 직업 문양 + 직업 색 테두리
+--  가까이 겹치면 살짝 벌려서 놓는다
+-------------------------------------------------------------------------------
+local SVC = {
+	bank = { "NpcBank", "E3C07A", "은행" }, auction = { "NpcAuction", "F2A84E", "경매장" }, inn = { "NpcInn", "F59E6B", "여관" },
+	mail = { "NpcMail", "7FB8FF", "우편함" }, flight = { "NpcFlight", "86DDF2", "비행" }, repair = { "NpcRepair", "C9CED6", "수리" },
+}
+for _, v in pairs(SVC) do v.rgb = Ink.hex(v[2]) end
+local PROF_ICON = { p171 = 136240, p164 = 136241, p202 = 136243, p333 = 136244, p356 = 136245, p182 = 136246,
+	p165 = 136247, p186 = 136248, p197 = 136249, p393 = 134366, p185 = 133971, p129 = 135966 }
+local CLASS_TOKEN = { c1 = "WARRIOR", c2 = "PALADIN", c3 = "HUNTER", c4 = "ROGUE", c5 = "PRIEST", c7 = "SHAMAN", c8 = "MAGE", c9 = "WARLOCK", c11 = "DRUID" }
+local PROF_RING = { 0.79, 0.66, 1.00 }
+local FLIGHT_OFF = { 0.55, 0.57, 0.60 }
+
+function M:CityPin(i)
+	self.cityPins = self.cityPins or {}
+	local p = self.cityPins[i]
+	if p then return p end
+	p = CreateFrame("Button", nil, self.layer)
+	p:SetSize(24, 24)
+	p.art = CreateFrame("Frame", nil, p)
+	p.art:SetPoint("CENTER")
+	p.art:SetSize(24, 24)
+	p.art:EnableMouse(false)
+	local a = p.art
+	a.glow = a:CreateTexture(nil, "BACKGROUND", nil, -1)
+	a.glow:SetTexture(Ink.tex.glow)
+	a.glow:SetPoint("TOPLEFT", -8, 8)
+	a.glow:SetPoint("BOTTOMRIGHT", 8, -8)
+	a.glow:SetBlendMode("ADD")
+	a.disc = a:CreateTexture(nil, "BACKGROUND")
+	a.disc:SetTexture(Ink.tex.disc)
+	a.disc:SetAllPoints()
+	a.disc:SetVertexColor(0.035, 0.04, 0.055, 0.95)
+	a.icon = a:CreateTexture(nil, "ARTWORK")
+	a.icon:SetPoint("CENTER")
+	a.mask = a:CreateMaskTexture()
+	a.mask:SetTexture(Ink.tex.mask, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+	a.mask:SetPoint("TOPLEFT", a, "TOPLEFT", 2, -2)
+	a.mask:SetPoint("BOTTOMRIGHT", a, "BOTTOMRIGHT", -2, 2)
+	a.ring = a:CreateTexture(nil, "OVERLAY")
+	a.ring:SetTexture(Ink.tex.ring)
+	a.ring:SetAllPoints()
+	-- 이름 알약 (서비스만)
+	a.pill = CreateFrame("Frame", nil, a)
+	a.pill:SetHeight(15)
+	a.pill:SetPoint("TOP", a, "BOTTOM", 0, -2)
+	a.pill.bg = Ink:Round(a.pill, "BACKGROUND", true, false)
+	a.pill.bg:SetAllPoints()
+	a.pill.bg:SetVertexColor(0.03, 0.035, 0.05, 0.86)
+	a.pill.t = Ink:Text(a.pill, F.semi, 10, C.text, "CENTER")
+	a.pill.t:SetPoint("CENTER", 0, 0)
+	local ag = a:CreateAnimationGroup()
+	local sc = ag:CreateAnimation("Scale")
+	sc:SetDuration(0.12); sc:SetScaleFrom(1, 1); sc:SetScaleTo(1.18, 1.18); sc:SetSmoothing("OUT")
+	ag:SetScript("OnFinished", function() a:SetScale(1.18) end)
+	p.grow = ag
+	p:SetScript("OnEnter", function(self)
+		self.grow:Play()
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT", 4, 0)
+		GameTooltip:AddLine(self.tipTitle or "", self.tipR or 1, self.tipG or 1, self.tipB or 1)
+		if self.tipSub then GameTooltip:AddLine(self.tipSub, 0.85, 0.86, 0.88, true) end
+		if self.tipNote then GameTooltip:AddLine(self.tipNote, 0.56, 0.58, 0.61, true) end
+		GameTooltip:AddLine("우클릭: 길 안내", 0.56, 0.58, 0.61)
+		GameTooltip:Show()
+	end)
+	p:SetScript("OnLeave", function(self) GameTooltip:Hide(); self.grow:Stop(); self.art:SetScale(1) end)
+	p:RegisterForClicks("RightButtonUp")
+	p:SetScript("OnClick", function(self)
+		local mapID = WorldMapFrame:GetMapID()
+		if mapID and C_Map.CanSetUserWaypointOnMap and C_Map.CanSetUserWaypointOnMap(mapID) then
+			C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(mapID, self.wx, self.wy))
+			if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
+		end
+	end)
+	self.cityPins[i] = p
+	return p
+end
+
+-- kind: "svc" / "prof" / "cls" / "flight"
+local function StylePin(p, kind, key, off)
+	local a = p.art
+	local size = (kind == "svc") and 26 or 22
+	p:SetSize(size, size); a:SetSize(size, size)
+	a.icon:RemoveMaskTexture(a.mask)
+	a.icon:SetTexCoord(0, 1, 0, 1)
+	a.icon:SetDesaturated(false)
+	a.icon:SetAlpha(1)
+	a.pill:Hide()
+	local col
+	if kind == "svc" or kind == "flight" then
+		local v = SVC[key == "flight" and "flight" or key]
+		col = (kind == "flight" and off) and FLIGHT_OFF or v.rgb
+		a.icon:SetTexture(Ink.icon(v[1]))
+		a.icon:SetSize(size * 0.56, size * 0.56)
+		a.icon:SetVertexColor(col[1], col[2], col[3])
+		a.icon:SetAlpha(off and 0.65 or 1)
+		if kind == "svc" then
+			a.pill.t:SetText(v[3])
+			a.pill.t:SetTextColor(col[1], col[2], col[3])
+			a.pill:SetWidth(a.pill.t:GetStringWidth() + 12)
+			a.pill:Show()
+		end
+	elseif kind == "prof" then
+		col = PROF_RING
+		a.icon:SetTexture(PROF_ICON[key] or 134400)
+		a.icon:SetSize(size - 4, size - 4)
+		a.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		a.icon:AddMaskTexture(a.mask)
+		a.icon:SetVertexColor(1, 1, 1)
+	else
+		local tok = CLASS_TOKEN[key]
+		local cc = tok and RAID_CLASS_COLORS and RAID_CLASS_COLORS[tok]
+		col = cc and { cc.r, cc.g, cc.b } or C.text
+		a.icon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
+		local tc = tok and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[tok]
+		if tc then a.icon:SetTexCoord(tc[1], tc[2], tc[3], tc[4]) end
+		a.icon:SetSize(size - 4, size - 4)
+		a.icon:SetVertexColor(1, 1, 1)
+	end
+	a.ring:SetVertexColor(col[1], col[2], col[3], off and 0.5 or 1)
+	a.glow:SetVertexColor(col[1], col[2], col[3], off and 0 or ((kind == "svc" or kind == "flight") and 0.26 or 0.14))
+	p.tipR, p.tipG, p.tipB = col[1], col[2], col[3]
+end
+
+-- 비행 지점을 알고 있는지 (비행 조련사 지도를 열 때 기억)
+local function FlightKnown(id)
+	return Ink.cdb and Ink.cdb.flightKnown and Ink.cdb.flightKnown[id]
+end
+
+function M:RememberFlights()
+	if not (C_TaxiMap and C_TaxiMap.GetAllTaxiNodes) then return end
+	local mapID = GetTaxiMapID and GetTaxiMapID()
+	local ok, nodes = pcall(C_TaxiMap.GetAllTaxiNodes, mapID or 0)
+	if not ok or type(nodes) ~= "table" then return end
+	Ink.cdb.flightKnown = Ink.cdb.flightKnown or {}
+	local S = Enum.FlightPathState
+	for _, nd in ipairs(nodes) do
+		if nd.nodeID and (not S or nd.state == S.Current or nd.state == S.Reachable) then
+			Ink.cdb.flightKnown[nd.nodeID] = true
+		end
+	end
+end
+
 function M:Refresh()
 	local wm = WorldMapFrame
 	local cv = Canvas()
@@ -198,53 +364,52 @@ function M:Refresh()
 	local scale = (wm.GetCanvasScale and wm:GetCanvasScale()) or 1
 	local pinScale = math.max(0.45, math.min(1.4, 1 / scale))
 	local n = 0
-	local function place(x, y, iconName, color, label, title, sub, dim)
+	local placed = {}
+	local cat = Ink.db.mapCat or {}
+	-- 겹치면 둘레로 살짝 벌린다 (지도 칸 단위)
+	local function spread(x, y, r)
+		local px, py = x * W, y * H
+		local function hit(qx, qy)
+			for _, o in ipairs(placed) do
+				local dx, dy = qx - o[1], qy - o[2]
+				if dx * dx + dy * dy < (r + o[3]) * (r + o[3]) * 0.8 then return true end
+			end
+		end
+		if hit(px, py) then
+			for ring = 1, 3 do
+				local found
+				for k = 0, 5 do
+					local ang = (k / 6 + ring * 0.08) * math.pi * 2
+					local qx, qy = px + math.cos(ang) * r * 1.9 * ring, py + math.sin(ang) * r * 1.9 * ring
+					if not hit(qx, qy) then px, py, found = qx, qy, true break end
+				end
+				if found then break end
+			end
+		end
+		placed[#placed + 1] = { px, py, r }
+		return px, py
+	end
+	local function put(x, y, kind, key, title, sub, note, off)
 		n = n + 1
-		local p = self:Pin(n)
+		local p = self:CityPin(n)
+		StylePin(p, kind, key, off)
+		local r = (kind == "svc" and 15 or 12) * pinScale
+		local px, py = spread(x, y, r)
 		p:ClearAllPoints()
 		p:SetScale(pinScale)
 		-- 크기를 바꾼 틀의 위치 값은 그 크기만큼 곱해져서, 미리 나눠 둬야 제자리에 찍힌다
-		p:SetPoint("CENTER", cv, "TOPLEFT", x * W / pinScale, -y * H / pinScale)
-		p.icon:SetTexture(Ink.icon(iconName))
-		p.icon:SetVertexColor(color[1], color[2], color[3])
-		p.ring:SetVertexColor(color[1], color[2], color[3], dim and 0.45 or 0.95)
-		p.icon:SetAlpha(dim and 0.6 or 1)
-		p.label:SetText(label or "")
-		p.label:SetTextColor(color[1], color[2], color[3], dim and 0.7 or 1)
-		p.tipTitle, p.tipSub = title, sub
+		p:SetPoint("CENTER", cv, "TOPLEFT", px / pinScale, -py / pinScale)
+		p:SetFrameLevel(self.layer:GetFrameLevel() + (kind == "svc" and 30 or 10))
+		p.wx, p.wy = x, y
+		p.tipTitle, p.tipSub, p.tipNote = title, sub, note
 		p:Show()
 	end
 
-	-- 1) 비행 지점 (블리자드가 이미 그리는 지도면 쉰다)
-	if Ink.db.mapFlight ~= false and C_TaxiMap and C_TaxiMap.GetTaxiNodesForMap and mapID then
-		local blizzard = C_TaxiMap.ShouldMapShowTaxiNodes and C_TaxiMap.ShouldMapShowTaxiNodes(mapID)
-		if not blizzard then
-			local ok, nodes = pcall(C_TaxiMap.GetTaxiNodesForMap, mapID)
-			local faction = UnitFactionGroup("player")
-			for _, nd in ipairs(ok and nodes or {}) do
-				local pos = nd.position
-				local x, y = pos and pos.GetXY and pos:GetXY()
-				local fac = nd.faction
-				local mine = true
-				if Enum.FlightPathFaction then
-					if fac == Enum.FlightPathFaction.Horde then mine = faction == "Horde"
-					elseif fac == Enum.FlightPathFaction.Alliance then mine = faction == "Alliance" end
-				end
-				if x and y and mine and not nd.isMapLayerTransition then
-					local off = nd.isUndiscovered
-					place(x, y, "NpcFlight", off and FLIGHT_OFF or FLIGHT_ON, nil,
-						nd.name or "비행 지점", off and "아직 발견 못 한 비행 지점" or "발견한 비행 지점")
-				end
-			end
-		end
-	end
-
-	-- 2) 대도시 주요 NPC: 대표만 하나씩 (들른 자리 > 자료 자리)
+	-- 1) 대도시: 서비스 먼저 (위에 그려지고 자리를 먼저 차지)
 	if Ink.db.mapNpcs ~= false and mapID and CAPITAL[mapID] then
 		local pick = {}
 		for k, xy in pairs(CITY[mapID] or {}) do pick[k] = { x = xy[1] / 100, y = xy[2] / 100, seed = true } end
-		local spots = Ink.db.npcSpots and Ink.db.npcSpots[mapID]
-		for name, sp in pairs(spots or {}) do
+		for name, sp in pairs((Ink.db.npcSpots and Ink.db.npcSpots[mapID]) or {}) do
 			local k
 			local ranked = type(sp.sub) == "string" and (sp.sub:find("^수습 ") or sp.sub:find("^숙련 ") or sp.sub:find("^전문 ")
 				or sp.sub:find("^대가 ") or sp.sub:find("^장인 ") or sp.sub:find("상급자") or sp.sub:find("지도자"))
@@ -252,19 +417,64 @@ function M:Refresh()
 			elseif KEY_ROLE[sp.role] then k = sp.role end
 			if k then
 				local cur = pick[k]
-				-- 수리는 대표 하나, 우편함도 하나 (가장 최근에 들른 곳)
 				if not cur or cur.seed or (sp.t or 0) >= (cur.t or 0) then
-					pick[k] = { x = sp.x, y = sp.y, name = name, sub = sp.sub, t = sp.t }
+					pick[k] = { x = sp.x, y = sp.y, name = (name:sub(1, 4) ~= "poi:") and name or nil, sub = sp.sub, t = sp.t }
 				end
 			end
 		end
-		for k, sp in pairs(pick) do
-			local role = KeyRole(k)
-			local col = RoleColor(role)
-			local label = KeyLabel(k)
-			place(sp.x, sp.y, ROLE_ICON[role] or "NpcVendor", col, label, sp.name or label, sp.sub and ("<" .. sp.sub .. ">") or nil)
+		local order = {}
+		for k, sp in pairs(pick) do order[#order + 1] = { k = k, sp = sp } end
+		local rank = function(k) return SVC[k] and 1 or (CLASS_TOKEN[k] and 2 or 3) end
+		table.sort(order, function(a2, b2) return rank(a2.k) < rank(b2.k) end)
+		for _, o in ipairs(order) do
+			local k, sp = o.k, o.sp
+			local kind = SVC[k] and "svc" or (CLASS_TOKEN[k] and "cls" or "prof")
+			local show = (kind == "svc" and cat.svc ~= false) or (kind == "cls" and cat.cls ~= false) or (kind == "prof" and cat.prof ~= false)
+			if show then
+				local label = KeyLabel(k)
+				local note = sp.seed and "기본 위치 · 한 번 들르면 정확한 자리로 바뀌어요" or nil
+				put(sp.x, sp.y, kind, k, sp.name or label, sp.name and label or (sp.sub and ("<" .. sp.sub .. ">")), note)
+			end
 		end
 	end
+
+	-- 2) 비행 지점: 게임이 알려 주면 그걸로, 아니면 포에버 비행 자료 + 내가 아는 지점 기록
+	if Ink.db.mapFlight ~= false and mapID and cat.flight ~= false then
+		local fac = UnitFactionGroup("player")
+		local facN = fac == "Horde" and 1 or (fac == "Alliance" and 2 or 0)
+		local shown = 0
+		if C_TaxiMap and C_TaxiMap.GetTaxiNodesForMap then
+			local ok, nodes = pcall(C_TaxiMap.GetTaxiNodesForMap, mapID)
+			for _, nd in ipairs(ok and nodes or {}) do
+				local pos = nd.position
+				local x, y = pos and pos.GetXY and pos:GetXY()
+				local mine = true
+				if Enum.FlightPathFaction then
+					if nd.faction == Enum.FlightPathFaction.Horde then mine = facN == 1
+					elseif nd.faction == Enum.FlightPathFaction.Alliance then mine = facN == 2 end
+				end
+				if x and y and mine and not nd.isMapLayerTransition then
+					local off = nd.isUndiscovered and not FlightKnown(nd.nodeID)
+					put(x, y, "flight", "flight", nd.name or "비행 지점", off and "아직 안 가 본 비행 지점" or "가 본 비행 지점", nil, off)
+					shown = shown + 1
+				end
+			end
+		end
+		if shown == 0 then
+			for id, f in pairs(ns.FLIGHT_DB or {}) do
+				if f[4] == 0 or f[4] == facN then
+					local x, y = ToMap(f[1], f[2] / 100, f[3] / 100, mapID)
+					if x then
+						local off = not FlightKnown(id)
+						put(x, y, "flight", "flight", "비행 조련사", off and "아직 안 가 본 비행 지점 (비행 조련사 지도를 한 번 열면 갱신)" or "가 본 비행 지점", nil, off)
+					end
+				end
+			end
+		end
+	end
+	for i = n + 1, #(self.cityPins or {}) do self.cityPins[i]:Hide() end
+	n = 0
+	self:PaintCityLegend(mapID)
 
 	for i = n + 1, #(self.pins or {}) do self.pins[i]:Hide() end
 	self:DrawBooks(mapID, cv, pinScale)
@@ -455,23 +665,6 @@ function M:PaintBookPin(p, done, lib)
 	a:SetSize(lib and 30 or 26, lib and 30 or 26)
 end
 
--- 다른 지도(대륙 · 세계 · 도시를 품은 지역) 위치로 바꾸기
-local rectCache = {}
-local function ToMap(fromID, x, y, toID)
-	if fromID == toID then return x, y end
-	local key = fromID .. ">" .. toID
-	local r = rectCache[key]
-	if r == nil then
-		local ok, minX, maxX, minY, maxY = pcall(C_Map.GetMapRectOnMap, fromID, toID)
-		r = (ok and minX and maxX and maxX > minX and maxY > minY) and { minX, maxX, minY, maxY } or false
-		rectCache[key] = r
-	end
-	if not r then return end
-	local nx, ny = r[1] + x * (r[2] - r[1]), r[3] + y * (r[4] - r[3])
-	if nx < 0 or nx > 1 or ny < 0 or ny > 1 then return end
-	return nx, ny
-end
-M.ToMap = ToMap
 
 function M:DrawBooks(mapID, cv, pinScale)
 	local n = 0
@@ -594,6 +787,101 @@ function M:BuildBooks()
 end
 
 -------------------------------------------------------------------------------
+-- 대도시 범례 (지도 아래 가운데): 서비스 · 직업 상급자 · 전문기술 · 비행 켜고 끄기
+-------------------------------------------------------------------------------
+local CHIPS = {
+	{ "svc", "서비스", "NpcBank", "E3C07A" }, { "cls", "직업 상급자", "NpcTrainer", "F3F2EE" },
+	{ "prof", "전문기술", "Professions", "C9A8FF" }, { "flight", "비행", "NpcFlight", "86DDF2" },
+}
+function M:BuildCityLegend()
+	local wm = WorldMapFrame
+	local bar = CreateFrame("Frame", nil, wm)
+	bar:SetHeight(24)
+	bar:SetPoint("TOP", wm, "BOTTOM", 0, -6)
+	bar:SetFrameStrata("HIGH")
+	bar.chips = {}
+	local prev
+	for i, c in ipairs(CHIPS) do
+		local b = CreateFrame("Button", nil, bar)
+		b:SetHeight(24)
+		b.bg = Ink:Round(b, "BACKGROUND", true, false)
+		b.bg:SetAllPoints()
+		b.bd = Ink:Round(b, "BORDER", true, true)
+		b.bd:SetAllPoints()
+		b.icon = b:CreateTexture(nil, "ARTWORK")
+		b.icon:SetTexture(Ink.icon(c[3]))
+		b.icon:SetSize(12, 12)
+		b.icon:SetPoint("LEFT", 9, 0)
+		b.t = Ink:Text(b, F.semi, 11, C.text, "LEFT")
+		b.t:SetPoint("LEFT", b.icon, "RIGHT", 5, 0)
+		b.t:SetText(c[2])
+		b:SetWidth(b.t:GetStringWidth() + 34)
+		b.key, b.rgb = c[1], Ink.hex(c[4])
+		b:SetPoint("LEFT", prev or bar, prev and "RIGHT" or "LEFT", prev and 6 or 0, 0)
+		b:SetScript("OnClick", function(self)
+			Ink.db.mapCat = Ink.db.mapCat or {}
+			Ink.db.mapCat[self.key] = (Ink.db.mapCat[self.key] == false) and true or false
+			M:Refresh()
+		end)
+		bar.chips[i] = b
+		prev = b
+	end
+	local w = 0
+	for _, b in ipairs(bar.chips) do w = w + b:GetWidth() + 6 end
+	bar:SetWidth(w - 6)
+	bar:Hide()
+	self.cityBar = bar
+end
+
+function M:PaintCityLegend(mapID)
+	local bar = self.cityBar
+	if not bar then return end
+	if not (mapID and CAPITAL[mapID]) or Ink.db.mapNpcs == false then bar:Hide() return end
+	local wm = WorldMapFrame
+	bar:ClearAllPoints()
+	if wm.IsMaximized and wm:IsMaximized() then
+		bar:SetPoint("BOTTOM", wm.ScrollContainer, "BOTTOM", 0, 10)
+	else
+		bar:SetPoint("TOP", wm, "BOTTOM", 0, -6)
+	end
+	local cat = Ink.db.mapCat or {}
+	for _, b in ipairs(bar.chips) do
+		local on = cat[b.key] ~= false
+		local c = b.rgb
+		b.bg:SetVertexColor(0.04, 0.045, 0.06, 0.9)
+		b.bd:SetVertexColor(c[1], c[2], c[3], on and 0.6 or 0.15)
+		b.icon:SetVertexColor(c[1], c[2], c[3], on and 1 or 0.35)
+		b.t:SetTextColor(on and C.text[1] or C.dim[1], on and C.text[2] or C.dim[2], on and C.text[3] or C.dim[3])
+	end
+	bar:Show()
+end
+
+-- 경비병에게 길을 물으면 지도에 찍히는 표시(은행 · 경매장 · 여관 · 훈련사 …)를 그 자리로 기억
+function M:RememberGossipPoi()
+	if not (C_GossipInfo and C_GossipInfo.GetPoiForUiMapID) then return end
+	local mapID = C_Map.GetBestMapForUnit("player")
+	if not (mapID and CAPITAL[mapID]) then return end
+	local poiID = C_GossipInfo.GetPoiForUiMapID(mapID)
+	local info = poiID and C_GossipInfo.GetPoiInfo(mapID, poiID)
+	if not (info and info.position and info.name) then return end
+	local x, y = info.position:GetXY()
+	local nm = info.name
+	local role
+	if nm:find("은행") or nm:find("Bank") then role = "bank"
+	elseif nm:find("경매") or nm:find("Auction") then role = "auction"
+	elseif nm:find("여관") or nm:find("Inn") then role = "inn"
+	elseif nm:find("우편") or nm:find("Mail") then role = "mail"
+	elseif nm:find("비행") or nm:find("그리") or nm:find("Flight") or nm:find("Gryphon") or nm:find("Wind Rider") then role = "flight"
+	elseif TrainerKey(nm) then role = "trainer" end
+	if not role then return end
+	Ink.db.npcSpots = Ink.db.npcSpots or {}
+	local t = Ink.db.npcSpots[mapID] or {}
+	Ink.db.npcSpots[mapID] = t
+	t["poi:" .. (role == "trainer" and TrainerKey(nm) or role)] = { x = x, y = y, role = role, sub = nm, t = time() }
+	if WorldMapFrame and WorldMapFrame:IsShown() then self:Refresh() end
+end
+
+-------------------------------------------------------------------------------
 -- NPC 자리 기억: 대화 · 상점 · 은행 · 훈련사 · 비행 · 우편함 창이 열릴 때 내 위치를 그 NPC 자리로
 -------------------------------------------------------------------------------
 local EVENT_ROLE = {
@@ -676,6 +964,7 @@ function M:Hook()
 	if not wm or self.hooked or not Canvas() then return end
 	self.hooked = true
 	pcall(self.MakeMovable, self)
+	pcall(self.BuildCityLegend, self)
 	self.layer = CreateFrame("Frame", nil, Canvas())
 	self.layer:SetAllPoints()
 	self.layer:SetFrameLevel(Canvas():GetFrameLevel() + 2500)
@@ -690,7 +979,7 @@ function M:Init()
 	self:Hook()
 	local e = CreateFrame("Frame")
 	for ev in pairs(EVENT_ROLE) do pcall(e.RegisterEvent, e, ev) end
-	for _, ev in ipairs({ "GOSSIP_SHOW", "ADDON_LOADED", "TAXI_NODE_STATUS_CHANGED", "BAG_UPDATE_DELAYED", "QUEST_TURNED_IN" }) do pcall(e.RegisterEvent, e, ev) end
+	for _, ev in ipairs({ "GOSSIP_SHOW", "ADDON_LOADED", "TAXI_NODE_STATUS_CHANGED", "BAG_UPDATE_DELAYED", "QUEST_TURNED_IN", "DYNAMIC_GOSSIP_POI_UPDATED" }) do pcall(e.RegisterEvent, e, ev) end
 	C_Timer.After(5, function() pcall(M.ScanBagsForBooks, M, "bags") end)
 	e:SetScript("OnEvent", function(_, event)
 		if event == "ADDON_LOADED" then
@@ -702,6 +991,11 @@ function M:Init()
 			if WorldMapFrame and WorldMapFrame:IsShown() then M:Refresh() end
 			return
 		end
+		if event == "DYNAMIC_GOSSIP_POI_UPDATED" then
+			C_Timer.After(0.1, function() pcall(M.RememberGossipPoi, M) end)
+			return
+		end
+		if event == "TAXIMAP_OPENED" then pcall(M.RememberFlights, M) end
 		if event == "BANKFRAME_OPENED" then
 			C_Timer.After(0.5, function() pcall(M.ScanBagsForBooks, M, "bank") end)
 		end

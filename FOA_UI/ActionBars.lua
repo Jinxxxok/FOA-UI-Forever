@@ -153,6 +153,7 @@ local function ButtonConfig(d, i, s)
 	return {
 		outOfRangeColoring = "button",
 		tooltip = "enabled",
+		cooldownCount = true, -- 쿨타임 남은 시간 숫자 (게임 설정과 상관없이 항상)
 		showGrid = s.grid ~= false,
 		colors = { range = { 0.85, 0.25, 0.22 }, mana = { 0.45, 0.55, 1 } },
 		hideElements = { macro = true, hotkey = false, equipped = false, border = true, borderIfEmpty = true },
