@@ -79,7 +79,7 @@ local ROLES = {
 	{ key = "bank", icon = "NpcBank", color = "6FD39A", words = { "은행", "Banker", "Bank" } },
 	{ key = "auction", icon = "NpcAuction", color = "F2C14E", words = { "경매", "Auctioneer" } },
 	{ key = "stable", icon = "NpcStable", color = "A9D88B", words = { "야수 조련사", "Stable Master" } },
-	{ key = "flight", icon = "NpcFlight", color = "86DDF2", words = { "비행", "그리폰", "와이번", "히포그리프", "비룡", "박쥐 조련사",
+	{ key = "flight", icon = "NpcFlight", color = "86DDF2", words = { "비행", "그리폰", "그리핀", "와이번", "히포그리프", "비룡", "박쥐 조련사",
 		"Flight Master", "Gryphon Master", "Wind Rider", "Hippogryph Master", "Bat Handler" } },
 	{ key = "transmog", icon = "NpcTransmog", color = "F4A3C8", words = { "형상변환", "공허 보관", "Transmogrifier", "Void Storage" } },
 	{ key = "upgrade", icon = "NpcUpgrade", color = "FF9547", words = { "강화", "업그레이드", "촉매", "재구성", "Upgrade", "Catalyst", "Reforge" } },
@@ -242,6 +242,11 @@ local function Build(plate)
 	rb.icon:SetPoint("CENTER")
 	rb:Hide()
 	f.role = rb
+	-- NPC 직함 (<여관주인> 같은 줄): 이름 바로 아래 작게
+	f.sub = Ink:Text(f, F.sans, 9, C.muted, "CENTER")
+	f.sub:SetPoint("TOP", f.name, "BOTTOM", 0, -1)
+	f.sub:SetWidth(W + 40)
+	f.sub:Hide()
 
 	-- 내 디버프 (이름 위)
 	f.auras = ns.AuraBox(f, 20, 6, { growUp = true, noMouse = true,
@@ -748,6 +753,15 @@ function M:SetFriendly(f, friendly)
 		-- 던전 · 레이드 안에선 거리를 잴 수 없어서(보호된 동작) 파티원 이름은 항상 보이게
 		f.nameAlpha = (role or InInstance() or self:NearFriendly(f.unit, f)) and 0.9 or 0
 		f.name:SetAlpha(f.nameAlpha)
+		local sub = f.unit and not plain(UnitIsPlayer(f.unit)) and not IsObject(f.unit) and Subtitle(f.unit)
+		if sub then
+			f.sub:SetText("<" .. sub .. ">")
+			if role then f.sub:SetTextColor(role.rgb[1], role.rgb[2], role.rgb[3]) else f.sub:SetTextColor(C.muted[1], C.muted[2], C.muted[3]) end
+			f.sub:SetAlpha(f.nameAlpha)
+			f.sub:Show()
+		else
+			f.sub:Hide()
+		end
 		f.markL:Hide(); f.markR:Hide(); f.elite:Hide()
 		-- 아군(파티원 등) 징표는 이름 바로 위에 크게
 		f.raid:ClearAllPoints()
@@ -765,6 +779,7 @@ function M:SetFriendly(f, friendly)
 		f.name:SetWidth(W - 34)
 		f.name:SetAlpha(1)
 		f.nameAlpha = nil
+		f.sub:Hide()
 		f.raid:ClearAllPoints()
 		f.raid:SetPoint("RIGHT", f.back, "LEFT", -12, 0)
 		f.raid:SetSize(16, 16)
@@ -997,6 +1012,8 @@ end
 local SOFT_CVARS = {
 	SoftTargetInteract = "3",          -- 상호작용 대상 잡기: 항상
 	SoftTargetNameplateInteract = "1", -- 그 대상에 이름표
+	SoftTargetIconInteract = "1",      -- 줍기 · 상호작용 물체 위에 게임 아이콘
+	SoftTargetIconGameObject = "1",    -- 바닥 물체(퀘스트 물건 등)에도
 }
 
 function M:ApplyObjectCVars()
@@ -1140,6 +1157,7 @@ function M:Init()
 				if f.nameAlpha ~= a then
 					f.nameAlpha = a
 					f.name:SetAlpha(a)
+					f.sub:SetAlpha(a)
 				end
 			end
 		end

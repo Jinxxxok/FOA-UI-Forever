@@ -346,9 +346,96 @@ function M:UpdateMode()
 	self:Update()
 end
 
+-------------------------------------------------------------------------------
+-- 퀘스트 목표를 다 채우면: 소리 + 화면 위에 잠깐 알림 (레벨업 알림처럼)
+-------------------------------------------------------------------------------
+function M:BuildToast()
+	local t = CreateFrame("Frame", "FOAQuestDone", Ink.root)
+	t:SetSize(340, 64)
+	t:SetPoint("TOP", Ink.root, "TOP", 0, -210)
+	t:SetFrameStrata("HIGH")
+	t:EnableMouse(false)
+	t.bg = Ink:Round(t, "BACKGROUND", false, false)
+	t.bg:SetAllPoints()
+	t.bg:SetVertexColor(0.04, 0.045, 0.06, 0.92)
+	t.bd = Ink:Round(t, "BORDER", false, true)
+	t.bd:SetAllPoints()
+	t.bd:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.55)
+	t.glow = t:CreateTexture(nil, "BACKGROUND", nil, -2)
+	t.glow:SetTexture(Ink.tex.glow)
+	t.glow:SetPoint("TOPLEFT", -24, 20)
+	t.glow:SetPoint("BOTTOMRIGHT", 24, -20)
+	t.glow:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.35)
+	t.ring = t:CreateTexture(nil, "ARTWORK")
+	t.ring:SetTexture(Ink.tex.ring)
+	t.ring:SetSize(34, 34)
+	t.ring:SetPoint("LEFT", 16, 0)
+	t.ring:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 1)
+	t.icon = t:CreateTexture(nil, "OVERLAY")
+	t.icon:SetTexture(Ink.icon("Check"))
+	t.icon:SetSize(16, 16)
+	t.icon:SetPoint("CENTER", t.ring, "CENTER")
+	t.icon:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
+	t.tag = Ink:Text(t, F.latinB, 10, C.accent, "LEFT")
+	t.tag:SetPoint("TOPLEFT", t.ring, "TOPRIGHT", 14, 2)
+	t.tag:SetText("QUEST COMPLETE")
+	t.title = Ink:Text(t, F.bold, 14, C.text, "LEFT")
+	t.title:SetPoint("TOPLEFT", t.tag, "BOTTOMLEFT", 0, -3)
+	t.title:SetWidth(250)
+	t.sub = Ink:Text(t, F.sans, 10, C.soft, "LEFT")
+	t.sub:SetPoint("TOPLEFT", t.title, "BOTTOMLEFT", 0, -3)
+	t.sub:SetText("목표 완료 · 보고하러 가세요")
+	t:Hide()
+	local ag = t:CreateAnimationGroup()
+	local m0 = ag:CreateAnimation("Translation"); m0:SetOrder(1); m0:SetDuration(0); m0:SetOffset(0, 16)
+	local a0 = ag:CreateAnimation("Alpha"); a0:SetOrder(1); a0:SetDuration(0); a0:SetFromAlpha(0); a0:SetToAlpha(0)
+	local s0 = ag:CreateAnimation("Scale"); s0:SetOrder(1); s0:SetDuration(0); s0:SetScaleFrom(0.92, 0.92); s0:SetScaleTo(0.92, 0.92)
+	local m1 = ag:CreateAnimation("Translation"); m1:SetOrder(2); m1:SetDuration(0.35); m1:SetSmoothing("OUT"); m1:SetOffset(0, -16)
+	local a1 = ag:CreateAnimation("Alpha"); a1:SetOrder(2); a1:SetDuration(0.3); a1:SetFromAlpha(0); a1:SetToAlpha(1)
+	local s1 = ag:CreateAnimation("Scale"); s1:SetOrder(2); s1:SetDuration(0.35); s1:SetSmoothing("OUT"); s1:SetScaleFrom(0.92, 0.92); s1:SetScaleTo(1, 1)
+	local a2 = ag:CreateAnimation("Alpha"); a2:SetOrder(3); a2:SetStartDelay(3.2); a2:SetDuration(0.6); a2:SetFromAlpha(1); a2:SetToAlpha(0)
+	ag:SetScript("OnFinished", function() t:Hide() end)
+	t.ag = ag
+	self.toast = t
+end
+
+function M:QuestDone(title)
+	if Ink.db.questToast == false then return end
+	if not self.toast then self:BuildToast() end
+	local t = self.toast
+	t.title:SetText(title or "")
+	t:SetAlpha(1)
+	t:Show()
+	t.ag:Stop()
+	t.ag:Play()
+	local kit = (SOUNDKIT and (SOUNDKIT.UI_QUEST_COMPLETE or SOUNDKIT.IG_QUEST_LIST_COMPLETE)) or 878
+	pcall(PlaySound, kit, "Master")
+end
+
+-- 퀘스트 로그를 훑어서 "방금 완료 상태가 된" 퀘스트를 찾는다
+function M:CheckDone()
+	local now = {}
+	local n = C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetNumQuestLogEntries() or 0
+	for i = 1, n do
+		local info = C_QuestLog.GetInfo(i)
+		if info and not info.isHeader and info.questID and info.questID > 0 and not info.isHidden then
+			local id = info.questID
+			local done = (C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(id)) or C_QuestLog.IsComplete(id)
+			now[id] = done and true or false
+			local objs = C_QuestLog.GetQuestObjectives(id)
+			-- 목표가 없는 퀘스트(바로 보고하는 심부름)는 받자마자 완료라 알리지 않는다
+			if done and self.doneState and self.doneState[id] == false and objs and #objs > 0 then
+				self:QuestDone(info.title)
+			end
+		end
+	end
+	self.doneState = now
+end
+
 function M:SetTest(on)
 	self.testing = on
 	self:Update()
+	if on and not Ink.modules.Config.testFromEdit then self:QuestDone("데피아즈단 소탕") end
 end
 
 -------------------------------------------------------------------------------
@@ -374,8 +461,15 @@ function M:Init()
 	}) do
 		e:RegisterEvent(ev)
 	end
-	local pending
+	local pending, donePending
+	C_Timer.After(3, function() M:CheckDone() end)
 	e:SetScript("OnEvent", function(_, event)
+		if event == "QUEST_LOG_UPDATE" or event == "UNIT_QUEST_LOG_CHANGED" or event == "QUEST_ACCEPTED" then
+			if not donePending then
+				donePending = true
+				C_Timer.After(0.4, function() donePending = nil; M:CheckDone() end)
+			end
+		end
 		if event == "PLAYER_REGEN_ENABLED" then
 			if M.modeDirty then M.modeDirty = nil; M:UpdateMode() return end
 			if M.dirty then M.dirty = nil end
