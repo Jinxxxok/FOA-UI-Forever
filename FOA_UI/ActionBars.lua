@@ -306,6 +306,42 @@ function M:LayoutAll()
 	for _, d in ipairs(self.list or {}) do self:LayoutBar(d) end
 end
 
+-- 게임 설정(ESC → 설정 → 행동 단축바)에서 "행동 단축바 2~8"을 켜고 끄면 FOA 바도 따라간다.
+--  블리자드 값이 바뀐 순간만 따라가고, FOA 편집 모드에서 바꾼 값은 그대로 둔다.
+local function BlizzBarShown(n)
+	if not (Settings and Settings.GetValue) then return nil end
+	local ok, v = pcall(Settings.GetValue, "PROXY_SHOW_ACTIONBAR_" .. n)
+	if ok and v ~= nil then return v and true or false end
+end
+
+function M:SyncBlizzToggles()
+	if not Ink.cdb.barsImported then return end
+	-- 처음 한 번: 블리자드 설정에서 이미 켜 둔 바는 FOA 에서도 켠다 (끄지는 않는다)
+	local first = Ink.cdb.bars.blizzSeen == nil
+	local seen = Ink.cdb.bars.blizzSeen or {}
+	Ink.cdb.bars.blizzSeen = seen
+	local changed
+	for n = 2, 8 do
+		local v = BlizzBarShown(n)
+		local key = "bar" .. n
+		if v ~= nil and DEF[key] then
+			if seen[n] ~= nil and seen[n] ~= v then
+				Settings(key).on = v
+				changed = true
+			elseif first and v and Settings(key).on == false then
+				Settings(key).on = true
+				changed = true
+			end
+			seen[n] = v
+		end
+	end
+	if changed then
+		self:LayoutAll()
+		for _, d in ipairs(self.list) do Ink:ApplyPos(d.key) end
+		if Ink.modules.Config and Ink.modules.Config.SyncOpts then pcall(Ink.modules.Config.SyncOpts, Ink.modules.Config) end
+	end
+end
+
 -- 블리자드가 숨긴 태세 · 소환수 버튼(쓸 수 없는 칸)은 블리자드 판단대로 둔다
 -- (LayoutBar 의 Show 는 행동 버튼에만)
 
@@ -508,6 +544,14 @@ function M:Init()
 	self:LayoutAll()
 	for _, d in ipairs(self.list) do Ink:ApplyPos(d.key) end
 	if Ink.cdb.barsImported then self:UpdateBindings() end
+	self:SyncBlizzToggles()
+	if MultiActionBar_Update then
+		hooksecurefunc("MultiActionBar_Update", function()
+			C_Timer.After(0, function()
+				if InCombatLockdown() then M.pendingSync = true else M:SyncBlizzToggles() end
+			end)
+		end)
+	end
 
 	local ev = CreateFrame("Frame")
 	ev:RegisterEvent("UPDATE_BINDINGS")
@@ -522,6 +566,7 @@ function M:Init()
 			if Ink.cdb.barsImported then M:UpdateBindings() end
 		elseif event == "PLAYER_REGEN_ENABLED" then
 			if M.pendingImport then M.pendingImport = nil; M:FirstImport() end
+			if M.pendingSync then M.pendingSync = nil; M:SyncBlizzToggles() end
 			if M.pendingBind then M:UpdateBindings() end
 			if M.pendingLayout then M.pendingLayout = nil; M:LayoutAll() end
 			if M.pendingHide then M.pendingHide = nil; M:HideAllBlizz() end
@@ -587,6 +632,7 @@ function M:FirstImport()
 		Ink:ApplyPos(d.key)
 	end
 	self:UpdateBindings()
+	self:SyncBlizzToggles()
 	print("|cffFFF468FOA|r 행동단축바를 FOA 바로 바꿨어요. 지금 블리자드 배치를 그대로 가져왔고, /foa → 편집 모드에서 바마다 조절할 수 있어요.")
 end
 

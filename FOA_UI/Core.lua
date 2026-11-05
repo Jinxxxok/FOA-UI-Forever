@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.33.6"
+Ink.version = "0.33.7"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -150,6 +150,8 @@ function Ink:DetectDensity()
 	local sfx = (self.renderTier == "q" and "_q") or (self.renderTier == "1x" and "_s") or ""
 	self.tex.ring = MEDIA .. "Textures\\Ring" .. sfx
 	self.tex.disc = MEDIA .. "Textures\\Disc" .. sfx
+	-- 1080p · 1200p: 픽셀이 커서 회색 글자가 배경에 묻힌다 → 회색을 밝히고 그림자를 진하게
+	if self.c and self.LowResPalette then self:LowResPalette(ph < 1300) end
 end
 Ink.icon = function(name)
 	local t = Ink.renderTier
@@ -234,6 +236,20 @@ Ink.c = {
 	trackSoft = { 1, 1, 1, 0.06 },
 	border = { 1, 1, 1, 0.10 },
 }
+
+-- 저해상도용 회색 (색 표는 여러 곳에서 같은 표를 들고 있으니 값만 바꾼다)
+local PALETTE_LOW = { muted = hex("A6ABB3"), soft = hex("CACED4"), dim = hex("7C818A") }
+local PALETTE_BASE = {}
+Ink.shadowA = 0.75
+function Ink:LowResPalette(on)
+	for k, v in pairs(PALETTE_LOW) do
+		local c = self.c[k]
+		if not PALETTE_BASE[k] then PALETTE_BASE[k] = { c[1], c[2], c[3] } end
+		local src = on and v or PALETTE_BASE[k]
+		c[1], c[2], c[3] = src[1], src[2], src[3]
+	end
+	self.shadowA = on and 1 or 0.75
+end
 
 Ink.powerColor = {
 	[0] = hex("5B9BFF"), [1] = hex("E5534B"), [2] = hex("FF9A4D"), [3] = hex("FFF468"),
@@ -333,7 +349,7 @@ function Ink:Text(parent, font, size, color, justify, layer)
 	fs:SetJustifyH(justify or "LEFT")
 	fs:SetJustifyV("MIDDLE")
 	fs:SetWordWrap(false)
-	fs:SetShadowColor(0, 0, 0, 0.75)
+	fs:SetShadowColor(0, 0, 0, self.shadowA or 0.75)
 	fs:SetShadowOffset(1, -1)
 	return fs
 end
