@@ -1,0 +1,164 @@
+1|성스러운 빛|1|spell_holy_holybolt|CHANGED
+6|성스러운 빛|2|spell_holy_holybolt|CHANGED
+14|성스러운 빛|3|spell_holy_holybolt|CHANGED
+22|성스러운 빛|4|spell_holy_holybolt|CHANGED
+30|성스러운 빛|5|spell_holy_holybolt|CHANGED
+38|성스러운 빛|6|spell_holy_holybolt|CHANGED
+46|성스러운 빛|7|spell_holy_holybolt|CHANGED
+54|성스러운 빛|8|spell_holy_holybolt|CHANGED
+60|성스러운 빛|9|spell_holy_holybolt|CHANGED
+1|정의의 문장|1|ability_thunderbolt|CHANGED
+10|정의의 문장|2|ability_thunderbolt|CHANGED
+18|정의의 문장|3|ability_thunderbolt|CHANGED
+26|정의의 문장|4|ability_thunderbolt|CHANGED
+34|정의의 문장|5|ability_thunderbolt|CHANGED
+42|정의의 문장|6|ability_thunderbolt|CHANGED
+50|정의의 문장|7|ability_thunderbolt|CHANGED
+58|정의의 문장|8|ability_thunderbolt|CHANGED
+1|기원의 오라|1|spell_holy_devotionaura|-
+10|기원의 오라|2|spell_holy_devotionaura|-
+20|기원의 오라|3|spell_holy_devotionaura|-
+30|기원의 오라|4|spell_holy_devotionaura|-
+40|기원의 오라|5|spell_holy_devotionaura|-
+50|기원의 오라|6|spell_holy_devotionaura|-
+60|기원의 오라|7|spell_holy_devotionaura|-
+4|힘의 축복|1|spell_holy_fistofjustice|CHANGED
+12|힘의 축복|2|spell_holy_fistofjustice|CHANGED
+22|힘의 축복|3|spell_holy_fistofjustice|CHANGED
+32|힘의 축복|4|spell_holy_fistofjustice|CHANGED
+42|힘의 축복|5|spell_holy_fistofjustice|CHANGED
+52|힘의 축복|6|spell_holy_fistofjustice|CHANGED
+60|힘의 축복|7|spell_holy_fistofjustice|CHANGED
+4|심판|-|spell_holy_righteousfury|CHANGED
+6|신의 가호|1|spell_holy_restoration|CHANGED
+18|신의 가호|2|spell_holy_restoration|CHANGED
+6|신성한 일격|1|spell_classicon_paladin|NEW
+12|신성한 일격|2|spell_classicon_paladin|NEW
+20|신성한 일격|3|spell_classicon_paladin|NEW
+28|신성한 일격|4|spell_classicon_paladin|NEW
+36|신성한 일격|5|spell_classicon_paladin|NEW
+44|신성한 일격|6|spell_classicon_paladin|NEW
+52|신성한 일격|7|spell_classicon_paladin|NEW
+60|신성한 일격|8|spell_classicon_paladin|NEW
+6|성전사의 문장|1|spell_holy_holysmite|CHANGED
+12|성전사의 문장|2|spell_holy_holysmite|CHANGED
+22|성전사의 문장|3|spell_holy_holysmite|CHANGED
+32|성전사의 문장|4|spell_holy_holysmite|CHANGED
+42|성전사의 문장|5|spell_holy_holysmite|CHANGED
+52|성전사의 문장|6|spell_holy_holysmite|CHANGED
+8|순화|-|spell_holy_purify|-
+8|심판의 망치|1|spell_holy_sealofmight|-
+24|심판의 망치|2|spell_holy_sealofmight|-
+40|심판의 망치|3|spell_holy_sealofmight|-
+54|심판의 망치|4|spell_holy_sealofmight|-
+8|무기 막기|-|ability_parry|-
+10|신의 축복|1|spell_holy_layonhands|CHANGED
+30|신의 축복|2|spell_holy_layonhands|CHANGED
+50|신의 축복|3|spell_holy_layonhands|CHANGED
+10|보호의 축복|1|spell_holy_sealofprotection|CHANGED
+24|보호의 축복|2|spell_holy_sealofprotection|CHANGED
+38|보호의 축복|3|spell_holy_sealofprotection|CHANGED
+10|정의의 격노|-|spell_holy_sealoffury|CHANGED
+10|격노의 문장|1|spell_holy_retributionaura|NEW
+18|격노의 문장|2|spell_holy_retributionaura|NEW
+26|격노의 문장|3|spell_holy_retributionaura|NEW
+34|격노의 문장|4|spell_holy_retributionaura|NEW
+42|격노의 문장|5|spell_holy_retributionaura|NEW
+50|격노의 문장|6|spell_holy_retributionaura|NEW
+58|격노의 문장|7|spell_holy_retributionaura|NEW
+12|구원|1|spell_holy_resurrection|-
+24|구원|2|spell_holy_resurrection|-
+36|구원|3|spell_holy_resurrection|-
+48|구원|4|spell_holy_resurrection|-
+60|구원|5|spell_holy_resurrection|-
+14|지혜의 축복|1|spell_holy_sealofwisdom|CHANGED
+24|지혜의 축복|2|spell_holy_sealofwisdom|CHANGED
+34|지혜의 축복|3|spell_holy_sealofwisdom|CHANGED
+44|지혜의 축복|4|spell_holy_sealofwisdom|CHANGED
+54|지혜의 축복|5|spell_holy_sealofwisdom|CHANGED
+60|지혜의 축복|6|spell_holy_sealofwisdom|CHANGED
+16|응보의 오라|1|spell_holy_auraoflight|-
+26|응보의 오라|2|spell_holy_auraoflight|-
+36|응보의 오라|3|spell_holy_auraoflight|-
+46|응보의 오라|4|spell_holy_auraoflight|-
+56|응보의 오라|5|spell_holy_auraoflight|-
+18|자유의 축복|-|spell_holy_sealofvalor|-
+20|신성화|1|spell_holy_innerfire|CHANGED
+30|신성화|2|spell_holy_innerfire|CHANGED
+40|신성화|3|spell_holy_innerfire|CHANGED
+50|신성화|4|spell_holy_innerfire|CHANGED
+60|신성화|5|spell_holy_innerfire|CHANGED
+20|신의 은총|-|spell_holy_heal|-
+20|퇴마술|1|spell_holy_excorcism_02|CHANGED
+28|퇴마술|2|spell_holy_excorcism_02|CHANGED
+36|퇴마술|3|spell_holy_excorcism_02|CHANGED
+44|퇴마술|4|spell_holy_excorcism_02|CHANGED
+52|퇴마술|5|spell_holy_excorcism_02|CHANGED
+60|퇴마술|6|spell_holy_excorcism_02|CHANGED
+20|빛의 섬광|1|spell_holy_flashheal|CHANGED
+26|빛의 섬광|2|spell_holy_flashheal|CHANGED
+34|빛의 섬광|3|spell_holy_flashheal|CHANGED
+42|빛의 섬광|4|spell_holy_flashheal|CHANGED
+50|빛의 섬광|5|spell_holy_flashheal|CHANGED
+58|빛의 섬광|6|spell_holy_flashheal|CHANGED
+20|왕의 축복|-|spell_magic_magearmor|CHANGED
+20|기사단의 보루|-|ability_paladin_shieldofthetemplar|NEW
+20|지휘의 문장|1|ability_warrior_innerrage|CHANGED
+30|지휘의 문장|2|ability_warrior_innerrage|CHANGED
+40|지휘의 문장|3|ability_warrior_innerrage|CHANGED
+50|지휘의 문장|4|ability_warrior_innerrage|CHANGED
+60|지휘의 문장|5|ability_warrior_innerrage|CHANGED
+22|집중의 오라|-|spell_holy_mindsooth|-
+22|심판의 문장|-|spell_holy_sealofwrath|-
+24|언데드 퇴치|1|spell_holy_turnundead|-
+38|언데드 퇴치|2|spell_holy_turnundead|-
+52|언데드 퇴치|3|spell_holy_turnundead|-
+25|빛의 서약|-|spell_holy_greaterblessingoflight|NEW
+25|신속한 심판|-|ability_paladin_judgementred|NEW
+28|암흑 저항의 오라|1|spell_shadow_sealofkings|CHANGED
+40|암흑 저항의 오라|2|spell_shadow_sealofkings|CHANGED
+52|암흑 저항의 오라|3|spell_shadow_sealofkings|CHANGED
+30|신성 충격|1|spell_holy_searinglight|CHANGED
+40|신성 충격|2|spell_holy_searinglight|CHANGED
+48|신성 충격|3|spell_holy_searinglight|CHANGED
+56|신성 충격|4|spell_holy_searinglight|CHANGED
+30|빛의 문장|1|spell_holy_healingaura|CHANGED
+40|빛의 문장|2|spell_holy_healingaura|CHANGED
+50|빛의 문장|3|spell_holy_healingaura|CHANGED
+60|빛의 문장|4|spell_holy_healingaura|CHANGED
+30|성스러운 중재|-|spell_nature_timestop|-
+30|신성한 방패|1|spell_holy_blessingofprotection|CHANGED
+40|신성한 방패|2|spell_holy_blessingofprotection|CHANGED
+50|신성한 방패|3|spell_holy_blessingofprotection|CHANGED
+30|참회|-|spell_holy_prayerofhealing|-
+32|냉기 저항의 오라|1|spell_frost_wizardmark|CHANGED
+44|냉기 저항의 오라|2|spell_frost_wizardmark|CHANGED
+56|냉기 저항의 오라|3|spell_frost_wizardmark|CHANGED
+34|천상의 보호막|1|spell_holy_divineintervention|CHANGED
+50|천상의 보호막|2|spell_holy_divineintervention|CHANGED
+36|화염 저항의 오라|1|spell_fire_sealoffire|CHANGED
+48|화염 저항의 오라|2|spell_fire_sealoffire|CHANGED
+60|화염 저항의 오라|3|spell_fire_sealoffire|CHANGED
+38|지혜의 문장|1|spell_holy_righteousnessaura|CHANGED
+48|지혜의 문장|2|spell_holy_righteousnessaura|CHANGED
+58|지혜의 문장|3|spell_holy_righteousnessaura|CHANGED
+40|빛의 경계|1|ability_paladin_judgementofthepure|NEW
+50|빛의 경계|2|ability_paladin_judgementofthepure|NEW
+60|빛의 경계|3|ability_paladin_judgementofthepure|NEW
+40|전투마 소환|-|spell_nature_swiftness|CHANGED
+40|정의의 망치|-|ability_paladin_hammeroftherighteous|NEW
+40|판금 갑옷|-|inv_chest_plate01|-
+42|정화|-|spell_holy_renew|-
+44|천벌의 망치|1|ability_thunderclap|CHANGED
+52|천벌의 망치|2|ability_thunderclap|CHANGED
+60|천벌의 망치|3|ability_thunderclap|CHANGED
+46|희생의 축복|1|spell_holy_sealofsacrifice|-
+54|희생의 축복|2|spell_holy_sealofsacrifice|-
+50|신의 격노|1|spell_holy_excorcism|CHANGED
+60|신의 격노|2|spell_holy_excorcism|CHANGED
+52|상급 힘의 축복|1|spell_holy_greaterblessingofkings|CHANGED
+60|상급 힘의 축복|2|spell_holy_greaterblessingofkings|CHANGED
+54|상급 지혜의 축복|1|spell_holy_greaterblessingofwisdom|CHANGED
+60|상급 지혜의 축복|2|spell_holy_greaterblessingofwisdom|CHANGED
+60|군마 소환|-|ability_mount_charger|CHANGED
+60|상급 왕의 축복|-|spell_magic_greaterblessingofkings|CHANGED

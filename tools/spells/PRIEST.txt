@@ -1,0 +1,241 @@
+1|하급 치유|1|spell_holy_lesserheal.jpg|CHANGED
+4|하급 치유|2|spell_holy_lesserheal.jpg|CHANGED
+10|하급 치유|3|spell_holy_lesserheal.jpg|CHANGED
+1|성스러운 일격|1|spell_holy_holysmite.jpg|CHANGED
+6|성스러운 일격|2|spell_holy_holysmite.jpg|CHANGED
+14|성스러운 일격|3|spell_holy_holysmite.jpg|CHANGED
+22|성스러운 일격|4|spell_holy_holysmite.jpg|CHANGED
+30|성스러운 일격|5|spell_holy_holysmite.jpg|CHANGED
+38|성스러운 일격|6|spell_holy_holysmite.jpg|CHANGED
+46|성스러운 일격|7|spell_holy_holysmite.jpg|CHANGED
+54|성스러운 일격|8|spell_holy_holysmite.jpg|CHANGED
+1|신의 권능: 인내|1|spell_holy_wordfortitude.jpg|CHANGED
+12|신의 권능: 인내|2|spell_holy_wordfortitude.jpg|CHANGED
+24|신의 권능: 인내|3|spell_holy_wordfortitude.jpg|CHANGED
+36|신의 권능: 인내|4|spell_holy_wordfortitude.jpg|CHANGED
+48|신의 권능: 인내|5|spell_holy_wordfortitude.jpg|CHANGED
+60|신의 권능: 인내|6|spell_holy_wordfortitude.jpg|CHANGED
+4|어둠의 권능: 고통|1|spell_shadow_shadowwordpain.jpg|CHANGED
+10|어둠의 권능: 고통|2|spell_shadow_shadowwordpain.jpg|CHANGED
+18|어둠의 권능: 고통|3|spell_shadow_shadowwordpain.jpg|CHANGED
+26|어둠의 권능: 고통|4|spell_shadow_shadowwordpain.jpg|CHANGED
+34|어둠의 권능: 고통|5|spell_shadow_shadowwordpain.jpg|CHANGED
+42|어둠의 권능: 고통|6|spell_shadow_shadowwordpain.jpg|CHANGED
+50|어둠의 권능: 고통|7|spell_shadow_shadowwordpain.jpg|CHANGED
+58|어둠의 권능: 고통|8|spell_shadow_shadowwordpain.jpg|CHANGED
+6|신의 권능: 보호막|1|spell_holy_powerwordshield.jpg|CHANGED
+12|신의 권능: 보호막|2|spell_holy_powerwordshield.jpg|CHANGED
+18|신의 권능: 보호막|3|spell_holy_powerwordshield.jpg|CHANGED
+24|신의 권능: 보호막|4|spell_holy_powerwordshield.jpg|CHANGED
+30|신의 권능: 보호막|5|spell_holy_powerwordshield.jpg|CHANGED
+36|신의 권능: 보호막|6|spell_holy_powerwordshield.jpg|CHANGED
+42|신의 권능: 보호막|7|spell_holy_powerwordshield.jpg|CHANGED
+48|신의 권능: 보호막|8|spell_holy_powerwordshield.jpg|CHANGED
+54|신의 권능: 보호막|9|spell_holy_powerwordshield.jpg|CHANGED
+60|신의 권능: 보호막|10|spell_holy_powerwordshield.jpg|CHANGED
+8|소생|1|spell_holy_renew.jpg|CHANGED
+14|소생|2|spell_holy_renew.jpg|CHANGED
+20|소생|3|spell_holy_renew.jpg|CHANGED
+26|소생|4|spell_holy_renew.jpg|CHANGED
+32|소생|5|spell_holy_renew.jpg|CHANGED
+38|소생|6|spell_holy_renew.jpg|CHANGED
+44|소생|7|spell_holy_renew.jpg|CHANGED
+50|소생|8|spell_holy_renew.jpg|CHANGED
+56|소생|9|spell_holy_renew.jpg|CHANGED
+60|소생|10|spell_holy_renew.jpg|CHANGED
+8|소실|1|spell_magic_lesserinvisibilty.jpg|-
+20|소실|2|spell_magic_lesserinvisibilty.jpg|-
+30|소실|3|spell_magic_lesserinvisibilty.jpg|-
+40|소실|4|spell_magic_lesserinvisibilty.jpg|-
+50|소실|5|spell_magic_lesserinvisibilty.jpg|-
+60|소실|6|spell_magic_lesserinvisibilty.jpg|-
+10|교란의 섬광|-|ability_paladin_blindinglight2.jpg|NEW
+10|구원의 기도|1|spell_holy_restoration.jpg|CHANGED
+18|구원의 기도|2|spell_holy_restoration.jpg|CHANGED
+26|구원의 기도|3|spell_holy_restoration.jpg|CHANGED
+34|구원의 기도|4|spell_holy_restoration.jpg|CHANGED
+42|구원의 기도|5|spell_holy_restoration.jpg|CHANGED
+50|구원의 기도|6|spell_holy_restoration.jpg|CHANGED
+58|구원의 기도|7|spell_holy_restoration.jpg|CHANGED
+10|정신 분열|1|spell_shadow_unholyfrenzy.jpg|CHANGED
+16|정신 분열|2|spell_shadow_unholyfrenzy.jpg|CHANGED
+22|정신 분열|3|spell_shadow_unholyfrenzy.jpg|CHANGED
+28|정신 분열|4|spell_shadow_unholyfrenzy.jpg|CHANGED
+34|정신 분열|5|spell_shadow_unholyfrenzy.jpg|CHANGED
+40|정신 분열|6|spell_shadow_unholyfrenzy.jpg|CHANGED
+46|정신 분열|7|spell_shadow_unholyfrenzy.jpg|CHANGED
+52|정신 분열|8|spell_shadow_unholyfrenzy.jpg|CHANGED
+58|정신 분열|9|spell_shadow_unholyfrenzy.jpg|CHANGED
+10|무력의 손길|1|spell_shadow_deadofnight.jpg|CHANGED
+20|무력의 손길|2|spell_shadow_deadofnight.jpg|CHANGED
+30|무력의 손길|3|spell_shadow_deadofnight.jpg|CHANGED
+40|무력의 손길|4|spell_shadow_deadofnight.jpg|CHANGED
+50|무력의 손길|5|spell_shadow_deadofnight.jpg|CHANGED
+60|무력의 손길|6|spell_shadow_deadofnight.jpg|CHANGED
+10|별조각|1|spell_arcane_starfire.jpg|CHANGED
+18|별조각|2|spell_arcane_starfire.jpg|CHANGED
+26|별조각|3|spell_arcane_starfire.jpg|CHANGED
+34|별조각|4|spell_arcane_starfire.jpg|CHANGED
+42|별조각|5|spell_arcane_starfire.jpg|CHANGED
+50|별조각|6|spell_arcane_starfire.jpg|CHANGED
+58|별조각|7|spell_arcane_starfire.jpg|CHANGED
+10|신성한 은총|1|ability_priest_savinggrace.jpg|NEW
+18|신성한 은총|2|ability_priest_savinggrace.jpg|NEW
+26|신성한 은총|3|ability_priest_savinggrace.jpg|NEW
+34|신성한 은총|4|ability_priest_savinggrace.jpg|NEW
+42|신성한 은총|5|ability_priest_savinggrace.jpg|NEW
+50|신성한 은총|6|ability_priest_savinggrace.jpg|NEW
+58|신성한 은총|7|ability_priest_savinggrace.jpg|NEW
+10|부활|1|spell_holy_resurrection.jpg|-
+22|부활|2|spell_holy_resurrection.jpg|-
+34|부활|3|spell_holy_resurrection.jpg|-
+46|부활|4|spell_holy_resurrection.jpg|-
+58|부활|5|spell_holy_resurrection.jpg|-
+10|약화의 사술|1|spell_shadow_fingerofdeath.jpg|CHANGED
+20|약화의 사술|2|spell_shadow_fingerofdeath.jpg|CHANGED
+30|약화의 사술|3|spell_shadow_fingerofdeath.jpg|CHANGED
+40|약화의 사술|4|spell_shadow_fingerofdeath.jpg|CHANGED
+50|약화의 사술|5|spell_shadow_fingerofdeath.jpg|CHANGED
+60|약화의 사술|6|spell_shadow_fingerofdeath.jpg|CHANGED
+12|내면의 열정|1|spell_holy_innerfire.jpg|-
+20|내면의 열정|2|spell_holy_innerfire.jpg|-
+30|내면의 열정|3|spell_holy_innerfire.jpg|-
+40|내면의 열정|4|spell_holy_innerfire.jpg|-
+50|내면의 열정|5|spell_holy_innerfire.jpg|-
+60|내면의 열정|6|spell_holy_innerfire.jpg|-
+14|영혼의 절규|1|spell_shadow_psychicscream.jpg|-
+28|영혼의 절규|2|spell_shadow_psychicscream.jpg|-
+42|영혼의 절규|3|spell_shadow_psychicscream.jpg|-
+56|영혼의 절규|4|spell_shadow_psychicscream.jpg|-
+14|질병 치료|-|spell_holy_nullifydisease.jpg|-
+16|치유|1|spell_holy_heal.jpg|CHANGED
+22|치유|2|spell_holy_heal.jpg|CHANGED
+28|치유|3|spell_holy_heal.jpg|CHANGED
+34|치유|4|spell_holy_heal.jpg|CHANGED
+18|마법 무효화|1|spell_holy_dispelmagic.jpg|-
+36|마법 무효화|2|spell_holy_dispelmagic.jpg|-
+20|내면의 집중력|-|spell_frost_windwalkon.jpg|-
+20|응징|1|spell_holy_chastise.jpg|NEW
+30|응징|2|spell_holy_chastise.jpg|NEW
+40|응징|3|spell_holy_chastise.jpg|NEW
+50|응징|4|spell_holy_chastise.jpg|NEW
+60|응징|5|spell_holy_chastise.jpg|NEW
+20|공포의 수호물|-|spell_holy_excorcism.jpg|CHANGED
+20|신성한 폭발|1|spell_holy_holynova.jpg|CHANGED
+28|신성한 폭발|2|spell_holy_holynova.jpg|CHANGED
+36|신성한 폭발|3|spell_holy_holynova.jpg|CHANGED
+44|신성한 폭발|4|spell_holy_holynova.jpg|CHANGED
+52|신성한 폭발|5|spell_holy_holynova.jpg|CHANGED
+60|신성한 폭발|6|spell_holy_holynova.jpg|CHANGED
+20|어둠의 희생|1|spell_holy_powerinfusion_shadow.jpg|NEW
+30|어둠의 희생|2|spell_holy_powerinfusion_shadow.jpg|NEW
+40|어둠의 희생|3|spell_holy_powerinfusion_shadow.jpg|NEW
+50|어둠의 희생|4|spell_holy_powerinfusion_shadow.jpg|NEW
+60|어둠의 희생|5|spell_holy_powerinfusion_shadow.jpg|NEW
+20|정신의 채찍|1|spell_shadow_siphonmana.jpg|CHANGED
+28|정신의 채찍|2|spell_shadow_siphonmana.jpg|CHANGED
+36|정신의 채찍|3|spell_shadow_siphonmana.jpg|CHANGED
+44|정신의 채찍|4|spell_shadow_siphonmana.jpg|CHANGED
+52|정신의 채찍|5|spell_shadow_siphonmana.jpg|CHANGED
+60|정신의 채찍|6|spell_shadow_siphonmana.jpg|CHANGED
+20|평정|1|spell_holy_mindsooth.jpg|-
+36|평정|2|spell_holy_mindsooth.jpg|-
+52|평정|3|spell_holy_mindsooth.jpg|-
+20|어둠의 수호|1|spell_nature_lightningshield.jpg|CHANGED
+28|어둠의 수호|2|spell_nature_lightningshield.jpg|CHANGED
+36|어둠의 수호|3|spell_nature_lightningshield.jpg|CHANGED
+44|어둠의 수호|4|spell_nature_lightningshield.jpg|CHANGED
+52|어둠의 수호|5|spell_nature_lightningshield.jpg|CHANGED
+60|어둠의 수호|6|spell_nature_lightningshield.jpg|CHANGED
+20|비상 대책|1|ability_priest_soulwarding.jpg|NEW
+30|비상 대책|2|ability_priest_soulwarding.jpg|NEW
+40|비상 대책|3|ability_priest_soulwarding.jpg|NEW
+50|비상 대책|4|ability_priest_soulwarding.jpg|NEW
+60|비상 대책|5|ability_priest_soulwarding.jpg|NEW
+20|엘룬의 은총|-|spell_holy_elunesgrace.jpg|CHANGED
+20|역순환|1|spell_shadow_ritualofsacrifice.jpg|CHANGED
+30|역순환|2|spell_shadow_ritualofsacrifice.jpg|CHANGED
+40|역순환|3|spell_shadow_ritualofsacrifice.jpg|CHANGED
+50|역순환|4|spell_shadow_ritualofsacrifice.jpg|CHANGED
+60|역순환|5|spell_shadow_ritualofsacrifice.jpg|CHANGED
+20|언데드 속박|1|spell_nature_slow.jpg|-
+40|언데드 속박|2|spell_nature_slow.jpg|-
+60|언데드 속박|3|spell_nature_slow.jpg|-
+20|순간 치유|1|spell_holy_flashheal.jpg|CHANGED
+26|순간 치유|2|spell_holy_flashheal.jpg|CHANGED
+32|순간 치유|3|spell_holy_flashheal.jpg|CHANGED
+38|순간 치유|4|spell_holy_flashheal.jpg|CHANGED
+44|순간 치유|5|spell_holy_flashheal.jpg|CHANGED
+50|순간 치유|6|spell_holy_flashheal.jpg|CHANGED
+56|순간 치유|7|spell_holy_flashheal.jpg|CHANGED
+20|신성한 불꽃|1|spell_holy_searinglight.jpg|CHANGED
+24|신성한 불꽃|2|spell_holy_searinglight.jpg|CHANGED
+30|신성한 불꽃|3|spell_holy_searinglight.jpg|CHANGED
+36|신성한 불꽃|4|spell_holy_searinglight.jpg|CHANGED
+42|신성한 불꽃|5|spell_holy_searinglight.jpg|CHANGED
+48|신성한 불꽃|6|spell_holy_searinglight.jpg|CHANGED
+54|신성한 불꽃|7|spell_holy_searinglight.jpg|CHANGED
+60|신성한 불꽃|8|spell_holy_searinglight.jpg|CHANGED
+20|파멸의 역병|1|spell_shadow_devouringplague.jpg|CHANGED
+28|파멸의 역병|2|spell_shadow_devouringplague.jpg|CHANGED
+36|파멸의 역병|3|spell_shadow_devouringplague.jpg|CHANGED
+44|파멸의 역병|4|spell_shadow_devouringplague.jpg|CHANGED
+52|파멸의 역병|5|spell_shadow_devouringplague.jpg|CHANGED
+60|파멸의 역병|6|spell_shadow_devouringplague.jpg|CHANGED
+22|마음의 눈|1|spell_holy_mindvision.jpg|-
+44|마음의 눈|2|spell_holy_mindvision.jpg|-
+24|마나 연소|1|spell_shadow_manaburn.jpg|CHANGED
+32|마나 연소|2|spell_shadow_manaburn.jpg|CHANGED
+40|마나 연소|3|spell_shadow_manaburn.jpg|CHANGED
+48|마나 연소|4|spell_shadow_manaburn.jpg|CHANGED
+56|마나 연소|5|spell_shadow_manaburn.jpg|CHANGED
+25|흡혈의 선물|-|spell_shadow_unsummonbuilding.jpg|CHANGED
+25|결속의 치유|1|spell_holy_blindingheal.jpg|NEW
+32|결속의 치유|2|spell_holy_blindingheal.jpg|NEW
+38|결속의 치유|3|spell_holy_blindingheal.jpg|NEW
+44|결속의 치유|4|spell_holy_blindingheal.jpg|NEW
+50|결속의 치유|5|spell_holy_blindingheal.jpg|NEW
+56|결속의 치유|6|spell_holy_blindingheal.jpg|NEW
+30|회개|1|spell_holy_penance.jpg|NEW
+40|회개|2|spell_holy_penance.jpg|NEW
+50|회개|3|spell_holy_penance.jpg|NEW
+60|회개|4|spell_holy_penance.jpg|NEW
+30|정신 지배|1|spell_shadow_shadowworddominate.jpg|CHANGED
+44|정신 지배|2|spell_shadow_shadowworddominate.jpg|CHANGED
+58|정신 지배|3|spell_shadow_shadowworddominate.jpg|CHANGED
+30|침묵|-|spell_shadow_impphaseshift.jpg|CHANGED
+30|천상의 정신|1|spell_holy_divinespirit.jpg|CHANGED
+40|천상의 정신|2|spell_holy_divinespirit.jpg|CHANGED
+50|천상의 정신|3|spell_holy_divinespirit.jpg|CHANGED
+60|천상의 정신|4|spell_holy_divinespirit.jpg|CHANGED
+30|치유의 기원|1|spell_holy_prayerofhealing02.jpg|CHANGED
+40|치유의 기원|2|spell_holy_prayerofhealing02.jpg|CHANGED
+50|치유의 기원|3|spell_holy_prayerofhealing02.jpg|CHANGED
+60|치유의 기원|4|spell_holy_prayerofhealing02.jpg|CHANGED
+60|치유의 기원|5|spell_holy_prayerofhealing02.jpg|CHANGED
+30|어둠의 보호|1|spell_shadow_antishadow.jpg|-
+42|어둠의 보호|2|spell_shadow_antishadow.jpg|-
+56|어둠의 보호|3|spell_shadow_antishadow.jpg|-
+32|어둠의 권능: 죽음|1|spell_shadow_demonicfortitude.jpg|NEW
+40|어둠의 권능: 죽음|2|spell_shadow_demonicfortitude.jpg|NEW
+48|어둠의 권능: 죽음|3|spell_shadow_demonicfortitude.jpg|NEW
+56|어둠의 권능: 죽음|4|spell_shadow_demonicfortitude.jpg|NEW
+32|질병 해제|-|spell_nature_nullifydisease.jpg|-
+34|공중 부양|-|spell_holy_layonhands.jpg|CHANGED
+40|마력 주입|-|spell_holy_powerinfusion.jpg|-
+40|상급 치유|1|spell_holy_greaterheal.jpg|CHANGED
+46|상급 치유|2|spell_holy_greaterheal.jpg|CHANGED
+52|상급 치유|3|spell_holy_greaterheal.jpg|CHANGED
+58|상급 치유|4|spell_holy_greaterheal.jpg|CHANGED
+60|상급 치유|5|spell_holy_greaterheal.jpg|CHANGED
+40|빛샘|1|spell_holy_summonlightwell.jpg|-
+50|빛샘|2|spell_holy_summonlightwell.jpg|-
+60|빛샘|3|spell_holy_summonlightwell.jpg|-
+40|회복의 기원|1|spell_holy_prayerofmendingtga.jpg|NEW
+50|회복의 기원|2|spell_holy_prayerofmendingtga.jpg|NEW
+60|회복의 기원|3|spell_holy_prayerofmendingtga.jpg|NEW
+40|어둠의 형상|-|spell_shadow_shadowform.jpg|CHANGED
+48|인내의 기원|1|spell_holy_prayeroffortitude.jpg|CHANGED
+60|인내의 기원|2|spell_holy_prayeroffortitude.jpg|CHANGED
+56|암흑 보호의 기원|-|spell_holy_prayerofshadowprotection.jpg|CHANGED
+60|정신력의 기원|-|spell_holy_prayerofspirit.jpg|CHANGED

@@ -1,0 +1,128 @@
+1|절개|1|ability_rogue_eviscerate|CHANGED
+8|절개|2|ability_rogue_eviscerate|CHANGED
+16|절개|3|ability_rogue_eviscerate|CHANGED
+24|절개|4|ability_rogue_eviscerate|CHANGED
+32|절개|5|ability_rogue_eviscerate|CHANGED
+40|절개|6|ability_rogue_eviscerate|CHANGED
+48|절개|7|ability_rogue_eviscerate|CHANGED
+56|절개|8|ability_rogue_eviscerate|CHANGED
+60|절개|9|ability_rogue_eviscerate|CHANGED
+1|사악한 일격|1|spell_shadow_ritualofsacrifice|-
+6|사악한 일격|2|spell_shadow_ritualofsacrifice|-
+14|사악한 일격|3|spell_shadow_ritualofsacrifice|-
+22|사악한 일격|4|spell_shadow_ritualofsacrifice|-
+30|사악한 일격|5|spell_shadow_ritualofsacrifice|-
+38|사악한 일격|6|spell_shadow_ritualofsacrifice|-
+46|사악한 일격|7|spell_shadow_ritualofsacrifice|-
+54|사악한 일격|8|spell_shadow_ritualofsacrifice|-
+1|자물쇠 따기|-|spell_nature_moonkey|-
+1|은신|1|ability_stealth|-
+20|은신|2|ability_stealth|-
+40|은신|3|ability_stealth|-
+60|은신|4|ability_stealth|-
+4|기습|1|ability_backstab|CHANGED
+12|기습|2|ability_backstab|CHANGED
+20|기습|3|ability_backstab|CHANGED
+28|기습|4|ability_backstab|CHANGED
+36|기습|5|ability_backstab|CHANGED
+44|기습|6|ability_backstab|CHANGED
+52|기습|7|ability_backstab|CHANGED
+60|기습|8|ability_backstab|CHANGED
+4|훔치기|-|inv_misc_bag_11|-
+6|후려치기|1|ability_gouge|CHANGED
+18|후려치기|2|ability_gouge|CHANGED
+32|후려치기|3|ability_gouge|CHANGED
+46|후려치기|4|ability_gouge|CHANGED
+60|후려치기|5|ability_gouge|CHANGED
+8|회피|-|spell_shadow_shadowward|-
+10|난도질|1|ability_rogue_slicedice|CHANGED
+42|난도질|2|ability_rogue_slicedice|CHANGED
+10|전력 질주|1|ability_rogue_sprint|-
+34|전력 질주|2|ability_rogue_sprint|-
+58|전력 질주|3|ability_rogue_sprint|-
+10|기절시키기|1|ability_sap|CHANGED
+28|기절시키기|2|ability_sap|CHANGED
+48|기절시키기|3|ability_sap|CHANGED
+10|쌍수 무기|-|ability_dualwield|-
+12|발차기|1|ability_kick|-
+26|발차기|2|ability_kick|-
+42|발차기|3|ability_kick|-
+58|발차기|4|ability_kick|-
+12|무기 막기|-|ability_parry|-
+14|약점 노출|1|ability_warrior_riposte|CHANGED
+26|약점 노출|2|ability_warrior_riposte|CHANGED
+36|약점 노출|3|ability_warrior_riposte|CHANGED
+46|약점 노출|4|ability_warrior_riposte|CHANGED
+56|약점 노출|5|ability_warrior_riposte|CHANGED
+14|목조르기|1|ability_rogue_garrote|-
+22|목조르기|2|ability_rogue_garrote|-
+30|목조르기|3|ability_rogue_garrote|-
+38|목조르기|4|ability_rogue_garrote|-
+46|목조르기|5|ability_rogue_garrote|-
+54|목조르기|6|ability_rogue_garrote|-
+16|교란|1|ability_rogue_feint|-
+28|교란|2|ability_rogue_feint|-
+40|교란|3|ability_rogue_feint|-
+52|교란|4|ability_rogue_feint|-
+60|교란|5|ability_rogue_feint|-
+18|매복|1|ability_rogue_ambush|-
+26|매복|2|ability_rogue_ambush|-
+34|매복|3|ability_rogue_ambush|-
+42|매복|4|ability_rogue_ambush|-
+50|매복|5|ability_rogue_ambush|-
+58|매복|6|ability_rogue_ambush|-
+18|침착|-|ability_rogue_fleetfooted|NEW
+20|파열|1|ability_rogue_rupture|CHANGED
+28|파열|2|ability_rogue_rupture|CHANGED
+36|파열|3|ability_rogue_rupture|CHANGED
+44|파열|4|ability_rogue_rupture|CHANGED
+52|파열|5|ability_rogue_rupture|CHANGED
+60|파열|6|ability_rogue_rupture|CHANGED
+20|반격|-|ability_warrior_challange|-
+20|사전계획|-|spell_shadow_possession|CHANGED
+20|신경 마비 독|1|ability_poisonsting|-
+50|신경 마비 독|2|ability_poisonsting|-
+20|순간 효과 독|1|ability_poisons|CHANGED
+28|순간 효과 독|2|ability_poisons|CHANGED
+36|순간 효과 독|3|ability_poisons|CHANGED
+44|순간 효과 독|4|ability_poisons|CHANGED
+52|순간 효과 독|5|ability_poisons|CHANGED
+60|순간 효과 독|6|ability_poisons|CHANGED
+20|독 조제|-|trade_brewpoison|-
+22|혼란|-|ability_rogue_distract|CHANGED
+22|소멸|1|ability_vanish|-
+42|소멸|2|ability_vanish|-
+24|찌르기|1|ability_theblackarrow|NEW
+44|찌르기|2|ability_theblackarrow|NEW
+24|함정 감지|-|ability_spy|-
+24|정신 마비 독|1|spell_nature_nullifydisease|CHANGED
+38|정신 마비 독|2|spell_nature_nullifydisease|CHANGED
+52|정신 마비 독|3|spell_nature_nullifydisease|CHANGED
+25|냉혈|-|spell_ice_lament|CHANGED
+25|그림자 일격|-|spell_shadow_curse|CHANGED
+26|비열한 습격|-|ability_cheapshot|-
+30|급소 가격|1|ability_rogue_kidneyshot|CHANGED
+50|급소 가격|2|ability_rogue_kidneyshot|CHANGED
+30|함정 해제|-|spell_shadow_grimward|-
+30|과다출혈|-|spell_shadow_lifedrain|CHANGED
+30|마음가짐|-|spell_shadow_antishadow|-
+30|맹독|1|ability_rogue_dualweild|CHANGED
+38|맹독|2|ability_rogue_dualweild|CHANGED
+46|맹독|3|ability_rogue_dualweild|CHANGED
+54|맹독|4|ability_rogue_dualweild|CHANGED
+60|맹독|5|ability_rogue_dualweild|CHANGED
+32|상처 감염 독|1|inv_misc_herb_16|CHANGED
+40|상처 감염 독|2|inv_misc_herb_16|CHANGED
+48|상처 감염 독|3|inv_misc_herb_16|CHANGED
+56|상처 감염 독|4|inv_misc_herb_16|CHANGED
+34|실명|-|spell_shadow_mindsteal|-
+34|실명 가루|-|inv_misc_ammo_gunpowder_02|-
+40|절단|1|ability_rogue_deadlybrew|NEW
+50|절단|2|ability_rogue_deadlybrew|NEW
+60|절단|3|ability_rogue_deadlybrew|NEW
+40|아드레날린 촉진|-|spell_shadow_shadowworddominate|-
+40|죽음의 징표|1|ability_creature_cursed_02|NEW
+48|죽음의 징표|2|ability_creature_cursed_02|NEW
+56|죽음의 징표|3|ability_creature_cursed_02|NEW
+60|죽음의 징표|4|ability_creature_cursed_02|NEW
+40|낙법|-|inv_feather_01|-

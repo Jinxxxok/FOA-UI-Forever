@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.39.1"
+Ink.version = "0.40.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -917,6 +917,42 @@ function Ink:Brand(parent, h, uiColor)
 	return f, f.ui
 end
 
+-- 창 옮기기: 빈 곳을 끌어서 옮기고 위치는 기준 창(host)의 오른쪽 위 기준으로 기억 · 오른쪽 클릭하면 기본 자리
+function Ink:MakeDraggable(f, key, host)
+	f:SetMovable(true)
+	f:EnableMouse(true)
+	f:RegisterForDrag("LeftButton")
+	f:SetScript("OnDragStart", function(self)
+		if InCombatLockdown() and self:IsProtected() then return end
+		self.foaMoving = true
+		self:StartMoving()
+	end)
+	f:SetScript("OnDragStop", function(self)
+		self:StopMovingOrSizing()
+		self.foaMoving = nil
+		local h = host or self:GetParent()
+		if not (h and self:GetLeft() and h:GetRight()) then return end
+		local s, hs = self:GetEffectiveScale(), h:GetEffectiveScale()
+		local dx = self:GetLeft() * s / hs - h:GetRight()
+		local dy = self:GetTop() * s / hs - h:GetTop()
+		Ink.db.panelPos = Ink.db.panelPos or {}
+		Ink.db.panelPos[key] = { math.floor(dx + 0.5), math.floor(dy + 0.5) }
+		self:ClearAllPoints()
+		self:SetPoint("TOPLEFT", h, "TOPRIGHT", Ink.db.panelPos[key][1], Ink.db.panelPos[key][2])
+	end)
+	f:SetScript("OnMouseUp", function(self, btn)
+		if btn ~= "RightButton" or not IsShiftKeyDown() then return end
+		if Ink.db.panelPos then Ink.db.panelPos[key] = nil end
+		if self.foaResetPos then self:foaResetPos() end
+	end)
+end
+
+function Ink:PanelPoint(f, key, host, dx, dy)
+	local pos = Ink.db.panelPos and Ink.db.panelPos[key]
+	f:ClearAllPoints()
+	f:SetPoint("TOPLEFT", host, "TOPRIGHT", pos and pos[1] or dx, pos and pos[2] or dy)
+end
+
 function Ink:Module(name)
 	local m = { name = name }
 	table.insert(self.modules, m)
@@ -983,6 +1019,11 @@ local defaults = {
 	actionBars = true,
 	itemCompare = true,
 	talentGuide = true,
+	training = true,
+	profGuide = true,
+	ahTooltip = true,
+	mapEntrances = true,
+	dungeonBoard = true,
 	range = true,
 	questToast = true,
 	mapLayer = true,

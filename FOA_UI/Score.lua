@@ -526,7 +526,14 @@ local function Line(tt, r)
 	end
 	if r.level then txt = txt .. string.format("  |cffFFF468%d레벨부터|r", r.level) end
 	local right = FOREVER and M:ProfileName() or M:RetailOrder()
-	tt:AddDoubleLine(txt, string.format("|cff5E636B%s|r", right or ""))
+	-- 아이템 점수 (FOA 가중치 합) · 착용 중인 것의 점수와 같이
+	local sc = ""
+	if r.new and r.new > 0 then
+		sc = string.format("|cffE3C07A점수 %d|r", math.floor(r.new + 0.5))
+		if r.old and r.old > 0 and not r.empty then sc = sc .. string.format(" |cff5E636B(지금 %d)|r", math.floor(r.old + 0.5)) end
+		sc = sc .. "  "
+	end
+	tt:AddDoubleLine(txt, sc .. string.format("|cff5E636B%s|r", right or ""))
 end
 
 function M:HookTooltip()

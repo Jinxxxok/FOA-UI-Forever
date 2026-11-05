@@ -1,0 +1,192 @@
+4|원숭이의 상|-|ability_hunter_aspectofthemonkey.jpg|CHANGED
+1|자동 사격|-|ability_whirlwind.jpg|-
+1|랩터의 일격|1|ability_meleedamage.jpg|CHANGED
+8|랩터의 일격|2|ability_meleedamage.jpg|CHANGED
+16|랩터의 일격|3|ability_meleedamage.jpg|CHANGED
+24|랩터의 일격|4|ability_meleedamage.jpg|CHANGED
+32|랩터의 일격|5|ability_meleedamage.jpg|CHANGED
+40|랩터의 일격|6|ability_meleedamage.jpg|CHANGED
+48|랩터의 일격|7|ability_meleedamage.jpg|CHANGED
+56|랩터의 일격|8|ability_meleedamage.jpg|CHANGED
+1|야수 추적|-|ability_tracking.jpg|-
+1|할퀴기|1|ability_druid_rake.jpg|-
+8|할퀴기|2|ability_druid_rake.jpg|-
+16|할퀴기|3|ability_druid_rake.jpg|-
+24|할퀴기|4|ability_druid_rake.jpg|-
+32|할퀴기|5|ability_druid_rake.jpg|-
+40|할퀴기|6|ability_druid_rake.jpg|-
+48|할퀴기|7|ability_druid_rake.jpg|-
+56|할퀴기|8|ability_druid_rake.jpg|-
+1|포효|1|ability_physical_taunt.jpg|-
+10|포효|2|ability_physical_taunt.jpg|-
+20|포효|3|ability_physical_taunt.jpg|-
+30|포효|4|ability_physical_taunt.jpg|-
+40|포효|5|ability_physical_taunt.jpg|-
+50|포효|6|ability_physical_taunt.jpg|-
+60|포효|7|ability_physical_taunt.jpg|-
+4|독사 쐐기|1|ability_hunter_quickshot.jpg|CHANGED
+10|독사 쐐기|2|ability_hunter_quickshot.jpg|CHANGED
+18|독사 쐐기|3|ability_hunter_quickshot.jpg|CHANGED
+26|독사 쐐기|4|ability_hunter_quickshot.jpg|CHANGED
+34|독사 쐐기|5|ability_hunter_quickshot.jpg|CHANGED
+42|독사 쐐기|6|ability_hunter_quickshot.jpg|CHANGED
+50|독사 쐐기|7|ability_hunter_quickshot.jpg|CHANGED
+58|독사 쐐기|8|ability_hunter_quickshot.jpg|CHANGED
+60|독사 쐐기|9|ability_hunter_quickshot.jpg|CHANGED
+6|신비한 사격|1|ability_impalingbolt.jpg|CHANGED
+12|신비한 사격|2|ability_impalingbolt.jpg|CHANGED
+20|신비한 사격|3|ability_impalingbolt.jpg|CHANGED
+28|신비한 사격|4|ability_impalingbolt.jpg|CHANGED
+36|신비한 사격|5|ability_impalingbolt.jpg|CHANGED
+44|신비한 사격|6|ability_impalingbolt.jpg|CHANGED
+52|신비한 사격|7|ability_impalingbolt.jpg|CHANGED
+60|신비한 사격|8|ability_impalingbolt.jpg|CHANGED
+6|사냥꾼의 징표|1|ability_hunter_snipershot.jpg|CHANGED
+22|사냥꾼의 징표|2|ability_hunter_snipershot.jpg|CHANGED
+40|사냥꾼의 징표|3|ability_hunter_snipershot.jpg|CHANGED
+58|사냥꾼의 징표|4|ability_hunter_snipershot.jpg|CHANGED
+8|충격포|-|spell_frost_stun.jpg|-
+8|무기 막기|-|ability_parry.jpg|-
+10|매의 상|1|spell_nature_ravenform.jpg|CHANGED
+18|매의 상|2|spell_nature_ravenform.jpg|CHANGED
+28|매의 상|3|spell_nature_ravenform.jpg|CHANGED
+38|매의 상|4|spell_nature_ravenform.jpg|CHANGED
+48|매의 상|5|spell_nature_ravenform.jpg|CHANGED
+58|매의 상|6|spell_nature_ravenform.jpg|CHANGED
+60|매의 상|7|spell_nature_ravenform.jpg|CHANGED
+10|야수 조련|-|ability_hunter_beastcall02.jpg|CHANGED
+10|야수 부르기|-|ability_hunter_beastcall.jpg|-
+10|야수 소환해제|-|spell_nature_spiritwolf.jpg|-
+10|먹이주기|-|ability_hunter_beasttraining.jpg|-
+10|야수 되살리기|-|ability_hunter_beastsoothe.jpg|-
+10|야수 길들이기|-|ability_hunter_beasttaming.jpg|-
+10|인간형 추적|-|spell_holy_prayerofhealing.jpg|-
+10|강인한 체력|1|spell_nature_unyeildingstamina.jpg|-
+12|강인한 체력|2|spell_nature_unyeildingstamina.jpg|-
+18|강인한 체력|3|spell_nature_unyeildingstamina.jpg|-
+24|강인한 체력|4|spell_nature_unyeildingstamina.jpg|-
+30|강인한 체력|5|spell_nature_unyeildingstamina.jpg|-
+36|강인한 체력|6|spell_nature_unyeildingstamina.jpg|-
+42|강인한 체력|7|spell_nature_unyeildingstamina.jpg|-
+48|강인한 체력|8|spell_nature_unyeildingstamina.jpg|-
+54|강인한 체력|9|spell_nature_unyeildingstamina.jpg|-
+60|강인한 체력|10|spell_nature_unyeildingstamina.jpg|-
+10|내 거야!|1|ability_hunter_snipershot.jpg|NEW
+20|내 거야!|2|ability_hunter_snipershot.jpg|NEW
+30|내 거야!|3|ability_hunter_snipershot.jpg|NEW
+40|내 거야!|4|ability_hunter_snipershot.jpg|NEW
+50|내 거야!|5|ability_hunter_snipershot.jpg|NEW
+10|무쇠 가죽|1|spell_nature_spiritarmor.jpg|-
+12|무쇠 가죽|2|spell_nature_spiritarmor.jpg|-
+18|무쇠 가죽|3|spell_nature_spiritarmor.jpg|-
+24|무쇠 가죽|4|spell_nature_spiritarmor.jpg|-
+30|무쇠 가죽|5|spell_nature_spiritarmor.jpg|-
+36|무쇠 가죽|6|spell_nature_spiritarmor.jpg|-
+42|무쇠 가죽|7|spell_nature_spiritarmor.jpg|-
+48|무쇠 가죽|8|spell_nature_spiritarmor.jpg|-
+54|무쇠 가죽|9|spell_nature_spiritarmor.jpg|-
+60|무쇠 가죽|10|spell_nature_spiritarmor.jpg|-
+12|동물 치료|1|ability_hunter_mendpet.jpg|-
+20|동물 치료|2|ability_hunter_mendpet.jpg|-
+28|동물 치료|3|ability_hunter_mendpet.jpg|-
+36|동물 치료|4|ability_hunter_mendpet.jpg|-
+44|동물 치료|5|ability_hunter_mendpet.jpg|-
+52|동물 치료|6|ability_hunter_mendpet.jpg|-
+60|동물 치료|7|ability_hunter_mendpet.jpg|-
+12|견제 사격|1|spell_arcane_blink.jpg|-
+20|견제 사격|2|spell_arcane_blink.jpg|-
+30|견제 사격|3|spell_arcane_blink.jpg|-
+40|견제 사격|4|spell_arcane_blink.jpg|-
+50|견제 사격|5|spell_arcane_blink.jpg|-
+60|견제 사격|6|spell_arcane_blink.jpg|-
+12|날개 절단|1|ability_rogue_trip.jpg|-
+38|날개 절단|2|ability_rogue_trip.jpg|-
+60|날개 절단|3|ability_rogue_trip.jpg|-
+14|독수리의 눈|-|ability_hunter_eagleeye.jpg|-
+14|야수의 눈|-|ability_eyeoftheowl.jpg|CHANGED
+14|야수 겁주기|1|ability_druid_cower.jpg|-
+30|야수 겁주기|2|ability_druid_cower.jpg|-
+46|야수 겁주기|3|ability_druid_cower.jpg|-
+16|제물의 덫|1|spell_fire_flameshock.jpg|CHANGED
+26|제물의 덫|2|spell_fire_flameshock.jpg|CHANGED
+36|제물의 덫|3|spell_fire_flameshock.jpg|CHANGED
+46|제물의 덫|4|spell_fire_flameshock.jpg|CHANGED
+56|제물의 덫|5|spell_fire_flameshock.jpg|CHANGED
+16|살쾡이의 이빨|1|ability_hunter_swiftstrike.jpg|CHANGED
+30|살쾡이의 이빨|2|ability_hunter_swiftstrike.jpg|CHANGED
+44|살쾡이의 이빨|3|ability_hunter_swiftstrike.jpg|CHANGED
+58|살쾡이의 이빨|4|ability_hunter_swiftstrike.jpg|CHANGED
+18|일제 사격|-|ability_upgrademoonglaive.jpg|CHANGED
+18|언데드 추적|-|spell_shadow_darksummoning.jpg|-
+20|치타의 상|-|ability_mount_jungletiger.jpg|-
+20|조준 사격|1|inv_spear_07.jpg|CHANGED
+28|조준 사격|2|inv_spear_07.jpg|CHANGED
+36|조준 사격|3|inv_spear_07.jpg|CHANGED
+44|조준 사격|4|inv_spear_07.jpg|CHANGED
+52|조준 사격|5|inv_spear_07.jpg|CHANGED
+60|조준 사격|6|inv_spear_07.jpg|CHANGED
+20|공격 저지|-|ability_whirlwind.jpg|-
+20|철수|1|ability_rogue_feint.jpg|CHANGED
+34|철수|2|ability_rogue_feint.jpg|CHANGED
+48|철수|3|ability_rogue_feint.jpg|CHANGED
+20|빙결 덫|1|spell_frost_chainsofice.jpg|CHANGED
+40|빙결 덫|2|spell_frost_chainsofice.jpg|CHANGED
+60|빙결 덫|3|spell_frost_chainsofice.jpg|CHANGED
+20|쌍수 무기|-|ability_dualwield.jpg|-
+22|전갈 쐐기|-|ability_hunter_criticalshot.jpg|CHANGED
+24|야수 연구|-|ability_physical_taunt.jpg|-
+24|은신 추적|-|ability_stealth.jpg|-
+25|매 소환|1|ability_hunter_animalhandler.jpg|NEW
+36|매 소환|2|ability_hunter_animalhandler.jpg|NEW
+48|매 소환|3|ability_hunter_animalhandler.jpg|NEW
+60|매 소환|4|ability_hunter_animalhandler.jpg|NEW
+25|정조준 오라|1|ability_trueshot.jpg|CHANGED
+32|정조준 오라|2|ability_trueshot.jpg|CHANGED
+40|정조준 오라|3|ability_trueshot.jpg|CHANGED
+50|정조준 오라|4|ability_trueshot.jpg|CHANGED
+60|정조준 오라|5|ability_trueshot.jpg|CHANGED
+25|역습|1|ability_warrior_challange.jpg|CHANGED
+30|역습|2|ability_warrior_challange.jpg|CHANGED
+42|역습|3|ability_warrior_challange.jpg|CHANGED
+54|역습|4|ability_warrior_challange.jpg|CHANGED
+26|속사|-|ability_hunter_runningshot.jpg|CHANGED
+26|정령 추적|-|spell_frost_summonwaterelemental.jpg|-
+28|냉기의 덫|-|spell_frost_freezingbreath.jpg|CHANGED
+30|야수의 상|1|ability_mount_pinktiger.jpg|CHANGED
+40|야수의 상|2|ability_mount_pinktiger.jpg|CHANGED
+50|야수의 상|3|ability_mount_pinktiger.jpg|CHANGED
+60|야수의 상|4|ability_mount_pinktiger.jpg|CHANGED
+30|위협|-|ability_devour.jpg|CHANGED
+30|분산 사격|-|ability_golemstormbolt.jpg|-
+30|죽은척하기|-|ability_rogue_feigndeath.jpg|CHANGED
+30|가르기|1|ability_gouge.jpg|NEW
+40|가르기|2|ability_gouge.jpg|NEW
+50|가르기|3|ability_gouge.jpg|NEW
+60|가르기|4|ability_gouge.jpg|NEW
+30|타조 발차기|-|ability_hunter_pet_tallstrider.jpg|NEW
+30|급강하|1|spell_shadow_burningspirit.jpg|-
+40|급강하|2|spell_shadow_burningspirit.jpg|-
+50|급강하|3|spell_shadow_burningspirit.jpg|-
+32|마력 깃든 섬광|-|ability_mage_arcanebarrage.jpg|NEW
+32|섬광|-|spell_fire_flare.jpg|-
+32|악마 추적|-|spell_shadow_summonfelhunter.jpg|-
+34|폭발의 덫|1|spell_fire_selfdestruct.jpg|CHANGED
+44|폭발의 덫|2|spell_fire_selfdestruct.jpg|CHANGED
+54|폭발의 덫|3|spell_fire_selfdestruct.jpg|CHANGED
+36|살무사 쐐기|1|ability_hunter_aimedshot.jpg|CHANGED
+46|살무사 쐐기|2|ability_hunter_aimedshot.jpg|CHANGED
+56|살무사 쐐기|3|ability_hunter_aimedshot.jpg|CHANGED
+40|치타 무리의 상|-|ability_mount_whitetiger.jpg|-
+40|야수의 격노|-|ability_druid_ferociousbite.jpg|-
+40|저격|1|hunter_pvp_snipershot.jpg|NEW
+48|저격|2|hunter_pvp_snipershot.jpg|NEW
+58|저격|3|hunter_pvp_snipershot.jpg|NEW
+40|연발 사격|1|ability_marksmanship.jpg|CHANGED
+50|연발 사격|2|ability_marksmanship.jpg|CHANGED
+58|연발 사격|3|ability_marksmanship.jpg|CHANGED
+40|거인 추적|-|ability_racial_avatar.jpg|-
+40|사슬|-|inv_chest_chain_05.jpg|-
+46|야생의 상|1|spell_nature_protectionformnature.jpg|CHANGED
+56|야생의 상|2|spell_nature_protectionformnature.jpg|CHANGED
+50|용족 추적|-|inv_misc_head_dragon_01.jpg|-
+60|평정의 사격|-|spell_nature_drowsy.jpg|-

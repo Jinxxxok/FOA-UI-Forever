@@ -321,7 +321,9 @@ end
 function M:BuildPanel(f)
 	local p = CreateFrame("Frame", "FOATalentGuide", f)
 	p:SetSize(250, 330)
-	p:SetPoint("TOPLEFT", f, "TOPRIGHT", 6, -12)
+	Ink:PanelPoint(p, "talent", f, 6, -12)
+	Ink:MakeDraggable(p, "talent", f)
+	p.foaResetPos = function() Ink:PanelPoint(p, "talent", f, 6, -12) end
 	p:SetFrameStrata(f:GetFrameStrata())
 	p.bg = Ink:Round(p, "BACKGROUND", false, false)
 	p.bg:SetAllPoints()

@@ -1,0 +1,191 @@
+1|번개 화살|1|spell_nature_lightning.jpg|CHANGED
+8|번개 화살|2|spell_nature_lightning.jpg|CHANGED
+14|번개 화살|3|spell_nature_lightning.jpg|CHANGED
+20|번개 화살|4|spell_nature_lightning.jpg|CHANGED
+26|번개 화살|5|spell_nature_lightning.jpg|CHANGED
+32|번개 화살|6|spell_nature_lightning.jpg|CHANGED
+38|번개 화살|7|spell_nature_lightning.jpg|CHANGED
+44|번개 화살|8|spell_nature_lightning.jpg|CHANGED
+50|번개 화살|9|spell_nature_lightning.jpg|CHANGED
+56|번개 화살|10|spell_nature_lightning.jpg|CHANGED
+1|치유의 물결|1|spell_nature_magicimmunity.jpg|CHANGED
+6|치유의 물결|2|spell_nature_magicimmunity.jpg|CHANGED
+12|치유의 물결|3|spell_nature_magicimmunity.jpg|CHANGED
+18|치유의 물결|4|spell_nature_magicimmunity.jpg|CHANGED
+24|치유의 물결|5|spell_nature_magicimmunity.jpg|CHANGED
+32|치유의 물결|6|spell_nature_magicimmunity.jpg|CHANGED
+40|치유의 물결|7|spell_nature_magicimmunity.jpg|CHANGED
+48|치유의 물결|8|spell_nature_magicimmunity.jpg|CHANGED
+56|치유의 물결|9|spell_nature_magicimmunity.jpg|CHANGED
+60|치유의 물결|10|spell_nature_magicimmunity.jpg|CHANGED
+1|대지의 무기|1|spell_nature_rockbiter.jpg|CHANGED
+8|대지의 무기|2|spell_nature_rockbiter.jpg|CHANGED
+16|대지의 무기|3|spell_nature_rockbiter.jpg|CHANGED
+24|대지의 무기|4|spell_nature_rockbiter.jpg|CHANGED
+34|대지의 무기|5|spell_nature_rockbiter.jpg|CHANGED
+44|대지의 무기|6|spell_nature_rockbiter.jpg|CHANGED
+54|대지의 무기|7|spell_nature_rockbiter.jpg|CHANGED
+4|돌가죽 토템|1|spell_nature_stoneskintotem.jpg|CHANGED
+14|돌가죽 토템|2|spell_nature_stoneskintotem.jpg|CHANGED
+24|돌가죽 토템|3|spell_nature_stoneskintotem.jpg|CHANGED
+34|돌가죽 토템|4|spell_nature_stoneskintotem.jpg|CHANGED
+44|돌가죽 토템|5|spell_nature_stoneskintotem.jpg|CHANGED
+54|돌가죽 토템|6|spell_nature_stoneskintotem.jpg|CHANGED
+4|대지 충격|1|spell_nature_earthshock.jpg|CHANGED
+8|대지 충격|2|spell_nature_earthshock.jpg|CHANGED
+14|대지 충격|3|spell_nature_earthshock.jpg|CHANGED
+24|대지 충격|4|spell_nature_earthshock.jpg|CHANGED
+36|대지 충격|5|spell_nature_earthshock.jpg|CHANGED
+48|대지 충격|6|spell_nature_earthshock.jpg|CHANGED
+60|대지 충격|7|spell_nature_earthshock.jpg|CHANGED
+6|속박의 토템|-|spell_nature_strengthofearthtotem02.jpg|-
+8|번개 보호막|1|spell_nature_lightningshield.jpg|CHANGED
+16|번개 보호막|2|spell_nature_lightningshield.jpg|CHANGED
+24|번개 보호막|3|spell_nature_lightningshield.jpg|CHANGED
+32|번개 보호막|4|spell_nature_lightningshield.jpg|CHANGED
+40|번개 보호막|5|spell_nature_lightningshield.jpg|CHANGED
+48|번개 보호막|6|spell_nature_lightningshield.jpg|CHANGED
+56|번개 보호막|7|spell_nature_lightningshield.jpg|CHANGED
+8|돌발톱 토템|1|spell_nature_stoneclawtotem.jpg|-
+18|돌발톱 토템|2|spell_nature_stoneclawtotem.jpg|-
+28|돌발톱 토템|3|spell_nature_stoneclawtotem.jpg|-
+38|돌발톱 토템|4|spell_nature_stoneclawtotem.jpg|-
+48|돌발톱 토템|5|spell_nature_stoneclawtotem.jpg|-
+58|돌발톱 토템|6|spell_nature_stoneclawtotem.jpg|-
+10|화염 충격|1|spell_fire_flameshock.jpg|CHANGED
+18|화염 충격|2|spell_fire_flameshock.jpg|CHANGED
+28|화염 충격|3|spell_fire_flameshock.jpg|CHANGED
+40|화염 충격|4|spell_fire_flameshock.jpg|CHANGED
+52|화염 충격|5|spell_fire_flameshock.jpg|CHANGED
+60|화염 충격|6|spell_fire_flameshock.jpg|CHANGED
+10|대지력 토템|1|spell_nature_earthbindtotem.jpg|CHANGED
+24|대지력 토템|2|spell_nature_earthbindtotem.jpg|CHANGED
+38|대지력 토템|3|spell_nature_earthbindtotem.jpg|CHANGED
+52|대지력 토템|4|spell_nature_earthbindtotem.jpg|CHANGED
+60|대지력 토템|5|spell_nature_earthbindtotem.jpg|CHANGED
+10|불타는 토템|1|spell_fire_searingtotem.jpg|-
+20|불타는 토템|2|spell_fire_searingtotem.jpg|-
+30|불타는 토템|3|spell_fire_searingtotem.jpg|-
+40|불타는 토템|4|spell_fire_searingtotem.jpg|-
+50|불타는 토템|5|spell_fire_searingtotem.jpg|-
+60|불타는 토템|6|spell_fire_searingtotem.jpg|-
+10|불꽃의 무기|1|spell_fire_flametounge.jpg|CHANGED
+18|불꽃의 무기|2|spell_fire_flametounge.jpg|CHANGED
+26|불꽃의 무기|3|spell_fire_flametounge.jpg|CHANGED
+36|불꽃의 무기|4|spell_fire_flametounge.jpg|CHANGED
+46|불꽃의 무기|5|spell_fire_flametounge.jpg|CHANGED
+56|불꽃의 무기|6|spell_fire_flametounge.jpg|CHANGED
+12|불꽃 회오리|1|spell_fire_sealoffire.jpg|NEW
+22|불꽃 회오리|2|spell_fire_sealoffire.jpg|NEW
+32|불꽃 회오리|3|spell_fire_sealoffire.jpg|NEW
+42|불꽃 회오리|4|spell_fire_sealoffire.jpg|NEW
+52|불꽃 회오리|5|spell_fire_sealoffire.jpg|NEW
+12|고대의 영혼|1|spell_nature_regenerate.jpg|-
+24|고대의 영혼|2|spell_nature_regenerate.jpg|-
+36|고대의 영혼|3|spell_nature_regenerate.jpg|-
+48|고대의 영혼|4|spell_nature_regenerate.jpg|-
+60|고대의 영혼|5|spell_nature_regenerate.jpg|-
+12|불꽃 회오리 토템|1|spell_fire_sealoffire.jpg|-
+22|불꽃 회오리 토템|2|spell_fire_sealoffire.jpg|-
+32|불꽃 회오리 토템|3|spell_fire_sealoffire.jpg|-
+42|불꽃 회오리 토템|4|spell_fire_sealoffire.jpg|-
+52|불꽃 회오리 토템|5|spell_fire_sealoffire.jpg|-
+12|정화|1|spell_nature_purge.jpg|-
+32|정화|2|spell_nature_purge.jpg|-
+16|해독|-|spell_nature_nullifypoison.jpg|-
+18|진동의 토템|-|spell_nature_tremortotem.jpg|CHANGED
+20|원소의 부름|-|spell_shaman_dropall_01.jpg|NEW
+20|치유의 토템|1|inv_spear_04.jpg|CHANGED
+30|치유의 토템|2|inv_spear_04.jpg|CHANGED
+40|치유의 토템|3|inv_spear_04.jpg|CHANGED
+50|치유의 토템|4|inv_spear_04.jpg|CHANGED
+60|치유의 토템|5|inv_spear_04.jpg|CHANGED
+20|하급 치유의 물결|1|spell_nature_healingwavelesser.jpg|CHANGED
+28|하급 치유의 물결|2|spell_nature_healingwavelesser.jpg|CHANGED
+36|하급 치유의 물결|3|spell_nature_healingwavelesser.jpg|CHANGED
+44|하급 치유의 물결|4|spell_nature_healingwavelesser.jpg|CHANGED
+52|하급 치유의 물결|5|spell_nature_healingwavelesser.jpg|CHANGED
+60|하급 치유의 물결|6|spell_nature_healingwavelesser.jpg|CHANGED
+20|물의 보호막|-|ability_shaman_watershield.jpg|NEW
+20|냉기 충격|1|spell_frost_frostshock.jpg|CHANGED
+34|냉기 충격|2|spell_frost_frostshock.jpg|CHANGED
+46|냉기 충격|3|spell_frost_frostshock.jpg|CHANGED
+58|냉기 충격|4|spell_frost_frostshock.jpg|CHANGED
+20|토템의 귀환|-|spell_shaman_totemrecall.jpg|NEW
+20|냉기의 무기|1|spell_frost_frostbrand.jpg|CHANGED
+28|냉기의 무기|2|spell_frost_frostbrand.jpg|CHANGED
+38|냉기의 무기|3|spell_frost_frostbrand.jpg|CHANGED
+48|냉기의 무기|4|spell_frost_frostbrand.jpg|CHANGED
+58|냉기의 무기|5|spell_frost_frostbrand.jpg|CHANGED
+20|늑대 정령|-|spell_nature_spiritwolf.jpg|-
+22|질병 치료|-|spell_nature_removedisease.jpg|-
+22|독 정화 토템|-|spell_nature_poisoncleansingtotem.jpg|CHANGED
+22|토템 재배치|-|ability_shaman_totemrelocation.jpg|NEW
+22|수중 호흡|-|spell_shadow_demonbreath.jpg|-
+24|냉기 저항 토템|1|spell_frostresistancetotem_01.jpg|CHANGED
+38|냉기 저항 토템|2|spell_frostresistancetotem_01.jpg|CHANGED
+54|냉기 저항 토템|3|spell_frostresistancetotem_01.jpg|CHANGED
+25|마나 해일 토템|1|spell_frost_summonwaterelemental.jpg|CHANGED
+38|마나 해일 토템|2|spell_frost_summonwaterelemental.jpg|CHANGED
+48|마나 해일 토템|3|spell_frost_summonwaterelemental.jpg|CHANGED
+58|마나 해일 토템|4|spell_frost_summonwaterelemental.jpg|CHANGED
+25|폭풍의 일격|-|ability_shaman_stormstrike.jpg|CHANGED
+26|천리안|-|spell_nature_farsight.jpg|-
+26|마나샘 토템|1|spell_nature_manaregentotem.jpg|CHANGED
+36|마나샘 토템|2|spell_nature_manaregentotem.jpg|CHANGED
+46|마나샘 토템|3|spell_nature_manaregentotem.jpg|CHANGED
+56|마나샘 토템|4|spell_nature_manaregentotem.jpg|CHANGED
+26|용암 토템|1|spell_fire_selfdestruct.jpg|CHANGED
+36|용암 토템|2|spell_fire_selfdestruct.jpg|CHANGED
+46|용암 토템|3|spell_fire_selfdestruct.jpg|CHANGED
+56|용암 토템|4|spell_fire_selfdestruct.jpg|CHANGED
+28|불꽃의 토템|1|spell_nature_guardianward.jpg|CHANGED
+38|불꽃의 토템|2|spell_nature_guardianward.jpg|CHANGED
+48|불꽃의 토템|3|spell_nature_guardianward.jpg|CHANGED
+58|불꽃의 토템|4|spell_nature_guardianward.jpg|CHANGED
+28|수면 걷기|-|spell_frost_windwalkon.jpg|-
+28|화염 저항 토템|1|spell_fireresistancetotem_01.jpg|CHANGED
+42|화염 저항 토템|2|spell_fireresistancetotem_01.jpg|CHANGED
+58|화염 저항 토템|3|spell_fireresistancetotem_01.jpg|CHANGED
+30|영혼의 귀환|-|spell_nature_astralrecal.jpg|-
+30|마법흡수 토템|-|spell_nature_groundingtotem.jpg|-
+30|질풍의 무기|1|spell_nature_cyclone.jpg|CHANGED
+40|질풍의 무기|2|spell_nature_cyclone.jpg|CHANGED
+50|질풍의 무기|3|spell_nature_cyclone.jpg|CHANGED
+60|질풍의 무기|4|spell_nature_cyclone.jpg|CHANGED
+30|윤회|-|spell_nature_reincarnation.jpg|-
+30|선조의 부름|-|spell_shaman_dropall_02.jpg|NEW
+30|용암 폭발|1|spell_shaman_lavaburst.jpg|NEW
+40|용암 폭발|2|spell_shaman_lavaburst.jpg|NEW
+50|용암 폭발|3|spell_shaman_lavaburst.jpg|NEW
+60|용암 폭발|4|spell_shaman_lavaburst.jpg|NEW
+30|자연 저항 토템|1|spell_nature_natureresistancetotem.jpg|CHANGED
+44|자연 저항 토템|2|spell_nature_natureresistancetotem.jpg|CHANGED
+60|자연 저항 토템|3|spell_nature_natureresistancetotem.jpg|CHANGED
+30|자연의 신속함|-|spell_nature_ravenform.jpg|-
+32|연쇄 번개|1|spell_nature_chainlightning.jpg|CHANGED
+40|연쇄 번개|2|spell_nature_chainlightning.jpg|CHANGED
+48|연쇄 번개|3|spell_nature_chainlightning.jpg|CHANGED
+56|연쇄 번개|4|spell_nature_chainlightning.jpg|CHANGED
+32|질풍의 토템|1|spell_nature_windfury.jpg|CHANGED
+42|질풍의 토템|2|spell_nature_windfury.jpg|CHANGED
+52|질풍의 토템|3|spell_nature_windfury.jpg|CHANGED
+34|감시의 토템|-|spell_nature_removecurse.jpg|-
+36|바람막이 토템|1|spell_nature_earthbind.jpg|CHANGED
+46|바람막이 토템|2|spell_nature_earthbind.jpg|CHANGED
+56|바람막이 토템|3|spell_nature_earthbind.jpg|CHANGED
+38|질병 정화 토템|-|spell_nature_diseasecleansingtotem.jpg|CHANGED
+40|영혼의 부름|-|spell_shaman_dropall_03.jpg|NEW
+40|연쇄 치유|1|spell_nature_healingwavegreater.jpg|CHANGED
+46|연쇄 치유|2|spell_nature_healingwavegreater.jpg|CHANGED
+54|연쇄 치유|3|spell_nature_healingwavegreater.jpg|CHANGED
+40|사슬|-|inv_chest_chain_05.jpg|-
+40|정기의 깨달음|-|spell_nature_wispheal.jpg|CHANGED
+40|선견자의 분노|-|spell_nature_bloodlust.jpg|NEW
+40|성난 해일|1|spell_nature_riptide.jpg|NEW
+50|성난 해일|2|spell_nature_riptide.jpg|NEW
+60|성난 해일|3|spell_nature_riptide.jpg|NEW
+42|은총의 토템|1|spell_nature_invisibilitytotem.jpg|CHANGED
+56|은총의 토템|2|spell_nature_invisibilitytotem.jpg|CHANGED
+60|은총의 토템|3|spell_nature_invisibilitytotem.jpg|CHANGED
+50|평온의 토템|-|spell_nature_brilliance.jpg|-

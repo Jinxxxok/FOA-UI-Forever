@@ -1,0 +1,211 @@
+1|천벌|1|spell_nature_abolishmagic|CHANGED
+6|천벌|2|spell_nature_abolishmagic|CHANGED
+14|천벌|3|spell_nature_abolishmagic|CHANGED
+22|천벌|4|spell_nature_abolishmagic|CHANGED
+30|천벌|5|spell_nature_abolishmagic|CHANGED
+38|천벌|6|spell_nature_abolishmagic|CHANGED
+46|천벌|7|spell_nature_abolishmagic|CHANGED
+54|천벌|8|spell_nature_abolishmagic|CHANGED
+1|치유의 손길|1|spell_nature_healingtouch|CHANGED
+8|치유의 손길|2|spell_nature_healingtouch|CHANGED
+14|치유의 손길|3|spell_nature_healingtouch|CHANGED
+20|치유의 손길|4|spell_nature_healingtouch|CHANGED
+26|치유의 손길|5|spell_nature_healingtouch|CHANGED
+32|치유의 손길|6|spell_nature_healingtouch|CHANGED
+38|치유의 손길|7|spell_nature_healingtouch|CHANGED
+44|치유의 손길|8|spell_nature_healingtouch|CHANGED
+50|치유의 손길|9|spell_nature_healingtouch|CHANGED
+56|치유의 손길|10|spell_nature_healingtouch|CHANGED
+60|치유의 손길|11|spell_nature_healingtouch|CHANGED
+1|야생의 징표|1|spell_nature_regeneration|CHANGED
+10|야생의 징표|2|spell_nature_regeneration|CHANGED
+20|야생의 징표|3|spell_nature_regeneration|CHANGED
+30|야생의 징표|4|spell_nature_regeneration|CHANGED
+40|야생의 징표|5|spell_nature_regeneration|CHANGED
+50|야생의 징표|6|spell_nature_regeneration|CHANGED
+60|야생의 징표|7|spell_nature_regeneration|CHANGED
+4|달빛섬광|1|spell_nature_starfall|CHANGED
+10|달빛섬광|2|spell_nature_starfall|CHANGED
+16|달빛섬광|3|spell_nature_starfall|CHANGED
+22|달빛섬광|4|spell_nature_starfall|CHANGED
+28|달빛섬광|5|spell_nature_starfall|CHANGED
+34|달빛섬광|6|spell_nature_starfall|CHANGED
+40|달빛섬광|7|spell_nature_starfall|CHANGED
+46|달빛섬광|8|spell_nature_starfall|CHANGED
+52|달빛섬광|9|spell_nature_starfall|CHANGED
+58|달빛섬광|10|spell_nature_starfall|CHANGED
+4|회복|1|spell_nature_rejuvenation|CHANGED
+10|회복|2|spell_nature_rejuvenation|CHANGED
+16|회복|3|spell_nature_rejuvenation|CHANGED
+22|회복|4|spell_nature_rejuvenation|CHANGED
+28|회복|5|spell_nature_rejuvenation|CHANGED
+34|회복|6|spell_nature_rejuvenation|CHANGED
+40|회복|7|spell_nature_rejuvenation|CHANGED
+46|회복|8|spell_nature_rejuvenation|CHANGED
+52|회복|9|spell_nature_rejuvenation|CHANGED
+58|회복|10|spell_nature_rejuvenation|CHANGED
+60|회복|11|spell_nature_rejuvenation|CHANGED
+6|가시|1|spell_nature_thorns|-
+14|가시|2|spell_nature_thorns|-
+24|가시|3|spell_nature_thorns|-
+34|가시|4|spell_nature_thorns|-
+44|가시|5|spell_nature_thorns|-
+54|가시|6|spell_nature_thorns|-
+8|휘감는 뿌리|1|spell_nature_stranglevines|CHANGED
+18|휘감는 뿌리|2|spell_nature_stranglevines|CHANGED
+28|휘감는 뿌리|3|spell_nature_stranglevines|CHANGED
+38|휘감는 뿌리|4|spell_nature_stranglevines|CHANGED
+48|휘감는 뿌리|5|spell_nature_stranglevines|CHANGED
+58|휘감는 뿌리|6|spell_nature_stranglevines|CHANGED
+10|자연의 손아귀|1|spell_nature_natureswrath|CHANGED
+18|자연의 손아귀|2|spell_nature_natureswrath|CHANGED
+28|자연의 손아귀|3|spell_nature_natureswrath|CHANGED
+38|자연의 손아귀|4|spell_nature_natureswrath|CHANGED
+48|자연의 손아귀|5|spell_nature_natureswrath|CHANGED
+58|자연의 손아귀|6|spell_nature_natureswrath|CHANGED
+10|순간이동: 달의 숲|-|spell_arcane_teleportmoonglade|-
+10|곰 변신|-|ability_racial_bearform|CHANGED
+10|위협의 포효|1|ability_druid_demoralizingroar|CHANGED
+20|위협의 포효|2|ability_druid_demoralizingroar|CHANGED
+32|위협의 포효|3|ability_druid_demoralizingroar|CHANGED
+42|위협의 포효|4|ability_druid_demoralizingroar|CHANGED
+52|위협의 포효|5|ability_druid_demoralizingroar|CHANGED
+10|포효|-|ability_physical_taunt|CHANGED
+10|후려치기|1|ability_druid_maul|-
+18|후려치기|2|ability_druid_maul|-
+26|후려치기|3|ability_druid_maul|-
+34|후려치기|4|ability_druid_maul|-
+42|후려치기|5|ability_druid_maul|-
+50|후려치기|6|ability_druid_maul|-
+58|후려치기|7|ability_druid_maul|-
+12|분노|-|ability_druid_enrage|CHANGED
+12|재생|1|spell_nature_resistnature|CHANGED
+18|재생|2|spell_nature_resistnature|CHANGED
+24|재생|3|spell_nature_resistnature|CHANGED
+30|재생|4|spell_nature_resistnature|CHANGED
+36|재생|5|spell_nature_resistnature|CHANGED
+42|재생|6|spell_nature_resistnature|CHANGED
+48|재생|7|spell_nature_resistnature|CHANGED
+54|재생|8|spell_nature_resistnature|CHANGED
+60|재생|9|spell_nature_resistnature|CHANGED
+12|되살리기|1|ability_druid_lunarguidance|NEW
+24|되살리기|2|ability_druid_lunarguidance|NEW
+36|되살리기|3|ability_druid_lunarguidance|NEW
+48|되살리기|4|ability_druid_lunarguidance|NEW
+60|되살리기|5|ability_druid_lunarguidance|NEW
+14|강타|1|ability_druid_bash|-
+30|강타|2|ability_druid_bash|-
+46|강타|3|ability_druid_bash|-
+14|해독|-|spell_nature_nullifypoison|-
+16|수중 생물 변신|-|ability_druid_aquaticform|-
+16|휘둘러치기|1|inv_misc_monsterclaw_03|-
+24|휘둘러치기|2|inv_misc_monsterclaw_03|-
+34|휘둘러치기|3|inv_misc_monsterclaw_03|-
+44|휘둘러치기|4|inv_misc_monsterclaw_03|-
+54|휘둘러치기|5|inv_misc_monsterclaw_03|-
+18|요정의 불꽃|1|spell_nature_faeriefire|-
+30|요정의 불꽃|2|spell_nature_faeriefire|-
+42|요정의 불꽃|3|spell_nature_faeriefire|-
+54|요정의 불꽃|4|spell_nature_faeriefire|-
+18|겨울잠|1|spell_nature_sleep|-
+38|겨울잠|2|spell_nature_sleep|-
+58|겨울잠|3|spell_nature_sleep|-
+20|청명의 전조|-|spell_nature_crystalball|CHANGED
+20|별빛섬광|1|spell_arcane_starfire|CHANGED
+26|별빛섬광|2|spell_arcane_starfire|CHANGED
+34|별빛섬광|3|spell_arcane_starfire|CHANGED
+42|별빛섬광|4|spell_arcane_starfire|CHANGED
+50|별빛섬광|5|spell_arcane_starfire|CHANGED
+58|별빛섬광|6|spell_arcane_starfire|CHANGED
+60|별빛섬광|7|spell_arcane_starfire|CHANGED
+20|표범 변신|-|ability_druid_catform|CHANGED
+20|할퀴기|1|ability_druid_rake|CHANGED
+28|할퀴기|2|ability_druid_rake|CHANGED
+38|할퀴기|3|ability_druid_rake|CHANGED
+48|할퀴기|4|ability_druid_rake|CHANGED
+58|할퀴기|5|ability_druid_rake|CHANGED
+20|야성의 돌진|-|ability_hunter_pet_bear|-
+20|숨기|1|ability_ambush|-
+40|숨기|2|ability_ambush|-
+60|숨기|3|ability_ambush|-
+20|도려내기|1|ability_ghoulfrenzy|CHANGED
+28|도려내기|2|ability_ghoulfrenzy|CHANGED
+36|도려내기|3|ability_ghoulfrenzy|CHANGED
+44|도려내기|4|ability_ghoulfrenzy|CHANGED
+52|도려내기|5|ability_ghoulfrenzy|CHANGED
+60|도려내기|6|ability_ghoulfrenzy|CHANGED
+20|칼날 발톱|1|spell_shadow_vampiricaura|CHANGED
+30|칼날 발톱|2|spell_shadow_vampiricaura|CHANGED
+38|칼날 발톱|3|spell_shadow_vampiricaura|CHANGED
+46|칼날 발톱|4|spell_shadow_vampiricaura|CHANGED
+54|칼날 발톱|5|spell_shadow_vampiricaura|CHANGED
+20|환생|1|spell_nature_reincarnation|-
+30|환생|2|spell_nature_reincarnation|-
+40|환생|3|spell_nature_reincarnation|-
+50|환생|4|spell_nature_reincarnation|-
+60|환생|5|spell_nature_reincarnation|-
+22|동물 달래기|1|ability_hunter_beastsoothe|-
+38|동물 달래기|2|ability_hunter_beastsoothe|-
+54|동물 달래기|3|ability_hunter_beastsoothe|-
+24|흉포한 이빨|1|ability_druid_ferociousbite|CHANGED
+32|흉포한 이빨|2|ability_druid_ferociousbite|CHANGED
+40|흉포한 이빨|3|ability_druid_ferociousbite|CHANGED
+48|흉포한 이빨|4|ability_druid_ferociousbite|CHANGED
+56|흉포한 이빨|5|ability_druid_ferociousbite|CHANGED
+60|흉포한 이빨|6|ability_druid_ferociousbite|CHANGED
+24|갈퀴 발톱|1|ability_druid_disembowel|CHANGED
+34|갈퀴 발톱|2|ability_druid_disembowel|CHANGED
+44|갈퀴 발톱|3|ability_druid_disembowel|CHANGED
+54|갈퀴 발톱|4|ability_druid_disembowel|CHANGED
+24|저주 해제|-|spell_holy_removecurse|CHANGED
+25|곤충 떼|1|spell_nature_insectswarm|CHANGED
+30|곤충 떼|2|spell_nature_insectswarm|CHANGED
+40|곤충 떼|3|spell_nature_insectswarm|CHANGED
+50|곤충 떼|4|spell_nature_insectswarm|CHANGED
+60|곤충 떼|5|spell_nature_insectswarm|CHANGED
+25|가르기|1|ability_druid_lacerate|NEW
+34|가르기|2|ability_druid_lacerate|NEW
+42|가르기|3|ability_druid_lacerate|NEW
+50|가르기|4|ability_druid_lacerate|NEW
+58|가르기|5|ability_druid_lacerate|NEW
+25|신속한 치유|-|inv_relics_idolofrejuvenation|CHANGED
+26|질주|1|ability_druid_dash|-
+46|질주|2|ability_druid_dash|-
+26|독 해제|-|spell_nature_nullifypoison_02|-
+28|도전의 포효|-|ability_druid_challangingroar|-
+28|웅크리기|1|ability_druid_cower|-
+40|웅크리기|2|ability_druid_cower|-
+52|웅크리기|3|ability_druid_cower|-
+30|날쌘 동물 변신|-|ability_druid_travelform|-
+30|자연의 신속함|-|spell_nature_ravenform|-
+30|평온|1|spell_nature_tranquility|CHANGED
+40|평온|2|spell_nature_tranquility|CHANGED
+50|평온|3|spell_nature_tranquility|CHANGED
+60|평온|4|spell_nature_tranquility|CHANGED
+32|침착|-|ability_racial_darkflight|NEW
+32|찢어발기기|1|ability_druid_ravage|CHANGED
+42|찢어발기기|2|ability_druid_ravage|CHANGED
+50|찢어발기기|3|ability_druid_ravage|CHANGED
+58|찢어발기기|4|ability_druid_ravage|CHANGED
+32|인간형 추적|-|ability_tracking|-
+36|광포한 재생력|-|ability_bullrush|CHANGED
+36|암습|1|ability_druid_supriseattack|-
+46|암습|2|ability_druid_supriseattack|-
+56|암습|3|ability_druid_supriseattack|-
+40|허리케인|1|spell_nature_cyclone|CHANGED
+50|허리케인|2|spell_nature_cyclone|CHANGED
+60|허리케인|3|spell_nature_cyclone|CHANGED
+40|달빛야수 변신|-|spell_nature_forceofnature|CHANGED
+40|광포한 곰 변신|-|ability_racial_bearform|CHANGED
+40|살쾡이의 우아함|-|inv_feather_01|-
+40|원시 이빨|1|ability_racial_cannibalize|NEW
+50|원시 이빨|2|ability_racial_cannibalize|NEW
+60|원시 이빨|3|ability_racial_cannibalize|NEW
+40|힘의 전환|-|spell_druid_displacement|NEW
+40|정신 자극|-|spell_nature_lightning|-
+40|급속 성장|1|ability_druid_flourish|NEW
+50|급속 성장|2|ability_druid_flourish|NEW
+60|급속 성장|3|ability_druid_flourish|NEW
+44|나무 껍질|-|spell_nature_stoneclawtotem|CHANGED
+50|야생의 선물|1|spell_nature_regeneration|CHANGED
+60|야생의 선물|2|spell_nature_regeneration|CHANGED

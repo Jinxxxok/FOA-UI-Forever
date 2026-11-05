@@ -1,0 +1,201 @@
+1|신비한 지능|1|spell_holy_magicalsentry.jpg|-
+14|신비한 지능|2|spell_holy_magicalsentry.jpg|-
+28|신비한 지능|3|spell_holy_magicalsentry.jpg|-
+42|신비한 지능|4|spell_holy_magicalsentry.jpg|-
+56|신비한 지능|5|spell_holy_magicalsentry.jpg|-
+1|화염구|1|spell_fire_flamebolt.jpg|-
+6|화염구|2|spell_fire_flamebolt.jpg|-
+12|화염구|3|spell_fire_flamebolt.jpg|-
+18|화염구|4|spell_fire_flamebolt.jpg|-
+24|화염구|5|spell_fire_flamebolt.jpg|-
+30|화염구|6|spell_fire_flamebolt.jpg|-
+36|화염구|7|spell_fire_flamebolt.jpg|-
+42|화염구|8|spell_fire_flamebolt.jpg|-
+48|화염구|9|spell_fire_flamebolt.jpg|-
+54|화염구|10|spell_fire_flamebolt.jpg|-
+60|화염구|11|spell_fire_flamebolt.jpg|-
+60|화염구|12|spell_fire_flamebolt.jpg|-
+1|냉기 갑옷|1|spell_frost_frostarmor02.jpg|-
+10|냉기 갑옷|2|spell_frost_frostarmor02.jpg|-
+20|냉기 갑옷|3|spell_frost_frostarmor02.jpg|-
+4|음료 창조|1|inv_drink_18.jpg|-
+10|음료 창조|2|inv_drink_18.jpg|-
+20|음료 창조|3|inv_drink_18.jpg|-
+30|음료 창조|4|inv_drink_18.jpg|-
+40|음료 창조|5|inv_drink_18.jpg|-
+50|음료 창조|6|inv_drink_18.jpg|-
+60|음료 창조|7|inv_drink_18.jpg|-
+4|얼음 화살|1|spell_frost_frostbolt02.jpg|-
+8|얼음 화살|2|spell_frost_frostbolt02.jpg|-
+14|얼음 화살|3|spell_frost_frostbolt02.jpg|-
+20|얼음 화살|4|spell_frost_frostbolt02.jpg|-
+26|얼음 화살|5|spell_frost_frostbolt02.jpg|-
+32|얼음 화살|6|spell_frost_frostbolt02.jpg|-
+38|얼음 화살|7|spell_frost_frostbolt02.jpg|-
+44|얼음 화살|8|spell_frost_frostbolt02.jpg|-
+50|얼음 화살|9|spell_frost_frostbolt02.jpg|-
+56|얼음 화살|10|spell_frost_frostbolt02.jpg|-
+60|얼음 화살|11|spell_frost_frostbolt02.jpg|-
+6|음식 창조|1|inv_misc_food_73cinnamonroll.jpg|-
+12|음식 창조|2|inv_misc_food_73cinnamonroll.jpg|-
+22|음식 창조|3|inv_misc_food_73cinnamonroll.jpg|-
+32|음식 창조|4|inv_misc_food_73cinnamonroll.jpg|-
+42|음식 창조|5|inv_misc_food_73cinnamonroll.jpg|-
+52|음식 창조|6|inv_misc_food_73cinnamonroll.jpg|-
+60|음식 창조|7|inv_misc_food_73cinnamonroll.jpg|-
+6|화염 작렬|1|spell_fire_fireball.jpg|-
+14|화염 작렬|2|spell_fire_fireball.jpg|-
+22|화염 작렬|3|spell_fire_fireball.jpg|-
+30|화염 작렬|4|spell_fire_fireball.jpg|-
+38|화염 작렬|5|spell_fire_fireball.jpg|-
+46|화염 작렬|6|spell_fire_fireball.jpg|-
+54|화염 작렬|7|spell_fire_fireball.jpg|-
+6|두루마리 이해|1|inv_misc_questionmark.jpg|-
+6|연구|1|inv_misc_book_08.jpg|-
+8|신비한 화살|1|spell_nature_starfall.jpg|-
+16|신비한 화살|2|spell_nature_starfall.jpg|-
+24|신비한 화살|3|spell_nature_starfall.jpg|-
+32|신비한 화살|4|spell_nature_starfall.jpg|-
+40|신비한 화살|5|spell_nature_starfall.jpg|-
+48|신비한 화살|6|spell_nature_starfall.jpg|-
+56|신비한 화살|7|spell_nature_starfall.jpg|-
+56|신비한 화살|8|spell_nature_starfall.jpg|-
+8|변이|1|spell_nature_polymorph.jpg|-
+20|변이|2|spell_nature_polymorph.jpg|-
+40|변이|3|spell_nature_polymorph.jpg|-
+60|변이|4|spell_nature_polymorph.jpg|-
+60|변이|5|spell_nature_polymorph.jpg|-
+60|변이|6|spell_nature_polymorph.jpg|-
+10|얼음 회오리|1|spell_frost_frostnova.jpg|-
+26|얼음 회오리|2|spell_frost_frostnova.jpg|-
+40|얼음 회오리|3|spell_frost_frostnova.jpg|-
+54|얼음 회오리|4|spell_frost_frostnova.jpg|-
+12|마법 감쇠|1|spell_nature_abolishmagic.jpg|-
+24|마법 감쇠|2|spell_nature_abolishmagic.jpg|-
+36|마법 감쇠|3|spell_nature_abolishmagic.jpg|-
+48|마법 감쇠|4|spell_nature_abolishmagic.jpg|-
+60|마법 감쇠|5|spell_nature_abolishmagic.jpg|-
+12|저속 낙하|1|spell_magic_featherfall.jpg|-
+14|신비한 폭발|1|spell_nature_wispsplode.jpg|-
+22|신비한 폭발|2|spell_nature_wispsplode.jpg|-
+30|신비한 폭발|3|spell_nature_wispsplode.jpg|-
+38|신비한 폭발|4|spell_nature_wispsplode.jpg|-
+46|신비한 폭발|5|spell_nature_wispsplode.jpg|-
+54|신비한 폭발|6|spell_nature_wispsplode.jpg|-
+16|마법 감지|1|spell_holy_dizzy.jpg|-
+16|불기둥|1|spell_fire_selfdestruct.jpg|-
+24|불기둥|2|spell_fire_selfdestruct.jpg|-
+32|불기둥|3|spell_fire_selfdestruct.jpg|-
+40|불기둥|4|spell_fire_selfdestruct.jpg|-
+48|불기둥|5|spell_fire_selfdestruct.jpg|-
+56|불기둥|6|spell_fire_selfdestruct.jpg|-
+18|마법 증폭|1|spell_holy_flashheal.jpg|-
+30|마법 증폭|2|spell_holy_flashheal.jpg|-
+42|마법 증폭|3|spell_holy_flashheal.jpg|-
+54|마법 증폭|4|spell_holy_flashheal.jpg|-
+18|하급 저주 해제|1|spell_nature_removecurse.jpg|-
+20|비전 작렬|1|spell_arcane_blast.jpg|-
+30|비전 작렬|2|spell_arcane_blast.jpg|-
+40|비전 작렬|3|spell_arcane_blast.jpg|-
+50|비전 작렬|4|spell_arcane_blast.jpg|-
+60|비전 작렬|5|spell_arcane_blast.jpg|-
+20|점멸|1|spell_arcane_blink.jpg|-
+20|환기|1|spell_nature_purge.jpg|-
+20|마나 보호막|1|spell_shadow_detectlesserinvisibility.jpg|-
+28|마나 보호막|2|spell_shadow_detectlesserinvisibility.jpg|-
+36|마나 보호막|3|spell_shadow_detectlesserinvisibility.jpg|-
+44|마나 보호막|4|spell_shadow_detectlesserinvisibility.jpg|-
+52|마나 보호막|5|spell_shadow_detectlesserinvisibility.jpg|-
+60|마나 보호막|6|spell_shadow_detectlesserinvisibility.jpg|-
+20|순간이동: 아이언포지|1|spell_arcane_teleportironforge.jpg|-
+20|순간이동: 오그리마|1|spell_arcane_teleportorgrimmar.jpg|-
+20|순간이동: 스톰윈드|1|spell_arcane_teleportstormwind.jpg|-
+20|순간이동: 언더시티|1|spell_arcane_teleportundercity.jpg|-
+20|화염계 수호|1|spell_fire_firearmor.jpg|-
+30|화염계 수호|2|spell_fire_firearmor.jpg|-
+40|화염계 수호|3|spell_fire_firearmor.jpg|-
+50|화염계 수호|4|spell_fire_firearmor.jpg|-
+60|화염계 수호|5|spell_fire_firearmor.jpg|-
+20|불덩이 작렬|1|spell_fire_fireball02.jpg|-
+24|불덩이 작렬|2|spell_fire_fireball02.jpg|-
+30|불덩이 작렬|3|spell_fire_fireball02.jpg|-
+36|불덩이 작렬|4|spell_fire_fireball02.jpg|-
+42|불덩이 작렬|5|spell_fire_fireball02.jpg|-
+48|불덩이 작렬|6|spell_fire_fireball02.jpg|-
+54|불덩이 작렬|7|spell_fire_fireball02.jpg|-
+60|불덩이 작렬|8|spell_fire_fireball02.jpg|-
+20|눈보라|1|spell_frost_icestorm.jpg|-
+28|눈보라|2|spell_frost_icestorm.jpg|-
+36|눈보라|3|spell_frost_icestorm.jpg|-
+44|눈보라|4|spell_frost_icestorm.jpg|-
+52|눈보라|5|spell_frost_icestorm.jpg|-
+60|눈보라|6|spell_frost_icestorm.jpg|-
+20|얼음창|1|spell_frost_frostblast.jpg|-
+28|얼음창|2|spell_frost_frostblast.jpg|-
+34|얼음창|3|spell_frost_frostblast.jpg|-
+42|얼음창|4|spell_frost_frostblast.jpg|-
+48|얼음창|5|spell_frost_frostblast.jpg|-
+56|얼음창|6|spell_frost_frostblast.jpg|-
+22|불태우기|1|spell_fire_soulburn.jpg|-
+28|불태우기|2|spell_fire_soulburn.jpg|-
+34|불태우기|3|spell_fire_soulburn.jpg|-
+40|불태우기|4|spell_fire_soulburn.jpg|-
+46|불태우기|5|spell_fire_soulburn.jpg|-
+52|불태우기|6|spell_fire_soulburn.jpg|-
+58|불태우기|7|spell_fire_soulburn.jpg|-
+22|냉기계 수호|1|spell_frost_frostward.jpg|-
+32|냉기계 수호|2|spell_frost_frostward.jpg|-
+42|냉기계 수호|3|spell_frost_frostward.jpg|-
+52|냉기계 수호|4|spell_frost_frostward.jpg|-
+60|냉기계 수호|5|spell_frost_frostward.jpg|-
+24|마법 차단|1|spell_frost_iceshock.jpg|-
+24|냉기 작렬|1|spell_frost_frostbolt.jpg|-
+36|냉기 작렬|2|spell_frost_frostbolt.jpg|-
+48|냉기 작렬|3|spell_frost_frostbolt.jpg|-
+25|비전 격노|1|ability_mage_netherwindpresence.jpg|-
+36|비전 격노|2|ability_mage_netherwindpresence.jpg|-
+48|비전 격노|3|ability_mage_netherwindpresence.jpg|-
+60|비전 격노|4|ability_mage_netherwindpresence.jpg|-
+25|얼음 방패|1|spell_frost_frost.jpg|-
+26|냉기 돌풍|1|spell_frost_glacier.jpg|-
+34|냉기 돌풍|2|spell_frost_glacier.jpg|-
+42|냉기 돌풍|3|spell_frost_glacier.jpg|-
+50|냉기 돌풍|4|spell_frost_glacier.jpg|-
+58|냉기 돌풍|5|spell_frost_glacier.jpg|-
+28|마나 마노 창조|1|inv_misc_gem_emerald_01.jpg|-
+30|냉정|1|spell_nature_enchantarmor.jpg|-
+30|순간이동: 다르나서스|1|spell_arcane_teleportdarnassus.jpg|-
+30|순간이동: 썬더 블러프|1|spell_arcane_teleportthunderbluff.jpg|-
+30|화염 폭풍|1|spell_holy_excorcism_02.jpg|-
+36|화염 폭풍|2|spell_holy_excorcism_02.jpg|-
+44|화염 폭풍|3|spell_holy_excorcism_02.jpg|-
+52|화염 폭풍|4|spell_holy_excorcism_02.jpg|-
+60|화염 폭풍|5|spell_holy_excorcism_02.jpg|-
+30|한파|1|spell_frost_wizardmark.jpg|-
+30|얼음 갑옷|1|spell_frost_frostarmor02.jpg|-
+40|얼음 갑옷|2|spell_frost_frostarmor02.jpg|-
+50|얼음 갑옷|3|spell_frost_frostarmor02.jpg|-
+60|얼음 갑옷|4|spell_frost_frostarmor02.jpg|-
+34|마법사 갑옷|1|spell_magearmor.jpg|-
+46|마법사 갑옷|2|spell_magearmor.jpg|-
+58|마법사 갑옷|3|spell_magearmor.jpg|-
+38|마나 비취 창조|1|inv_misc_gem_emerald_02.jpg|-
+40|신비의 마법 강화|1|spell_nature_lightning.jpg|-
+40|차원문: 아이언포지|1|spell_arcane_portalironforge.jpg|-
+40|차원문: 오그리마|1|spell_arcane_portalorgrimmar.jpg|-
+40|차원문: 스톰윈드|1|spell_arcane_portalstormwind.jpg|-
+40|차원문: 언더시티|1|spell_arcane_portalundercity.jpg|-
+40|발화|1|spell_fire_sealoffire.jpg|-
+40|냉기화염 화살|1|ability_mage_frostfirebolt.jpg|-
+50|냉기화염 화살|2|ability_mage_frostfirebolt.jpg|-
+60|냉기화염 화살|3|ability_mage_frostfirebolt.jpg|-
+40|얼음 보호막|1|spell_ice_lament.jpg|-
+46|얼음 보호막|2|spell_ice_lament.jpg|-
+52|얼음 보호막|3|spell_ice_lament.jpg|-
+58|얼음 보호막|4|spell_ice_lament.jpg|-
+48|마나 황수정 창조|1|inv_misc_gem_opal_01.jpg|-
+50|차원문: 다르나서스|1|spell_arcane_portaldarnassus.jpg|-
+50|차원문: 썬더 블러프|1|spell_arcane_portalthunderbluff.jpg|-
+50|순간이동: 달라란|1|spell_arcane_teleporthalloftheguardian.jpg|-
+56|신비한 총명함|1|spell_holy_arcaneintellect.jpg|-
+58|마나 루비 창조|1|inv_misc_gem_ruby_01.jpg|-

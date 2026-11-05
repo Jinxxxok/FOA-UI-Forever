@@ -2,7 +2,7 @@
 ## Title: |cffFFF468FOA|r UI
 ## Notes: FOA (First of All) 통합 UI
 ## Author: hyeokjiny
-## Version: 0.39.1
+## Version: 0.40.0
 ## SavedVariables: InkUIDB
 ## SavedVariablesPerCharacter: InkUICharDB
 ## IconTexture: Interface\AddOns\FOA_UI\Media\Textures\Logo
@@ -21,6 +21,11 @@ ActionBars.lua
 Score.lua
 TalentData.lua
 Talents.lua
+ClassSpells.lua
+Training.lua
+AHPrice.lua
+ProfessionRoutes.lua
+Professions.lua
 Group.lua
 Quest.lua
 Bags.lua

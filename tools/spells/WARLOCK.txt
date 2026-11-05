@@ -1,0 +1,237 @@
+10|악마의 피부|1|spell_shadow_ragingscream|CHANGED
+10|악마의 피부|2|spell_shadow_ragingscream|CHANGED
+1|임프 소환|-|spell_shadow_summonimp|-
+1|제물|1|spell_fire_immolation|CHANGED
+10|제물|2|spell_fire_immolation|CHANGED
+20|제물|3|spell_fire_immolation|CHANGED
+30|제물|4|spell_fire_immolation|CHANGED
+40|제물|5|spell_fire_immolation|CHANGED
+50|제물|6|spell_fire_immolation|CHANGED
+60|제물|7|spell_fire_immolation|CHANGED
+60|제물|8|spell_fire_immolation|CHANGED
+1|어둠의 화살|1|spell_shadow_shadowbolt|CHANGED
+6|어둠의 화살|2|spell_shadow_shadowbolt|CHANGED
+12|어둠의 화살|3|spell_shadow_shadowbolt|CHANGED
+20|어둠의 화살|4|spell_shadow_shadowbolt|CHANGED
+28|어둠의 화살|5|spell_shadow_shadowbolt|CHANGED
+36|어둠의 화살|6|spell_shadow_shadowbolt|CHANGED
+44|어둠의 화살|7|spell_shadow_shadowbolt|CHANGED
+52|어둠의 화살|8|spell_shadow_shadowbolt|CHANGED
+60|어둠의 화살|9|spell_shadow_shadowbolt|CHANGED
+60|어둠의 화살|10|spell_shadow_shadowbolt|CHANGED
+1|불화살|1|spell_fire_firebolt|-
+8|불화살|2|spell_fire_firebolt|-
+18|불화살|3|spell_fire_firebolt|-
+28|불화살|4|spell_fire_firebolt|-
+38|불화살|5|spell_fire_firebolt|-
+48|불화살|6|spell_fire_firebolt|-
+58|불화살|7|spell_fire_firebolt|-
+4|부패|1|spell_shadow_abominationexplosion|CHANGED
+14|부패|2|spell_shadow_abominationexplosion|CHANGED
+24|부패|3|spell_shadow_abominationexplosion|CHANGED
+34|부패|4|spell_shadow_abominationexplosion|CHANGED
+44|부패|5|spell_shadow_abominationexplosion|CHANGED
+54|부패|6|spell_shadow_abominationexplosion|CHANGED
+60|부패|7|spell_shadow_abominationexplosion|CHANGED
+4|무력화 저주|1|spell_shadow_curseofmannoroth|CHANGED
+12|무력화 저주|2|spell_shadow_curseofmannoroth|CHANGED
+22|무력화 저주|3|spell_shadow_curseofmannoroth|CHANGED
+32|무력화 저주|4|spell_shadow_curseofmannoroth|CHANGED
+42|무력화 저주|5|spell_shadow_curseofmannoroth|CHANGED
+52|무력화 저주|6|spell_shadow_curseofmannoroth|CHANGED
+4|피의 서약|1|spell_shadow_bloodboil|-
+14|피의 서약|2|spell_shadow_bloodboil|-
+26|피의 서약|3|spell_shadow_bloodboil|-
+38|피의 서약|4|spell_shadow_bloodboil|-
+50|피의 서약|5|spell_shadow_bloodboil|-
+6|생명력 전환|1|spell_shadow_burningspirit|CHANGED
+16|생명력 전환|2|spell_shadow_burningspirit|CHANGED
+26|생명력 전환|3|spell_shadow_burningspirit|CHANGED
+36|생명력 전환|4|spell_shadow_burningspirit|CHANGED
+46|생명력 전환|5|spell_shadow_burningspirit|CHANGED
+56|생명력 전환|6|spell_shadow_burningspirit|CHANGED
+8|고통의 파멸|1|spell_shadow_curseofsargeras|CHANGED
+18|고통의 파멸|2|spell_shadow_curseofsargeras|CHANGED
+28|고통의 파멸|3|spell_shadow_curseofsargeras|CHANGED
+38|고통의 파멸|4|spell_shadow_curseofsargeras|CHANGED
+48|고통의 파멸|5|spell_shadow_curseofsargeras|CHANGED
+58|고통의 파멸|6|spell_shadow_curseofsargeras|CHANGED
+8|공포|1|spell_shadow_possession|-
+32|공포|2|spell_shadow_possession|-
+56|공포|3|spell_shadow_possession|-
+10|영혼 흡수|1|spell_shadow_haunting|CHANGED
+24|영혼 흡수|2|spell_shadow_haunting|CHANGED
+38|영혼 흡수|3|spell_shadow_haunting|CHANGED
+52|영혼 흡수|4|spell_shadow_haunting|CHANGED
+10|생명석 창조|1|spell_inv_stone_04|CHANGED
+22|생명석 창조|2|spell_inv_stone_04|CHANGED
+34|생명석 창조|3|spell_inv_stone_04|CHANGED
+46|생명석 창조|4|spell_inv_stone_04|CHANGED
+58|생명석 창조|5|spell_inv_stone_04|CHANGED
+10|공허방랑자 소환|-|spell_shadow_summonvoidwalker|-
+10|고문|1|spell_shadow_gathershadows|-
+20|고문|2|spell_shadow_gathershadows|-
+30|고문|3|spell_shadow_gathershadows|-
+40|고문|4|spell_shadow_gathershadows|-
+50|고문|5|spell_shadow_gathershadows|-
+60|고문|6|spell_shadow_gathershadows|-
+12|생명력 집중|1|spell_shadow_lifedrain|CHANGED
+20|생명력 집중|2|spell_shadow_lifedrain|CHANGED
+28|생명력 집중|3|spell_shadow_lifedrain|CHANGED
+36|생명력 집중|4|spell_shadow_lifedrain|CHANGED
+44|생명력 집중|5|spell_shadow_lifedrain|CHANGED
+52|생명력 집중|6|spell_shadow_lifedrain|CHANGED
+60|생명력 집중|7|spell_shadow_lifedrain|CHANGED
+12|위상 변화|-|spell_shadow_impphaseshift|-
+14|무모함의 저주|1|spell_shadow_unholystrength|CHANGED
+28|무모함의 저주|2|spell_shadow_unholystrength|CHANGED
+42|무모함의 저주|3|spell_shadow_unholystrength|CHANGED
+56|무모함의 저주|4|spell_shadow_unholystrength|CHANGED
+14|생명력 흡수|1|spell_shadow_lifedrain02|CHANGED
+22|생명력 흡수|2|spell_shadow_lifedrain02|CHANGED
+30|생명력 흡수|3|spell_shadow_lifedrain02|CHANGED
+38|생명력 흡수|4|spell_shadow_lifedrain02|CHANGED
+46|생명력 흡수|5|spell_shadow_lifedrain02|CHANGED
+54|생명력 흡수|6|spell_shadow_lifedrain02|CHANGED
+14|화염 보호막|1|spell_fire_firearmor|-
+24|화염 보호막|2|spell_fire_firearmor|-
+34|화염 보호막|3|spell_fire_firearmor|-
+44|화염 보호막|4|spell_fire_firearmor|-
+54|화염 보호막|5|spell_fire_firearmor|-
+16|영원의 숨결|-|spell_shadow_demonbreath|-
+16|희생|1|spell_shadow_sacrificialshield|-
+24|희생|2|spell_shadow_sacrificialshield|-
+32|희생|3|spell_shadow_sacrificialshield|-
+40|희생|4|spell_shadow_sacrificialshield|-
+48|희생|5|spell_shadow_sacrificialshield|-
+56|희생|6|spell_shadow_sacrificialshield|-
+18|영혼석 창조|1|spell_shadow_soulgem|CHANGED
+30|영혼석 창조|2|spell_shadow_soulgem|CHANGED
+40|영혼석 창조|3|spell_shadow_soulgem|CHANGED
+50|영혼석 창조|4|spell_shadow_soulgem|CHANGED
+60|영혼석 창조|5|spell_shadow_soulgem|CHANGED
+18|불타는 고통|1|spell_fire_soulburn|CHANGED
+26|불타는 고통|2|spell_fire_soulburn|CHANGED
+34|불타는 고통|3|spell_fire_soulburn|CHANGED
+42|불타는 고통|4|spell_fire_soulburn|CHANGED
+50|불타는 고통|5|spell_fire_soulburn|CHANGED
+58|불타는 고통|6|spell_fire_soulburn|CHANGED
+18|어둠 흡수|1|spell_shadow_antishadow|-
+26|어둠 흡수|2|spell_shadow_antishadow|-
+34|어둠 흡수|3|spell_shadow_antishadow|-
+42|어둠 흡수|4|spell_shadow_antishadow|-
+50|어둠 흡수|5|spell_shadow_antishadow|-
+58|어둠 흡수|6|spell_shadow_antishadow|-
+20|저주 증폭|-|spell_shadow_contagion|CHANGED
+20|원소의 저주|1|spell_warlock_curse_shadow|CHANGED
+30|원소의 저주|2|spell_warlock_curse_shadow|CHANGED
+40|원소의 저주|3|spell_warlock_curse_shadow|CHANGED
+50|원소의 저주|4|spell_warlock_curse_shadow|CHANGED
+20|악마의 갑옷|1|spell_shadow_ragingscream|CHANGED
+30|악마의 갑옷|2|spell_shadow_ragingscream|CHANGED
+40|악마의 갑옷|3|spell_shadow_ragingscream|CHANGED
+50|악마의 갑옷|4|spell_shadow_ragingscream|CHANGED
+60|악마의 갑옷|5|spell_shadow_ragingscream|CHANGED
+20|악마의 제물|-|spell_shadow_psychicscream|CHANGED
+20|소환 의식|-|spell_shadow_twilight|-
+20|인큐버스 소환|-|spell_ability_warlock_incubus|-
+20|서큐버스 소환|-|spell_shadow_summonsuccubus|-
+20|불의 비|1|spell_shadow_rainoffire|CHANGED
+34|불의 비|2|spell_shadow_rainoffire|CHANGED
+46|불의 비|3|spell_shadow_rainoffire|CHANGED
+58|불의 비|4|spell_shadow_rainoffire|CHANGED
+20|어둠의 연소|1|spell_shadow_scourgebuild|CHANGED
+24|어둠의 연소|2|spell_shadow_scourgebuild|CHANGED
+32|어둠의 연소|3|spell_shadow_scourgebuild|CHANGED
+40|어둠의 연소|4|spell_shadow_scourgebuild|CHANGED
+48|어둠의 연소|5|spell_shadow_scourgebuild|CHANGED
+56|어둠의 연소|6|spell_shadow_scourgebuild|CHANGED
+20|고통의 채찍|1|spell_shadow_curse|-
+28|고통의 채찍|2|spell_shadow_curse|-
+36|고통의 채찍|3|spell_shadow_curse|-
+44|고통의 채찍|4|spell_shadow_curse|-
+52|고통의 채찍|5|spell_shadow_curse|-
+60|고통의 채찍|6|spell_shadow_curse|-
+22|킬로그의 눈|-|spell_shadow_evileye|-
+22|유혹의 입맞춤|1|spell_shadow_soothingkiss|-
+34|유혹의 입맞춤|2|spell_shadow_soothingkiss|-
+46|유혹의 입맞춤|3|spell_shadow_soothingkiss|-
+58|유혹의 입맞춤|4|spell_shadow_soothingkiss|-
+24|마나 흡수|1|spell_shadow_siphonmana|CHANGED
+34|마나 흡수|2|spell_shadow_siphonmana|CHANGED
+44|마나 흡수|3|spell_shadow_siphonmana|CHANGED
+54|마나 흡수|4|spell_shadow_siphonmana|CHANGED
+24|악마 감지|-|spell_shadow_metamorphosis|-
+24|고통|1|spell_shadow_blackplague|-
+36|고통|2|spell_shadow_blackplague|-
+48|고통|3|spell_shadow_blackplague|-
+60|고통|4|spell_shadow_blackplague|-
+25|피로의 저주|-|spell_shadow_grimward|CHANGED
+25|마의 지배|-|spell_nature_removecurse|CHANGED
+25|점화|1|spell_fire_fireball|CHANGED
+32|점화|2|spell_fire_fireball|CHANGED
+40|점화|3|spell_fire_fireball|CHANGED
+48|점화|4|spell_fire_fireball|CHANGED
+54|점화|5|spell_fire_fireball|CHANGED
+60|점화|6|spell_fire_fireball|CHANGED
+26|언어의 저주|1|spell_shadow_curseoftounges|CHANGED
+50|언어의 저주|2|spell_shadow_curseoftounges|CHANGED
+26|투명체 감지|1|spell_shadow_detectinvisibility|CHANGED
+38|투명체 감지|2|spell_shadow_detectinvisibility|CHANGED
+50|투명체 감지|3|spell_shadow_detectinvisibility|CHANGED
+26|현혹|-|spell_shadow_mindsteal|-
+28|추방|1|spell_shadow_cripple|-
+48|추방|2|spell_shadow_cripple|-
+28|화염석 창조|1|spell_inv_misc_gem_bloodstone_02|CHANGED
+36|화염석 창조|2|spell_inv_misc_gem_bloodstone_02|CHANGED
+46|화염석 창조|3|spell_inv_misc_gem_bloodstone_02|CHANGED
+56|화염석 창조|4|spell_inv_misc_gem_bloodstone_02|CHANGED
+30|생명력 착취|1|spell_shadow_requiem|CHANGED
+38|생명력 착취|2|spell_shadow_requiem|CHANGED
+48|생명력 착취|3|spell_shadow_requiem|CHANGED
+58|생명력 착취|4|spell_shadow_requiem|CHANGED
+30|영혼의 고리|-|spell_shadow_gathershadows|-
+30|악마 예속|1|spell_shadow_enslavedemon|CHANGED
+44|악마 예속|2|spell_shadow_enslavedemon|CHANGED
+58|악마 예속|3|spell_shadow_enslavedemon|CHANGED
+30|지옥사냥개 소환|-|spell_shadow_summonfelhunter|-
+30|대혼란의 파멸|-|spell_ability_warlock_baneofhavoc|NEW
+30|지옥의 불길|1|spell_fire_incinerate|CHANGED
+42|지옥의 불길|2|spell_fire_incinerate|CHANGED
+54|지옥의 불길|3|spell_fire_incinerate|CHANGED
+30|마법 삼키기|1|spell_nature_purge|-
+38|마법 삼키기|2|spell_nature_purge|-
+46|마법 삼키기|3|spell_nature_purge|-
+54|마법 삼키기|4|spell_nature_purge|-
+32|암흑계 수호|1|spell_shadow_antishadow|-
+42|암흑계 수호|2|spell_shadow_antishadow|-
+52|암흑계 수호|3|spell_shadow_antishadow|-
+60|암흑계 수호|4|spell_shadow_antishadow|-
+32|하급 투명화|-|spell_magic_lesserinvisibilty|-
+32|얼룩진 피|1|spell_shadow_lifedrain|-
+40|얼룩진 피|2|spell_shadow_lifedrain|-
+48|얼룩진 피|3|spell_shadow_lifedrain|-
+56|얼룩진 피|4|spell_shadow_lifedrain|-
+36|주문석 창조|1|spell_inv_misc_gem_sapphire_01|CHANGED
+48|주문석 창조|2|spell_inv_misc_gem_sapphire_01|CHANGED
+60|주문석 창조|3|spell_inv_misc_gem_sapphire_01|CHANGED
+36|주문 잠금|1|spell_shadow_mindrot|-
+52|주문 잠금|2|spell_shadow_mindrot|-
+40|공포의 울부짖음|1|spell_shadow_deathscream|-
+54|공포의 울부짖음|2|spell_shadow_deathscream|-
+40|괴멸|-|spell_ability_deathknight_hemorrhagicfever|NEW
+40|지옥마 소환|-|spell_nature_swiftness|CHANGED
+40|소각|1|spell_fire_burnout|NEW
+50|소각|2|spell_fire_burnout|NEW
+60|소각|3|spell_fire_burnout|NEW
+42|죽음의 고리|1|spell_shadow_deathcoil|CHANGED
+50|죽음의 고리|2|spell_shadow_deathcoil|CHANGED
+58|죽음의 고리|3|spell_shadow_deathcoil|CHANGED
+42|망상|-|spell_shadow_auraofdarkness|-
+48|영혼의 불꽃|1|spell_fire_fireball02|CHANGED
+56|영혼의 불꽃|2|spell_fire_fireball02|CHANGED
+50|불지옥|-|spell_shadow_summoninfernal|-
+60|운명의 파멸|-|spell_shadow_auraofdarkness|CHANGED
+60|소환의 차원문|-|spell_inv_misc_rune_10|NEW
+60|파멸의 의식|-|spell_shadow_antimagicshell|-
+60|공포마 소환|-|spell_ability_mount_dreadsteed|CHANGED
