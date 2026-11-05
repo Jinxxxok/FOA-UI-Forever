@@ -335,7 +335,7 @@ function M:MatchBar1(keys)
 			if lx and d.header then
 				local h = d.header:GetHeight()
 				d.header:ClearAllPoints()
-				d.header:SetPoint("TOPLEFT", Ink.root, "TOPLEFT", lx, -(top - h - (b1.gap or 4) - 4))
+				d.header:SetPoint("TOPLEFT", Ink.root, "TOPLEFT", lx, -(top - h - (b1.gap or 4)))
 				Ink:SavePos(key)
 				Ink:ApplyPos(key)
 			end
@@ -355,7 +355,8 @@ function M:SyncBlizzToggles()
 			local s = Settings(key)
 			if seen[n] == nil then
 				-- 처음 보는 값: 블리자드 설정에서 켜 둔 바는 FOA 에서도 켠다 (끄지는 않는다)
-				if v and s.on == false then
+				--  공용 배치 · 프리셋을 받아온 직후에는 받아온 그대로 둔다
+				if v and s.on == false and not Ink.cdb.bars.noAdopt then
 					s.on = true; changed = true
 					if n <= 3 then adopted = adopted or {}; adopted[#adopted + 1] = key end
 				end
@@ -366,7 +367,7 @@ function M:SyncBlizzToggles()
 			seen[n] = v
 		end
 	end
-	if any then Ink.cdb.bars.blizzSeen = seen end
+	if any then Ink.cdb.bars.blizzSeen = seen; Ink.cdb.bars.noAdopt = nil end
 	if changed then
 		self:LayoutAll()
 		for _, d in ipairs(self.list) do Ink:ApplyPos(d.key) end

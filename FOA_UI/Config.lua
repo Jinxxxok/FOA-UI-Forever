@@ -159,16 +159,74 @@ function M:ShowGrid(on)
 	if on then self:DrawGrid() end
 end
 
--- 격자 맞춤: 왼쪽 위 모서리를 8칸 단위로
+-- 놓을 때 맞춤:
+--  1) 다른 요소 · 화면 가장자리에 가까우면 딱 붙인다 (행동단축바끼리는 버튼 간격만큼 띄워서 한 덩어리처럼)
+--  2) 붙일 곳이 없는 방향은 8칸 격자에 맞춘다
+local MAGNET = 12
+local function Box(key)
+	local m = Ink.movers[key]
+	if not (m and m.frame and m.frame:IsShown()) then return end
+	local x, y, w = Ink:FrameBox(key)
+	if not x then return end
+	local f = m.frame
+	local k = f:GetEffectiveScale() / Ink.root:GetEffectiveScale()
+	local h = (m.h and m.h * (f:GetScale() or 1)) or f:GetHeight() * k
+	if not (w and h) or w < 1 or h < 1 then return end
+	return x, y, w, h
+end
+
+local function IsBar(key)
+	return key:match("^bar%d$") or key == "stance" or key == "pet"
+end
+
+local function BarGap(key)
+	local b = ns.Bars
+	if b and b.Settings and IsBar(key) then return b.Settings(key).gap or 0 end
+	return 0
+end
+
 local function Snap(key)
 	if Ink.db.editSnap == false then return end
 	local m = Ink.movers[key]
-	local x, y = Ink:FrameBox(key)
+	local x, y, w, h = Box(key)
 	if not (m and x) then return end
+	local rw, rh = Ink.root:GetWidth(), Ink.root:GetHeight()
+	local bestX, bestY, dx, dy = nil, nil, MAGNET + 1, MAGNET + 1
+	local function tryX(v) local d = math.abs(v - x) if d < dx then dx, bestX = d, v end end
+	local function tryY(v) local d = math.abs(v - y) if d < dy then dy, bestY = d, v end end
+	-- 화면 가장자리
+	tryX(0); tryX(rw - w); tryY(0); tryY(rh - h)
+	for _, other in ipairs(Ink.moverOrder) do
+		if other ~= key then
+			local ox, oy, ow, oh = Box(other)
+			if ox then
+				local pad = (IsBar(key) and IsBar(other)) and math.max(BarGap(key), BarGap(other)) or 0
+				-- 세로로 겹치는 범위에 있을 때만 옆에 붙이고, 가로로 겹칠 때만 위아래로 붙인다
+				local nearV = y < oy + oh + MAGNET and y + h > oy - MAGNET
+				local nearH = x < ox + ow + MAGNET and x + w > ox - MAGNET
+				if nearV then
+					tryX(ox + ow + pad)          -- 오른쪽에 붙이기
+					tryX(ox - w - pad)           -- 왼쪽에 붙이기
+				end
+				if nearH then
+					tryY(oy + oh + pad)          -- 아래에 붙이기
+					tryY(oy - h - pad)           -- 위에 붙이기
+					tryX(ox)                     -- 왼쪽 끝 맞추기
+					tryX(ox + ow - w)            -- 오른쪽 끝 맞추기
+					tryX(ox + (ow - w) / 2)      -- 가운데 맞추기
+				end
+				if nearV then
+					tryY(oy)                     -- 위쪽 끝 맞추기
+					tryY(oy + oh - h)            -- 아래쪽 끝 맞추기
+				end
+			end
+		end
+	end
+	if not bestX then bestX = math.floor(x / SNAP + 0.5) * SNAP end
+	if not bestY then bestY = math.floor(y / SNAP + 0.5) * SNAP end
 	local s = m.frame:GetScale() or 1
 	m.frame:ClearAllPoints()
-	m.frame:SetPoint("TOPLEFT", Ink.root, "TOPLEFT",
-		math.floor(x / SNAP + 0.5) * SNAP / s, -math.floor(y / SNAP + 0.5) * SNAP / s)
+	m.frame:SetPoint("TOPLEFT", Ink.root, "TOPLEFT", bestX / s, -bestY / s)
 end
 
 -- 크기 조절 (미터기 · 채팅): 아래쪽 띠 = 높이, 오른쪽 아래 모서리 = 폭과 높이
@@ -510,7 +568,11 @@ function M:SetEdit(on)
 			o:Hide()
 		end
 	end
-	if not on then self.sel = nil end
+	if not on then
+		self.sel = nil
+		if self.presetPop then self.presetPop:Hide() end
+		pcall(Ink.PushShared, Ink)   -- 모든 캐릭터 같은 배치: 공용 배치로 저장
+	end
 	self:ShowBar(on)
 	self:ShowGrid(on and Ink.db.editGrid ~= false)
 	if on and not self.testing then self:SetTest(true) end
@@ -783,7 +845,7 @@ function M:ShowBar(on)
 	if not self.bar then
 		local bar = CreateFrame("Frame", nil, Ink.root)
 		bar:SetFrameStrata("FULLSCREEN_DIALOG")
-		bar:SetSize(900, 92)
+		bar:SetSize(980, 92)
 		bar:SetPoint("TOP", Ink.root, "TOP", 0, -240)
 		bar:EnableMouse(true)
 		bar:SetMovable(true)
@@ -805,7 +867,7 @@ function M:ShowBar(on)
 		bar.title:SetText("FOA 편집 모드")
 		bar.hint = Ink:Text(bar, F.sans, 10, C.muted, "LEFT")
 		bar.hint:SetPoint("LEFT", bar.title, "RIGHT", 10, -1)
-		bar.hint:SetText("드래그 이동 · 휠 크기 · 우클릭 기본 위치 · 화살표 키 1칸 (Shift 10칸)")
+		bar.hint:SetText("드래그 · 휠 크기 · 우클릭 기본 · 방향키 1칸")
 
 		-- 1줄: 도구 (오른쪽부터)
 		bar.done = Button(bar, "완료", 64, function() M:SetEdit(false) end, true)
@@ -827,6 +889,8 @@ function M:ShowBar(on)
 			M:SyncButtons()
 		end)
 		bar.gridBtn:SetPoint("RIGHT", bar.snap, "LEFT", -6, 0)
+		bar.share = Button(bar, "배치 공유", 80, function() M:TogglePresets() end)
+		bar.share:SetPoint("RIGHT", bar.gridBtn, "LEFT", -6, 0)
 
 		-- 2줄: 선택한 요소
 		bar.line = bar:CreateTexture(nil, "ARTWORK")
@@ -1032,6 +1096,124 @@ function M:ApplyGraphics(kind)
 	self:SyncButtons()
 end
 
+-------------------------------------------------------------------------------
+-- 배치 공유 · 프리셋 창 (편집 모드 "배치 공유" 버튼)
+-------------------------------------------------------------------------------
+local MAX_PRESETS = 8
+
+function M:BuildPresets()
+	local p = CreateFrame("Frame", nil, self.bar)
+	p:SetSize(360, 150)
+	p:SetPoint("TOPRIGHT", self.bar.share, "BOTTOMRIGHT", 0, -6)
+	p:SetFrameStrata("FULLSCREEN_DIALOG")
+	p:EnableMouse(true)
+	p.bg = Ink:Round(p, "BACKGROUND", false, false)
+	p.bg:SetAllPoints()
+	p.bg:SetVertexColor(0.05, 0.06, 0.08, 0.97)
+	p.bd = Ink:Round(p, "BORDER", false, true)
+	p.bd:SetAllPoints()
+	p.bd:SetVertexColor(1, 1, 1, 0.14)
+	p.title = Ink:Text(p, F.bold, 13, C.text, "LEFT")
+	p.title:SetPoint("TOPLEFT", 14, -12)
+	p.title:SetText("배치 공유 · 프리셋")
+
+	p.shared = Button(p, "", 332, function()
+		Ink.db.layoutShared = not Ink.db.layoutShared or nil
+		if Ink.db.layoutShared then
+			Ink:PushShared()
+			print("|cffFFF468FOA|r 이 캐릭터 배치를 공용으로 저장했어요. 다른 캐릭터도 접속하면 같은 배치가 돼요.")
+		end
+		M:PaintPresets()
+		M:SyncButtons()
+	end)
+	p.shared:SetHeight(28)
+	p.shared:SetPoint("TOPLEFT", 14, -36)
+	p.sharedDesc = Ink:Text(p, F.sans, 10, C.muted, "LEFT")
+	p.sharedDesc:SetPoint("TOPLEFT", p.shared, "BOTTOMLEFT", 2, -5)
+	p.sharedDesc:SetWidth(332)
+	p.sharedDesc:SetWordWrap(true)
+	p.sharedDesc:SetText("켜 두면 편집 모드에서 완료를 누를 때마다 공용으로 저장되고, 다른 캐릭터는 접속하면 이 배치로 바뀌어요. (위치 · 크기 · 행동단축바)")
+
+	p.save = Button(p, "지금 배치를 프리셋으로 저장", 332, function()
+		local list = Ink.db.layoutPresets or {}
+		Ink.db.layoutPresets = list
+		if #list >= MAX_PRESETS then
+			print("|cffFFF468FOA|r 프리셋은 " .. MAX_PRESETS .. "개까지예요. 안 쓰는 걸 지우고 저장해 주세요.")
+			return
+		end
+		local n = 1
+		local used = {}
+		for _, e in ipairs(list) do used[e.name] = true end
+		while used["프리셋 " .. n] do n = n + 1 end
+		list[#list + 1] = { name = "프리셋 " .. n, data = Ink:SnapshotLayout() }
+		M:PaintPresets()
+	end)
+	p.save:SetHeight(28)
+	p.save:SetPoint("TOPLEFT", p.sharedDesc, "BOTTOMLEFT", -2, -10)
+
+	p.rows = {}
+	for i = 1, MAX_PRESETS do
+		local r = CreateFrame("Frame", nil, p)
+		r:SetSize(332, 30)
+		r:SetPoint("TOPLEFT", p.save, "BOTTOMLEFT", 0, -6 - (i - 1) * 32)
+		r.name = Ink:Text(r, F.semi, 12, C.text, "LEFT")
+		r.name:SetPoint("TOPLEFT", 4, -3)
+		r.sub = Ink:Text(r, F.sans, 10, C.muted, "LEFT")
+		r.sub:SetPoint("TOPLEFT", r.name, "BOTTOMLEFT", 0, -2)
+		r.del = Button(r, "삭제", 48, function()
+			table.remove(Ink.db.layoutPresets, r.index)
+			M:PaintPresets()
+		end)
+		r.del:SetHeight(24)
+		r.del:SetPoint("RIGHT", 0, 0)
+		r.load = Button(r, "불러오기", 72, function()
+			local e = Ink.db.layoutPresets[r.index]
+			if not e or InCombatLockdown() then return end
+			Ink:ApplyLayoutData(e.data)
+			Ink:PushShared()
+			ReloadUI()
+		end)
+		r.load:SetHeight(24)
+		r.load:SetPoint("RIGHT", r.del, "LEFT", -6, 0)
+		p.rows[i] = r
+	end
+	p.empty = Ink:Text(p, F.sans, 11, C.muted, "LEFT")
+	p.empty:SetPoint("TOPLEFT", p.save, "BOTTOMLEFT", 4, -12)
+	p.empty:SetText("저장한 프리셋이 없어요. 불러오면 화면을 다시 불러와요.")
+	self.presetPop = p
+end
+
+function M:PaintPresets()
+	local p = self.presetPop
+	if not p then return end
+	local on = Ink.db.layoutShared and true or false
+	p.shared.text:SetText(on and "모든 캐릭터 같은 배치: 켜짐" or "모든 캐릭터 같은 배치: 꺼짐")
+	p.shared:SetActive(on)
+	local list = Ink.db.layoutPresets or {}
+	for i, r in ipairs(p.rows) do
+		local e = list[i]
+		r.index = i
+		if e then
+			r.name:SetText(e.name)
+			local d = e.data or {}
+			r.sub:SetText((d.from or "?") .. (d.at and ("  ·  " .. date("%m/%d %H:%M", d.at)) or ""))
+			r:Show()
+		else
+			r:Hide()
+		end
+	end
+	p.empty:SetShown(#list == 0)
+	local rows = math.max(1, #list)
+	p:SetHeight(36 + 28 + 40 + 28 + 10 + rows * 32 + 8)
+end
+
+function M:TogglePresets()
+	if not self.presetPop then self:BuildPresets() end
+	local p = self.presetPop
+	p:SetShown(not p:IsShown())
+	if p:IsShown() then self:PaintPresets() end
+end
+
 function M:ResetAll()
 	if InCombatLockdown() then return end
 	for _, key in ipairs(Ink.moverOrder) do ResetSize(Ink.movers[key]) end
@@ -1057,6 +1239,7 @@ function M:SyncButtons()
 		self.bar.group.text:SetText(self.testGroup == "raid" and "레이드 예시" or "파티 예시")
 		self.bar.snap:SetActive(Ink.db.editSnap ~= false)
 		self.bar.gridBtn:SetActive(Ink.db.editGrid ~= false)
+		if self.bar.share then self.bar.share:SetActive(Ink.db.layoutShared and true or false) end
 		self.bar.aspect.text:SetText(AspectLabel())
 	end
 	if self.panel then

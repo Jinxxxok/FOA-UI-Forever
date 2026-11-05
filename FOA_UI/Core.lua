@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.33.9"
+Ink.version = "0.34.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -546,6 +546,62 @@ local function EdgeInset()
 end
 Ink.EdgeInset = EdgeInset
 
+-------------------------------------------------------------------------------
+-- 배치 공유 · 프리셋
+--  배치 = 요소 위치(비율별) + 크기 + 행동단축바 설정 + 가방 위치 + 화면 비율
+--  "모든 캐릭터 같은 배치"를 켜면 편집 모드를 마칠 때 계정 공용 배치에 저장하고,
+--  다른 캐릭터는 접속할 때 공용 배치가 바뀌었으면 받아온다.
+-------------------------------------------------------------------------------
+function Ink:SnapshotLayout()
+	local c = self.cdb
+	if not c then return end
+	local bars = c.bars and CopyTable(c.bars) or nil
+	if bars then bars.blizzSeen = nil; bars.noAdopt = nil end
+	return {
+		layouts = CopyTable(c.layouts or {}),
+		sizes = CopyTable(c.sizes or {}),
+		bars = bars,
+		bagPos = c.bagPos and CopyTable(c.bagPos) or nil,
+		aspect = c.aspect,
+		from = UnitName("player"),
+		at = time(),
+	}
+end
+
+function Ink:ApplyLayoutData(d)
+	local c = self.cdb
+	if not (c and d) then return end
+	c.layouts = CopyTable(d.layouts or {})
+	c.sizes = CopyTable(d.sizes or {})
+	if d.bars then
+		c.bars = CopyTable(d.bars)
+		c.bars.blizzSeen = nil
+		c.bars.noAdopt = true      -- 블리자드 설정의 단축바 켜기가 받아온 배치를 바꾸지 않게
+		c.barsImported = true
+		c.barsFix1, c.barsSizeFix = true, true
+	end
+	c.bagPos = d.bagPos and CopyTable(d.bagPos) or nil
+	c.aspect = d.aspect
+end
+
+-- 지금 캐릭터 배치를 공용 배치로 올린다
+function Ink:PushShared()
+	if not (self.db and self.db.layoutShared) then return end
+	local snap = self:SnapshotLayout()
+	if not snap then return end
+	snap.stamp = ((self.db.sharedLayout and self.db.sharedLayout.stamp) or 0) + 1
+	self.db.sharedLayout = snap
+	self.cdb.sharedStamp = snap.stamp
+end
+
+-- 접속할 때: 공용 배치가 이 캐릭터가 마지막으로 받은 것보다 새로우면 받아온다
+function Ink:PullShared()
+	local sh = self.db and self.db.layoutShared and self.db.sharedLayout
+	if not sh or self.cdb.sharedStamp == sh.stamp then return end
+	self:ApplyLayoutData(sh)
+	self.cdb.sharedStamp = sh.stamp
+end
+
 function Ink:SelectLayout()
 	if not self.cdb then return end
 	local key = self:ActiveAspect()
@@ -993,6 +1049,8 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 		for k, v in pairs(defaults) do
 			if Ink.db[k] == nil then Ink.db[k] = v end
 		end
+		-- 모든 캐릭터 같은 배치: 공용 배치를 받아오고 비율별 위치를 다시 고른다
+		if pcall(Ink.PullShared, Ink) then Ink:SelectLayout() end
 		pcall(Ink.DetectDensity, Ink)
 		pcall(Ink.ApplyFontSet, Ink)
 		Ink:UpdateScale()

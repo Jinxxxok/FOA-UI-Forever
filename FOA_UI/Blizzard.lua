@@ -623,6 +623,10 @@ function M:LayoutAnchors()
 	if ChatFrame1 then
 		safe(function()
 			if ChatFrame1.SetUserPlaced then ChatFrame1:SetUserPlaced(true) end
+			-- 블리자드 편집 모드가 채팅창에 "화면 안쪽 여백"(왼쪽 버튼 줄 폭)을 걸어 둬서
+			--  화면 왼쪽 끝에 붙이려 해도 30칸쯤 안쪽에서 멈췄다. FOA 틀이 위치를 정하니 끈다.
+			ChatFrame1:SetClampedToScreen(false)
+			ChatFrame1:SetClampRectInsets(0, 0, 0, 0)
 		end)
 		local cw, ch = self.chatAnchor:GetSize()
 		ChatFrame1.foaFitting = true
