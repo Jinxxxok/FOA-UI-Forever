@@ -12,69 +12,56 @@ local F, C = Ink.font, Ink.c
 local plain = Ink.plain
 
 -------------------------------------------------------------------------------
--- 도서관 책 (wowf.io 도서관 목록 · 지역과 위치 이름. 좌표는 공개된 게 없어서 위치 이름으로)
+-- 도서관 책 (위치: 와우헤드 포에버 도서관 가이드 좌표, 한글 이름: wowf.io)
+--  { 지도, x, y, 한글 이름, 위치, 아이템ID, 반납 퀘스트ID, 진영(0 공통 1 호드 2 얼라), 메모 }
 -------------------------------------------------------------------------------
-local ZONE_KO = {
-	["Elwynn Forest"] = "엘윈 숲", ["Ironforge"] = "아이언포지", ["Westfall"] = "서부 몰락지대",
-	["Loch Modan"] = "모단 호수", ["Duskwood"] = "그늘숲", ["Wetlands"] = "저습지",
-	["Silverpine Forest"] = "은빛소나무 숲", ["Tirisfal Glades"] = "티리스팔 숲", ["Darkshore"] = "어둠해안",
-	["The Barrens"] = "불모의 땅", ["Stonetalon Mountains"] = "돌발톱 산맥", ["Orgrimmar"] = "오그리마",
-	["Stranglethorn Vale"] = "가시덤불 골짜기", ["Thousand Needles"] = "버섯구름 봉우리", ["Alterac Mountains"] = "알터랙 산맥",
-	["Dustwallow Marsh"] = "먼지진흙 습지대", ["Arathi Highlands"] = "아라시 고원", ["Desolace"] = "잊혀진 땅",
-	["Badlands"] = "황야의 땅", ["Swamp of Sorrows"] = "슬픔의 늪", ["Tanaris"] = "타나리스",
-	["Azshara"] = "아즈샤라", ["Burning Steppes"] = "불타는 평원", ["The Hinterlands"] = "동부 내륙지",
-	["Searing Gorge"] = "이글거리는 협곡", ["Blasted Lands"] = "저주받은 땅", ["Felwood"] = "악령의 숲",
-	["Western Plaguelands"] = "서부 역병지대", ["Eastern Plaguelands"] = "동부 역병지대", ["Winterspring"] = "여명의 설원",
-	["Stormwind City"] = "스톰윈드", ["Undercity"] = "언더시티",
-}
 local BOOKS = {
-	{ "Archmage Theocritus' Research Journal", "Elwynn Forest", "Tower of Azora" },
-	{ "Archmage Antonidas: The Unabridged Autobiography", "Ironforge", nil },
-	{ "Bewitchments and Glamours", "Westfall", "Moonbrook" },
-	{ "Rumi of Gnomeregan: The Collected Works", "Westfall", "Sentinel Hill" },
-	{ "Runes of the Sorcerer-Kings", "Loch Modan", "Mo'grosh Stronghold" },
-	{ "Crimes Against Anatomy", "Duskwood", "The Darkened Bank" },
-	{ "Goaz Scrolls", "Wetlands", "Whelgar's Excavation Site" },
-	{ "The Dalaran Digest, Vol. 23", "Silverpine Forest", "Ambermill" },
-	{ "Ataeric: On Arcane Curiosities", "Silverpine Forest", "The Sepulcher" },
-	{ "The Apothecary's Metaphysical Primer", "Tirisfal Glades", "Brill" },
-	{ "Nar'thalas Almanac, Vol. 74", "Darkshore", "Ruins of Mathystra" },
-	{ "Arcanic Systems Manual", "The Barrens", "The Sludge Fen" },
-	{ "Baxtan: On Destructive Magics", "The Barrens", "Ratchet" },
-	{ "Secrets of the Dreamers", "The Barrens", "Lushwater Oasis" },
-	{ "Fury of the Land", "Stonetalon Mountains", "Grimtotem Post" },
-	{ "The Lessons of Ta'zo", "Orgrimmar", nil },
-	{ "Basilisks: Should Petrification be Feared?", "Stranglethorn Vale", "Crystalvein Mine" },
-	{ "Geomancy: The Stone-Cold Truth", "Thousand Needles", "Darkcloud Pinnacle" },
-	{ "Defensive Magics 101", "Alterac Mountains", "Gallows' Corner" },
-	{ "RwlRwlRwlRwl!", "Dustwallow Marsh", "Witch Hill" },
-	{ "A Web of Lies: Debunking Myths and Legends", "Arathi Highlands", "Witherbark Village" },
-	{ "Demons and You", "Desolace", "Thunder Axe Fortress" },
-	{ "Mummies: A Guide to the Unsavory Undead", "Badlands", nil },
-	{ "A Luddite's Guide to Caring for Your Demonic Pet", "Swamp of Sorrows", "Fallow Sanctuary" },
-	{ "Sanguine Sorcery", "Swamp of Sorrows", "Pool of Tears" },
-	{ "Legends of the Tidesages", "Tanaris", "Lost Rigger Cove" },
-	{ "Everyday Etiquette", "Azshara", "Haldarr Encampment" },
-	{ "Stonewrought Design", "Burning Steppes", "Blackrock Mountain" },
-	{ "Venomous Journeys", "The Hinterlands", "Shadra'Alor" },
-	{ "A Mind of Metal", "Searing Gorge", "The Cauldron" },
-	{ "Conjurer's Codex", "Blasted Lands", nil },
-	{ "Northern Kalimdor - A Comprehensive Guide", "Felwood", "Timbermaw Hold" },
-	{ "Necromancy 101", "Western Plaguelands", "Caer Darrow" },
-	{ "A Study of the Light", "Eastern Plaguelands", "Light's Hope Chapel" },
-	{ "Ka-Boom!", "Winterspring", "Everlook" },
-}
--- 위치 이름 한글 (확실한 것만. 나머지는 영어 그대로)
-local SUB_KO = {
-	["Moonbrook"] = "달빛시내 마을", ["Sentinel Hill"] = "감시의 언덕", ["Brill"] = "브릴", ["Ratchet"] = "톱니항",
-	["Everlook"] = "눈망루 마을", ["Light's Hope Chapel"] = "희망의 빛 예배당", ["Caer Darrow"] = "카엘 다로우",
-	["Blackrock Mountain"] = "검은바위 산", ["Timbermaw Hold"] = "나무구렁 요새", ["The Sepulcher"] = "공동묘지",
+	{ 1429, 65.4, 70.1, "대마법사 테오크리투스의 연구 일지", "아조라의 탑", 203755, 79092, 2 },
+	{ 1455, 75.4, 11.0, "대마법사 안토니다스: 자서전 원본", "탐험가의 전당", 203754, 79091, 2 },
+	{ 1436, 45.4, 70.4, "마술과 비술", "문브룩", 209845, 78142, 0 },
+	{ 1436, 52.7, 53.8, "놈리건의 루미: 작품 모음집", "감시의 언덕", 208860, 79093, 2 },
+	{ 1432, 77.4, 14.0, "마술사 왕의 룬", "모그로쉬 소굴 · 오우거 동굴", 209850, 78148, 0 },
+	{ 1431, 16.4, 28.4, "범죄에 맞서는 해부학", "어스름 강둑", 209849, 78147, 0 },
+	{ 1437, 33.6, 47.9, "고아즈 두루마리", "웰가르의 발굴현장", 209848, 78146, 0 },
+	{ 1421, 63.4, 63.1, "달라란 소식지 23호", "앰버밀", 209844, 78127, 0 },
+	{ 1421, 43.4, 41.2, "아테릭: 비전의 신비에 관하여", "공동묘지", 210177, 79096, 1 },
+	{ 1420, 59.4, 52.3, "연금술사의 형이상학적 지침서", "브릴", 208185, 79095, 1 },
+	{ 1439, 59.6, 22.2, "나르탈라스 연감 74권", "마시스트라의 폐허", 209843, 78124, 0 },
+	{ 1413, 56.3, 8.8, "신비한 체계 설명서", "진흙늪", 209847, 78145, 0 },
+	{ 1413, 62.7, 36.3, "박스탄: 파괴 마법에 관하여", "톱니항", 208800, 79097, 0 },
+	{ 1413, 46.0, 36.5, "꿈꾸는 자의 비밀", "푸른 오아시스", 209846, 78143, 0 },
+	{ 1442, 74.4, 85.7, "대지의 격노", "그림토템 초소", 209851, 78149, 0 },
+	{ 1454, 38.7, 78.4, "타조의 가르침", "정기의 골짜기", 207972, 79094, 1 },
+	{ 1434, 41.4, 50.9, "바실리스크: 과연 석화를 두려워해야 하는가?", "수정 광산", 213165, 79535, 0 },
+	{ 1441, 34.4, 40.1, "흙점술: 냉혹한 진실", "먹구름 봉우리", 215683, 79947, 0 },
+	{ 1416, 48.4, 57.7, "방어 마법의 기초", "갤로우 삼거리", 215815, 79948, 0 },
+	{ 1445, 57.2, 20.8, "옳옳옳옳!", "마녀 언덕", 215822, 79952, 0 },
+	{ 1417, 73.6, 65.2, "거짓의 그물: 신화와 전설의 실체", "마른나무껍질 마을", 215816, 79949, 0 },
+	{ 1443, 55.1, 26.2, "악마와 나", "천둥도끼 요새", 215817, 79950, 0 },
+	{ 1418, 56.7, 39.9, "미라: 불쾌한 언데드 안내서", "지하 묘실", 215820, 79951, 0 },
+	{ 1435, 61.0, 22.0, "루디트의 악마 소환수 관리법", "드레노어 성역", 215824, 79953, 0, "녹슨 우리 열쇠가 있으면 편해요" },
+	{ 1435, 70.1, 51.8, "핏빛 마술", "눈물의 연못", 0, 0, 0 },
+	{ 1446, 72.6, 47.8, "파도현자의 전설", "해적단 소굴", 0, 0, 0 },
+	{ 1447, 20.8, 62.0, "일상 예의", "할다르 야영지", 0, 0, 0 },
+	{ 1428, 29.1, 28.9, "바위의 설계", "검은바위 산", 220349, 0, 0, "검은바위 나락 강철 금고 안쪽" },
+	{ 1425, 36.0, 72.8, "지독한 여정", "샤드라알로", 0, 0, 0 },
+	{ 1427, 37.8, 49.3, "금속 정신", "용광로", 0, 0, 0 },
+	{ 1419, 55.4, 32.2, "창조술사의 전서", nil, 0, 0, 0 },
+	{ 1448, 65.2, 3.2, "북부 칼림도어 - 종합 안내서", "나무구렁 요새 안", 228134, 0, 0 },
+	{ 1422, 69.4, 72.8, "강령술 기초서", "카엘 다로우 · 스칼로맨스 위층", 228141, 0, 0 },
+	{ 1423, 81.7, 57.8, "빛의 연구", "희망의 빛 예배당", 228135, 0, 0 },
+	{ 1452, 60.7, 37.7, "콰쾅!", "눈망루 마을 · 연금술 건물", 228136, 0, 0 },
+	{ 1422, 38.3, 54.6, "언데드 감자", "펠스톤 농장", 228132, 0, 0, "위치 미확인 (와우헤드 좌표)" },
+	{ 1423, 54.5, 50.8, "기사와 숙녀", nil, 228138, 0, 0, "위치 미확인 (와우헤드 좌표)" },
+	{ 1423, 31.3, 21.0, "스컬지: 언데드의 위협인가 오해인가?", "스트라솔름 입구 앞", 228140, 0, 0, "위치 미확인 (와우헤드 좌표)" },
 }
 local LIBRARIANS = {
-	["Stormwind City"] = { "사서 가리온 웬델 (얼라이언스)", "마법사 지구 · 책장 옆 — 책을 모아 가져가요" },
-	["Undercity"] = { "사서 오웬 새드 (호드)", "마법 지구 · 계산대 뒤 — 책을 모아 가져가요" },
+	[1453] = { 49.0, 86.4, "가리온 웬델", "사서 · 얼라이언스 — 마법사 탑, 책장 옆", 2 },
+	[1458] = { 74.0, 32.4, "오웬 사드", "사서 · 호드 — 마법 지구, 계산대 뒤", 1 },
 }
-local REWARDS = "책 10권 목걸이 · 20권 반지 · 25권 활/방패/보조장비"
+local REWARDS = { { 10, "목걸이" }, { 20, "반지" }, { 25, "활 · 방패 · 보조장비" } }
+local BOOK = { 0.79, 0.66, 1.00 }      -- 보라
+local BOOK_DONE = { 0.44, 0.83, 0.60 } -- 초록
 
 -------------------------------------------------------------------------------
 -- NPC 역할 → 지도 이름표 글자
@@ -211,69 +198,291 @@ function M:Refresh()
 	end
 
 	for i = n + 1, #(self.pins or {}) do self.pins[i]:Hide() end
+	self:DrawBooks(mapID, cv, pinScale)
 	self:PaintBooks(mapID)
 end
 
 -------------------------------------------------------------------------------
--- 도서관 책 목록 (지도 왼쪽 아래)
+-- 도서관 책: 모았는지 (가방 · 은행에 있음 / 반납 퀘스트 완료 / 직접 체크)
 -------------------------------------------------------------------------------
-local function ZoneKey(mapID)
-	local info = mapID and C_Map.GetMapInfo(mapID)
-	local name = info and info.name
-	if not name then return end
-	for en, ko in pairs(ZONE_KO) do
-		if name == en or name == ko then return en end
-	end
+local function BookKey(b) return b[6] ~= 0 and ("i" .. b[6]) or ("n" .. b[4]) end
+
+local function BookState(b)
+	local key = BookKey(b)
+	local man = Ink.cdb and Ink.cdb.books and Ink.cdb.books[key]
+	if man == false then return false end              -- 직접 체크를 풀었으면 그대로
+	if b[7] ~= 0 and C_QuestLog.IsQuestFlaggedCompleted and C_QuestLog.IsQuestFlaggedCompleted(b[7]) then return true, "반납함" end
+	if b[6] ~= 0 and C_Item.GetItemCount and (C_Item.GetItemCount(b[6], true) or 0) > 0 then return true, "가방 · 은행에 있음" end
+	local seen = Ink.cdb and Ink.cdb.booksSeen and Ink.cdb.booksSeen[key]
+	if seen then return true, seen end
+	if man then return true, "직접 체크" end
+	return false
 end
 
+local function MyFaction()
+	local f = UnitFactionGroup("player")
+	return f == "Horde" and 1 or (f == "Alliance" and 2 or 0)
+end
+
+function M:BookCount()
+	local have, total = 0, 0
+	local fac = MyFaction()
+	for _, b in ipairs(BOOKS) do
+		if b[8] == 0 or b[8] == fac then
+			total = total + 1
+			if BookState(b) then have = have + 1 end
+		end
+	end
+	return have, total
+end
+
+-- 이름이 같은 책을 가방에서 찾기 (아이템 번호가 없는 책용) / 획득 메시지
+function M:ScanBagsForBooks(where)
+	if not (C_Container and C_Container.GetContainerNumSlots) then return end
+	local names = {}
+	for _, b in ipairs(BOOKS) do names[b[4]] = b end
+	local bags = where == "bank" and { -1, 6, 7, 8, 9, 10, 11, 12 } or { 0, 1, 2, 3, 4, 5 }
+	local changed
+	for _, bag in ipairs(bags) do
+		local ok, n = pcall(C_Container.GetContainerNumSlots, bag)
+		for slot = 1, (ok and n or 0) do
+			local info = C_Container.GetContainerItemInfo(bag, slot)
+			local nm = info and info.hyperlink and info.hyperlink:match("%[(.-)%]")
+			local b = nm and names[nm]
+			if b and BookState(b) == false then
+				Ink.cdb.booksSeen = Ink.cdb.booksSeen or {}
+				Ink.cdb.booksSeen[BookKey(b)] = where == "bank" and "은행에 있음" or "주움"
+				changed = true
+			end
+		end
+	end
+	if changed and WorldMapFrame and WorldMapFrame:IsShown() then self:Refresh() end
+end
+
+function M:ToggleBook(b)
+	Ink.cdb.books = Ink.cdb.books or {}
+	local key = BookKey(b)
+	local on = BookState(b)
+	if on then
+		Ink.cdb.books[key] = false
+		if Ink.cdb.booksSeen then Ink.cdb.booksSeen[key] = nil end
+	else
+		Ink.cdb.books[key] = true
+	end
+	PlaySound(SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or 856)
+	self:Refresh()
+end
+
+-------------------------------------------------------------------------------
+-- 책 핀: 어두운 원판 + 보라 고리 + 책 아이콘, 모은 책은 초록 고리 + 체크 배지
+--  마우스를 올리면 그림만 살짝 커진다 (누르는 범위는 그대로라 깜빡이지 않음)
+-------------------------------------------------------------------------------
+local function HoverArt(p)
+	local ag = p.art:CreateAnimationGroup()
+	local sc = ag:CreateAnimation("Scale")
+	sc:SetDuration(0.12); sc:SetScaleFrom(1, 1); sc:SetScaleTo(1.16, 1.16); sc:SetSmoothing("OUT")
+	ag:SetScript("OnFinished", function() p.art:SetScale(1.16) end)
+	p.grow = ag
+end
+
+function M:BookPin(i)
+	self.bookPins = self.bookPins or {}
+	local p = self.bookPins[i]
+	if p then return p end
+	p = CreateFrame("Button", nil, self.layer)
+	p:SetSize(26, 26)
+	p:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	p.art = CreateFrame("Frame", nil, p)
+	p.art:SetPoint("CENTER")
+	p.art:SetSize(26, 26)
+	p.art:EnableMouse(false)
+	local a = p.art
+	a.glow = a:CreateTexture(nil, "BACKGROUND", nil, -1)
+	a.glow:SetTexture(Ink.tex.glow)
+	a.glow:SetPoint("TOPLEFT", -10, 10)
+	a.glow:SetPoint("BOTTOMRIGHT", 10, -10)
+	a.glow:SetBlendMode("ADD")
+	a.disc = a:CreateTexture(nil, "BACKGROUND")
+	a.disc:SetTexture(Ink.tex.disc)
+	a.disc:SetAllPoints()
+	a.disc:SetVertexColor(0.035, 0.035, 0.055, 0.94)
+	a.shine = a:CreateTexture(nil, "BORDER")
+	a.shine:SetTexture(Ink.tex.disc)
+	a.shine:SetPoint("TOPLEFT", 3, -2)
+	a.shine:SetPoint("BOTTOMRIGHT", -3, 11)
+	a.shine:SetVertexColor(1, 1, 1, 0.06)
+	a.ring = a:CreateTexture(nil, "ARTWORK")
+	a.ring:SetTexture(Ink.tex.ring)
+	a.ring:SetAllPoints()
+	a.icon = a:CreateTexture(nil, "OVERLAY")
+	a.icon:SetTexture(Ink.icon("Journal"))
+	a.icon:SetSize(14, 14)
+	a.icon:SetPoint("CENTER")
+	a.check = CreateFrame("Frame", nil, a)
+	a.check:SetSize(13, 13)
+	a.check:SetPoint("CENTER", a, "BOTTOMRIGHT", -3, 3)
+	a.check.bg = a.check:CreateTexture(nil, "ARTWORK")
+	a.check.bg:SetTexture(Ink.tex.disc)
+	a.check.bg:SetAllPoints()
+	a.check.bg:SetVertexColor(BOOK_DONE[1], BOOK_DONE[2], BOOK_DONE[3])
+	a.check.i = a.check:CreateTexture(nil, "OVERLAY")
+	a.check.i:SetTexture(Ink.icon("Check"))
+	a.check.i:SetSize(9, 9)
+	a.check.i:SetPoint("CENTER")
+	a.check.i:SetVertexColor(0.04, 0.06, 0.05)
+	HoverArt(p)
+	p:SetScript("OnEnter", function(self)
+		self.grow:Play()
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT", 4, 0)
+		if self.lib then
+			GameTooltip:AddLine(self.lib[3], BOOK[1], BOOK[2], BOOK[3])
+			GameTooltip:AddLine(self.lib[4], 0.85, 0.86, 0.88)
+			local have, total = M:BookCount()
+			GameTooltip:AddLine(string.format("모은 책 %d / %d", have, total), 1, 1, 1)
+			for _, r in ipairs(REWARDS) do
+				local c = have >= r[1] and "|cff6FD39A" or "|cff8E939B"
+				GameTooltip:AddLine(string.format("%s%d권 · %s|r", c, r[1], r[2]))
+			end
+		else
+			local b = self.book
+			local done, how = BookState(b)
+			GameTooltip:AddLine(b[4], done and BOOK_DONE[1] or BOOK[1], done and BOOK_DONE[2] or BOOK[2], done and BOOK_DONE[3] or BOOK[3])
+			if b[5] then GameTooltip:AddLine(b[5], 0.85, 0.86, 0.88) end
+			GameTooltip:AddLine(string.format("%.1f, %.1f", b[2], b[3]), 0.56, 0.58, 0.61)
+			if b[9] then GameTooltip:AddLine(b[9], 1, 0.72, 0.35, true) end
+			if b[8] == 1 then GameTooltip:AddLine("언더시티 사서(오웬 사드)에게만 반납", 0.75, 0.77, 0.8)
+			elseif b[8] == 2 then GameTooltip:AddLine("스톰윈드 사서(가리온 웬델)에게만 반납", 0.75, 0.77, 0.8) end
+			GameTooltip:AddLine(" ")
+			GameTooltip:AddLine(done and ("|cff6FD39A모음|r · " .. (how or "")) or "|cffC9A8FF아직 안 모음|r", 1, 1, 1)
+			GameTooltip:AddLine("클릭: 모음 체크 · 우클릭: 길 안내", 0.56, 0.58, 0.61)
+		end
+		GameTooltip:Show()
+	end)
+	p:SetScript("OnLeave", function(self) GameTooltip:Hide(); self.grow:Stop(); self.art:SetScale(1) end)
+	p:SetScript("OnClick", function(self, btn)
+		if btn == "RightButton" or self.lib then
+			local mapID = WorldMapFrame:GetMapID()
+			if mapID and C_Map.CanSetUserWaypointOnMap and C_Map.CanSetUserWaypointOnMap(mapID) then
+				C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(mapID, self.wx, self.wy))
+				if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
+			end
+			return
+		end
+		M:ToggleBook(self.book)
+		if GameTooltip:GetOwner() == self then self:GetScript("OnEnter")(self) end
+	end)
+	self.bookPins[i] = p
+	return p
+end
+
+function M:PaintBookPin(p, done, lib)
+	local col = lib and C.accent or (done and BOOK_DONE or BOOK)
+	local a = p.art
+	a.ring:SetVertexColor(col[1], col[2], col[3], 1)
+	a.icon:SetVertexColor(col[1], col[2], col[3], done and 0.75 or 1)
+	a.glow:SetVertexColor(col[1], col[2], col[3], done and 0.12 or 0.3)
+	a.check:SetShown(done and not lib)
+	p:SetSize(lib and 30 or 26, lib and 30 or 26)
+	a:SetSize(lib and 30 or 26, lib and 30 or 26)
+end
+
+function M:DrawBooks(mapID, cv, pinScale)
+	local n = 0
+	local W, H = cv:GetWidth(), cv:GetHeight()
+	local fac = MyFaction()
+	local function put(x, y)
+		n = n + 1
+		local p = self:BookPin(n)
+		p:ClearAllPoints()
+		p:SetPoint("CENTER", cv, "TOPLEFT", x * W, -y * H)
+		p:SetScale(pinScale)
+		p:SetFrameLevel(self.layer:GetFrameLevel() + 20)
+		p.wx, p.wy = x, y
+		p:Show()
+		return p
+	end
+	if Ink.db.mapBooks ~= false and mapID then
+		for _, b in ipairs(BOOKS) do
+			if b[1] == mapID and (b[8] == 0 or b[8] == fac) then
+				local p = put(b[2] / 100, b[3] / 100)
+				p.book, p.lib = b, nil
+				self:PaintBookPin(p, BookState(b) and true or false, false)
+			end
+		end
+		local lib = LIBRARIANS[mapID]
+		if lib and (lib[5] == fac or fac == 0) then
+			local p = put(lib[1] / 100, lib[2] / 100)
+			p.book, p.lib = nil, lib
+			self:PaintBookPin(p, false, true)
+		end
+	end
+	for i = n + 1, #(self.bookPins or {}) do self.bookPins[i]:Hide() end
+end
+
+-------------------------------------------------------------------------------
+-- 도서관 책 상자 (지도 왼쪽 아래): 모은 수 + 다음 보상 + 이 지역 책 목록
+-------------------------------------------------------------------------------
 function M:PaintBooks(mapID)
 	local box = self.books
 	if not box then return end
-	local zone = Ink.db.mapBooks ~= false and ZoneKey(mapID)
-	if not zone then box:Hide() return end
+	if Ink.db.mapBooks == false or not mapID then box:Hide() return end
+	local fac = MyFaction()
 	local lines = {}
-	local lib = LIBRARIANS[zone]
-	if lib then
-		lines[#lines + 1] = "|cffC9A8FF" .. lib[1] .. "|r"
-		lines[#lines + 1] = "|cffB4B8BF" .. lib[2] .. "|r"
-		lines[#lines + 1] = "|cff8E939B" .. REWARDS .. "|r"
-	end
 	for _, b in ipairs(BOOKS) do
-		if b[2] == zone then
-			local where = b[3] and ((SUB_KO[b[3]] and (SUB_KO[b[3]] .. " · ") or "") .. b[3]) or "도시 안"
-			lines[#lines + 1] = "|cffF3F2EE" .. b[1] .. "|r"
-			lines[#lines + 1] = "   |cffB4B8BF" .. where .. "|r"
+		if b[1] == mapID and (b[8] == 0 or b[8] == fac) then
+			local done = BookState(b)
+			lines[#lines + 1] = (done and "|cff8E939B" or "|cffF3F2EE") .. b[4] .. "|r" .. (done and "  |cff6FD39A모음|r" or "")
+			lines[#lines + 1] = "   |cff8E939B" .. (b[5] or "") .. (b[5] and "  ·  " or "") .. string.format("%.1f, %.1f", b[2], b[3]) .. "|r"
 		end
 	end
-	if #lines == 0 then box:Hide() return end
+	local lib = LIBRARIANS[mapID]
+	if #lines == 0 and not lib then box:Hide() return end
+	local have, total = self:BookCount()
+	local nextR
+	for _, r in ipairs(REWARDS) do if have < r[1] then nextR = r break end end
+	box.count:SetText(string.format("%d / %d", have, total))
+	box.bar:SetMinMaxValues(0, math.max(1, total))
+	box.bar:SetValue(have)
+	box.next:SetText(nextR and string.format("다음 보상 %d권 · %s", nextR[1], nextR[2]) or "보상을 모두 받을 수 있어요")
 	box.text:SetText(table.concat(lines, "\n"))
-	box:SetHeight(box.text:GetStringHeight() + 40)
+	box.text:SetShown(#lines > 0)
+	box:SetHeight(64 + (#lines > 0 and (box.text:GetStringHeight() + 8) or 0))
 	box:Show()
 end
 
 function M:BuildBooks()
 	local wm = WorldMapFrame
 	local box = CreateFrame("Frame", nil, wm.ScrollContainer)
-	box:SetWidth(300)
+	box:SetWidth(290)
 	box:SetPoint("BOTTOMLEFT", wm.ScrollContainer, "BOTTOMLEFT", 10, 10)
 	box:SetFrameStrata("HIGH")
 	box.bg = Ink:Round(box, "BACKGROUND", false, false)
 	box.bg:SetAllPoints()
-	box.bg:SetVertexColor(0.04, 0.045, 0.06, 0.88)
+	box.bg:SetVertexColor(0.035, 0.035, 0.05, 0.9)
 	box.bd = Ink:Round(box, "BORDER", false, true)
 	box.bd:SetAllPoints()
-	box.bd:SetVertexColor(0.79, 0.66, 1, 0.45)
+	box.bd:SetVertexColor(BOOK[1], BOOK[2], BOOK[3], 0.4)
+	box.accent = box:CreateTexture(nil, "ARTWORK")
+	box.accent:SetColorTexture(BOOK[1], BOOK[2], BOOK[3], 0.95)
+	box.accent:SetSize(22, 2)
+	box.accent:SetPoint("TOPLEFT", 14, -1)
 	box.icon = box:CreateTexture(nil, "ARTWORK")
 	box.icon:SetTexture(Ink.icon("Journal"))
 	box.icon:SetSize(14, 14)
-	box.icon:SetPoint("TOPLEFT", 12, -10)
-	box.icon:SetVertexColor(0.79, 0.66, 1)
+	box.icon:SetPoint("TOPLEFT", 14, -12)
+	box.icon:SetVertexColor(BOOK[1], BOOK[2], BOOK[3])
 	box.title = Ink:Text(box, F.bold, 12, C.text, "LEFT")
 	box.title:SetPoint("LEFT", box.icon, "RIGHT", 6, 0)
 	box.title:SetText("도서관 책")
+	box.count = Ink:Text(box, F.latinB, 12, BOOK, "RIGHT")
+	box.count:SetPoint("TOPRIGHT", -14, -12)
+	box.bar = Ink:Bar(box, 262, 3, BOOK, C.track)
+	box.bar:SetPoint("TOPLEFT", 14, -34)
+	box.next = Ink:Text(box, F.sans, 10, C.muted, "LEFT")
+	box.next:SetPoint("TOPLEFT", box.bar, "BOTTOMLEFT", 0, -6)
 	box.text = Ink:Text(box, F.sans, 11, C.soft, "LEFT")
-	box.text:SetPoint("TOPLEFT", 12, -30)
-	box.text:SetWidth(276)
+	box.text:SetPoint("TOPLEFT", 14, -62)
+	box.text:SetWidth(262)
 	box.text:SetWordWrap(true)
 	box.text:SetSpacing(2)
 	box:Hide()
@@ -335,11 +544,20 @@ function M:Init()
 	self:Hook()
 	local e = CreateFrame("Frame")
 	for ev in pairs(EVENT_ROLE) do pcall(e.RegisterEvent, e, ev) end
-	for _, ev in ipairs({ "GOSSIP_SHOW", "ADDON_LOADED", "TAXI_NODE_STATUS_CHANGED" }) do pcall(e.RegisterEvent, e, ev) end
+	for _, ev in ipairs({ "GOSSIP_SHOW", "ADDON_LOADED", "TAXI_NODE_STATUS_CHANGED", "BAG_UPDATE_DELAYED", "QUEST_TURNED_IN" }) do pcall(e.RegisterEvent, e, ev) end
+	C_Timer.After(5, function() pcall(M.ScanBagsForBooks, M, "bags") end)
 	e:SetScript("OnEvent", function(_, event)
 		if event == "ADDON_LOADED" then
 			if not M.hooked then M:Hook() end
 			return
+		end
+		if event == "BAG_UPDATE_DELAYED" or event == "QUEST_TURNED_IN" then
+			if event == "BAG_UPDATE_DELAYED" then pcall(M.ScanBagsForBooks, M, "bags") end
+			if WorldMapFrame and WorldMapFrame:IsShown() then M:Refresh() end
+			return
+		end
+		if event == "BANKFRAME_OPENED" then
+			C_Timer.After(0.5, function() pcall(M.ScanBagsForBooks, M, "bank") end)
 		end
 		if event == "TAXI_NODE_STATUS_CHANGED" then
 			if WorldMapFrame and WorldMapFrame:IsShown() then M:Refresh() end

@@ -134,29 +134,35 @@ local function NewPin(parent)
 	local p = CreateFrame("Button", nil, parent)
 	p:SetSize(24, 24)
 	p:RegisterForClicks("LeftButtonUp")
-	p.glow = p:CreateTexture(nil, "BACKGROUND", nil, -1)
+	-- 그림은 따로 둔 틀(art)에: 마우스 올렸을 때 그림만 커지고 누르는 범위는 그대로 (깜빡임 방지)
+	p.art = CreateFrame("Frame", nil, p)
+	p.art:SetPoint("CENTER")
+	p.art:SetSize(24, 24)
+	p.art:EnableMouse(false)
+	local A = p.art
+	p.glow = A:CreateTexture(nil, "BACKGROUND", nil, -1)
 	p.glow:SetTexture(Ink.tex.glow)
 	p.glow:SetPoint("TOPLEFT", -9, 9)
 	p.glow:SetPoint("BOTTOMRIGHT", 9, -9)
 	p.glow:SetBlendMode("ADD")
-	p.disc = p:CreateTexture(nil, "BACKGROUND")
+	p.disc = A:CreateTexture(nil, "BACKGROUND")
 	p.disc:SetTexture(Ink.tex.disc)
 	p.disc:SetAllPoints()
 	p.disc:SetVertexColor(0.035, 0.04, 0.055, 0.94)
-	p.shine = p:CreateTexture(nil, "BORDER")
+	p.shine = A:CreateTexture(nil, "BORDER")
 	p.shine:SetTexture(Ink.tex.disc)
 	p.shine:SetPoint("TOPLEFT", 3, -2)
 	p.shine:SetPoint("BOTTOMRIGHT", -3, 10)
 	p.shine:SetVertexColor(1, 1, 1, 0.06)
-	p.ring = p:CreateTexture(nil, "ARTWORK")
+	p.ring = A:CreateTexture(nil, "ARTWORK")
 	p.ring:SetTexture(Ink.tex.ring)
 	p.ring:SetAllPoints()
-	p.bang = p:CreateTexture(nil, "OVERLAY")
+	p.bang = A:CreateTexture(nil, "OVERLAY")
 	p.bang:SetTexture(Ink.icon("QuestBang"))
 	p.bang:SetSize(16, 16)
 	p.bang:SetPoint("CENTER", 0, 0)
 	-- 여러 퀘스트 배지
-	p.badge = CreateFrame("Frame", nil, p)
+	p.badge = CreateFrame("Frame", nil, A)
 	p.badge:SetSize(14, 14)
 	p.badge:SetPoint("CENTER", p, "TOPRIGHT", -3, -3)
 	p.badge.bg = p.badge:CreateTexture(nil, "ARTWORK")
@@ -166,17 +172,17 @@ local function NewPin(parent)
 	p.badge.t:SetPoint("CENTER", 0, 0)
 	p.badge:Hide()
 	-- 곧 받을 수 있는 퀘스트 레벨
-	p.lv = Ink:Text(p, F.latinB, 9, SOON, "CENTER")
+	p.lv = Ink:Text(A, F.latinB, 9, SOON, "CENTER")
 	p.lv:SetPoint("TOP", p, "BOTTOM", 0, -1)
 	p.lv:SetShadowColor(0, 0, 0, 1)
 	-- 마우스 올리면 살짝 커짐
-	local ag = p:CreateAnimationGroup()
+	local ag = A:CreateAnimationGroup()
 	local sc = ag:CreateAnimation("Scale")
 	sc:SetDuration(0.12); sc:SetScaleFrom(1, 1); sc:SetScaleTo(1.18, 1.18); sc:SetSmoothing("OUT")
-	ag:SetScript("OnFinished", function() p:SetScale((p.baseScale or 1) * 1.18) end)
+	ag:SetScript("OnFinished", function() A:SetScale(1.18) end)
 	p.hover = ag
 	p:SetScript("OnEnter", function(self) self.hover:Play(); M:Tip(self) end)
-	p:SetScript("OnLeave", function(self) GameTooltip:Hide(); self.hover:Stop(); self:SetScale(self.baseScale or 1) end)
+	p:SetScript("OnLeave", function(self) GameTooltip:Hide(); self.hover:Stop(); self.art:SetScale(1) end)
 	p:SetScript("OnClick", function(self) M:Waypoint(self) end)
 	return p
 end
@@ -323,6 +329,25 @@ function M:Refresh()
 		end
 		local W, H = cv:GetWidth(), cv:GetHeight()
 		local scale = (wm.GetCanvasScale and wm:GetCanvasScale()) or 1
+		-- 가까이 붙은 핀(마을 한가운데 여러 NPC)은 하나로 합친다. 확대할수록 덜 합친다
+		local R = 0.016 / math.max(1, scale)
+		local merged = {}
+		for _, g in ipairs(order) do
+			local host
+			for _, h in ipairs(merged) do
+				local dx, dy = (g.x - h.x) * W / H, g.y - h.y
+				if dx * dx + dy * dy < R * R then host = h break end
+			end
+			if host then
+				for _, q in ipairs(g.list) do host.list[#host.list + 1] = q end
+				if g.state == 1 then host.state = 1 end
+				if not g.rep then host.rep = false end
+				if host.giver ~= g.giver then host.giver = 0 end
+			else
+				merged[#merged + 1] = g
+			end
+		end
+		order = merged
 		local pinScale = math.max(0.5, math.min(1.5, 1.05 / scale))
 		for _, g in ipairs(order) do
 			table.sort(g.list, function(a, b)
