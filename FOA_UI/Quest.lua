@@ -153,11 +153,143 @@ local function WatchedQuests()
 	return list
 end
 
+-------------------------------------------------------------------------------
+-- 직업 퀘스트 (포에버): 지금 받을 수 있는 내 직업 퀘스트 + 다음에 열리는 것 → 목록 맨 위에
+--  · 진행 중인 직업 퀘스트는 자동으로 추적하고 목록 맨 위로, 이름 옆에 (직업)
+-------------------------------------------------------------------------------
+local function ClassRGB()
+	local _, cls = UnitClass("player")
+	local c = cls and (C_ClassColor and C_ClassColor.GetClassColor and C_ClassColor.GetClassColor(cls) or (RAID_CLASS_COLORS and RAID_CLASS_COLORS[cls]))
+	if c then return { c.r, c.g, c.b } end
+	return { C.accent[1], C.accent[2], C.accent[3] }
+end
+local function ClassSet()
+	local Q = Ink.modules.QuestMap
+	if Ink.db.questClass == false or not (Q and Q.ClassSet and ns.QUEST_DB) then return nil end
+	return Q:ClassSet()
+end
+
+local function ClassRow(i)
+	local f = M.frame
+	f.crow = f.crow or {}
+	local r = f.crow[i]
+	if r then return r end
+	r = CreateFrame("Button", nil, f)
+	r:SetSize(W, 32)
+	r.title = Ink:Text(r, F.semi, 12, C.text, "LEFT")
+	r.title:SetPoint("TOPLEFT", 0, 0)
+	r.title:SetPoint("RIGHT", -22, 0)
+	r.title:SetWordWrap(false)
+	r.sub = Ink:Text(r, F.sans, 10, C.muted, "LEFT")
+	r.sub:SetPoint("TOPLEFT", 0, -17)
+	r.sub:SetPoint("RIGHT", -22, 0)
+	r.sub:SetWordWrap(false)
+	r.pin = r:CreateTexture(nil, "ARTWORK")
+	r.pin:SetTexture(Ink.icon("MapPin"))
+	r.pin:SetSize(12, 12)
+	r.pin:SetPoint("TOPRIGHT", -2, -2)
+	r:SetScript("OnClick", function(self)
+		local Q = Ink.modules.QuestMap
+		if self.e and Q and Q.Waypoint then Q:Waypoint({ mapID = self.e.map, wx = self.e.x, wy = self.e.y }) end
+	end)
+	r:SetScript("OnEnter", function(self)
+		self.pin:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 1)
+		self.title:SetAlpha(0.85)
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:AddLine(self.title:GetText() or "", 1, 1, 1)
+		if self.giver then GameTooltip:AddLine(self.giver, 1, 0.82, 0.32) end
+		GameTooltip:AddLine(self.where or "", 0.7, 0.72, 0.75)
+		if self.alts and self.alts > 0 then GameTooltip:AddLine("다른 도시에서도 " .. self.alts .. "곳 더 시작할 수 있어요 (가장 가까운 곳)", 0.7, 0.72, 0.75) end
+		GameTooltip:AddLine(self.soon and "레벨이 되면 받을 수 있어요 · 클릭: 길 안내 표시" or "클릭: 길 안내 표시", 0.56, 0.58, 0.61)
+		GameTooltip:Show()
+	end)
+	r:SetScript("OnLeave", function(self)
+		self.pin:SetVertexColor(C.muted[1], C.muted[2], C.muted[3], 0.7)
+		self.title:SetAlpha(1)
+		GameTooltip:Hide()
+	end)
+	f.crow[i] = r
+	return r
+end
+
+-- 직업 퀘스트 칸을 그리고 높이를 돌려준다
+function M:PaintClass(y)
+	local f = self.frame
+	local Q = Ink.modules.QuestMap
+	local list = {}
+	if ClassSet() and Q.ClassQuests then
+		local avail, nextQ = Q:ClassQuests()
+		for i = 1, math.min(3, #avail) do list[#list + 1] = avail[i] end
+		if nextQ and #list < 3 then nextQ.soon = true; list[#list + 1] = nextQ end
+	end
+	if self.testing and #list == 0 then
+		list = { { id = 0, lvl = 16, map = 1453, x = 0.78, y = 0.7, test = "도적의 시험" }, { id = 0, lvl = 20, map = 1453, x = 0.78, y = 0.7, soon = true, test = "데피아즈 밀서" } }
+	end
+	if not f.chead then
+		local h = CreateFrame("Frame", nil, f)
+		h:SetSize(W, 14)
+		h.dot = h:CreateTexture(nil, "ARTWORK")
+		h.dot:SetSize(5, 5)
+		h.dot:SetPoint("LEFT", 1, 0)
+		h.dot:SetColorTexture(1, 1, 1, 1)
+		h.dot:SetRotation(math.rad(45))
+		h.t = Ink:Text(h, F.semi, 10, C.muted, "LEFT")
+		h.t:SetPoint("LEFT", h.dot, "RIGHT", 6, 0)
+		h.line = h:CreateTexture(nil, "ARTWORK")
+		h.line:SetHeight(1)
+		h.line:SetPoint("LEFT", h.t, "RIGHT", 8, 0)
+		h.line:SetPoint("RIGHT", 0, 0)
+		f.chead = h
+	end
+	local h = f.chead
+	for _, r in ipairs(f.crow or {}) do r:Hide() end
+	if #list == 0 then h:Hide() return 0 end
+	local rgb = ClassRGB()
+	local cname = UnitClass("player") or ""
+	h:ClearAllPoints()
+	h:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
+	h.dot:SetVertexColor(rgb[1], rgb[2], rgb[3], 1)
+	h.t:SetText("직업 퀘스트  |cff" .. string.format("%02x%02x%02x", math.floor(rgb[1] * 255), math.floor(rgb[2] * 255), math.floor(rgb[3] * 255)) .. cname .. "|r")
+	h.line:SetColorTexture(rgb[1], rgb[2], rgb[3], 0.18)
+	h:Show()
+	local cy = y - 20
+	for i, e in ipairs(list) do
+		local r = ClassRow(i)
+		r.e = e
+		local title = e.test or (Q and Q.QuestTitle and Q:QuestTitle(e.id)) or "직업 퀘스트"
+		r.title:SetText(title)
+		local col = e.soon and C.muted or C.text
+		r.title:SetTextColor(col[1], col[2], col[3])
+		local info = C_Map.GetMapInfo and C_Map.GetMapInfo(e.map)
+		local zone = info and info.name or ""
+		r.giver = e.npc and e.npc ~= 0 and Q and Q.GiverName and Q:GiverName(e.npc) or nil
+		r.where = zone .. string.format("  %.1f, %.1f", e.x * 100, e.y * 100)
+		r.soon = e.soon
+		local lv = e.soon and ("|cffFFB75A" .. e.lvl .. "레벨부터|r") or (e.lvl .. "레벨")
+		r.sub:SetText(lv .. "  ·  " .. zone .. (r.giver and ("  ·  " .. r.giver) or ""))
+		r.alts = e.alts
+		r.pin:SetVertexColor(C.muted[1], C.muted[2], C.muted[3], 0.7)
+		r:ClearAllPoints()
+		r:SetPoint("TOPLEFT", f, "TOPLEFT", 0, cy)
+		r:Show()
+		cy = cy - 36
+	end
+	return -(cy - y) + 6
+end
+
 function M:Update()
 	local f = self.frame
 	if not f or not f:IsShown() then return end
 	local quests = WatchedQuests()
 	if #quests == 0 and self.testing then quests = { "test1", "test2" } end
+	-- 진행 중인 직업 퀘스트를 맨 위로
+	local cset = ClassSet()
+	if cset then
+		local a, b = {}, {}
+		for _, id in ipairs(quests) do if cset[id] then a[#a + 1] = id else b[#b + 1] = id end end
+		for _, id in ipairs(b) do a[#a + 1] = id end
+		quests = a
+	end
 	local _, numQuests = C_QuestLog.GetNumQuestLogEntries()
 	local maxQ = C_QuestLog.GetMaxNumQuestsCanAccept and C_QuestLog.GetMaxNumQuestsCanAccept() or 35
 	f.count:SetText(string.format("%d / %d", numQuests or 0, maxQ))
@@ -166,6 +298,8 @@ function M:Update()
 	if combat and #quests ~= (self.lastCount or 0) then self.dirty = true end
 
 	local y = -32
+	if not combat then self.classH = self:PaintClass(y) end
+	y = y - (self.classH or 0)
 	local shown = 0
 	local total = #quests
 	local offset = math.max(0, math.min(self.offset or 0, total - MAX_QUESTS))
@@ -197,12 +331,15 @@ function M:Update()
 			complete = C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(id) or C_QuestLog.IsComplete(id)
 		end
 		local tag = QuestTag(id)
-		if tag then
+		if cset and cset[id] then
+			local rgb = ClassRGB()
+			r.title:SetText(string.format("%s |cff%02x%02x%02x(직업)|r", title, math.floor(rgb[1] * 255), math.floor(rgb[2] * 255), math.floor(rgb[3] * 255)))
+		elseif tag then
 			r.title:SetText(string.format("%s |cff%02x%02x%02x(%s)|r", title, TAG_COLOR[1] * 255, TAG_COLOR[2] * 255, TAG_COLOR[3] * 255, tag))
 		else
 			r.title:SetText(title)
 		end
-		r.div:SetShown(idx > 1)
+		r.div:SetShown(idx > 1 or (self.classH or 0) > 0)
 		local isSuper = (super == id)
 		r.title:SetTextColor(isSuper and C.accent[1] or C.text[1], isSuper and C.accent[2] or C.text[2], isSuper and C.accent[3] or C.text[3])
 		r.mark:SetShown(isSuper)
@@ -314,7 +451,30 @@ function M:Update()
 		f:SetHeight(-y)
 	end
 	self.lastCount = #quests
-	f:SetAlpha(shown > 0 and 1 or 0)
+	f:SetAlpha((shown > 0 or (self.classH or 0) > 0) and 1 or 0)
+end
+
+-- 진행 중인 내 직업 퀘스트는 자동으로 추적
+function M:WatchClass(id)
+	local cset = ClassSet()
+	if not cset then return end
+	local function watch(qid)
+		if not cset[qid] then return end
+		if C_QuestLog.GetQuestWatchType and C_QuestLog.GetQuestWatchType(qid) ~= nil then return end
+		if C_QuestLog.IsQuestWatched and C_QuestLog.IsQuestWatched(qid) then return end
+		if C_QuestLog.AddQuestWatch then
+			pcall(C_QuestLog.AddQuestWatch, qid)
+		elseif AddQuestWatch and C_QuestLog.GetLogIndexForQuestID then
+			local idx = C_QuestLog.GetLogIndexForQuestID(qid)
+			if idx then pcall(AddQuestWatch, idx) end
+		end
+	end
+	if id then watch(id) return end
+	local n = C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetNumQuestLogEntries() or 0
+	for i = 1, n do
+		local info = C_QuestLog.GetInfo and C_QuestLog.GetInfo(i)
+		if info and not info.isHeader and info.questID then watch(info.questID) end
+	end
 end
 
 -- 던전 / 시나리오 / 전장에서는 블리자드 목표 추적기를 쓰고, 그 밖에서는 Ink 목록을 쓴다
@@ -487,12 +647,19 @@ function M:Init()
 		"QUEST_WATCH_LIST_CHANGED", "QUEST_LOG_UPDATE", "QUEST_ACCEPTED", "QUEST_REMOVED", "QUEST_TURNED_IN",
 		"SUPER_TRACKING_CHANGED", "UNIT_QUEST_LOG_CHANGED", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA",
 		"SCENARIO_UPDATE", "PLAYER_REGEN_ENABLED", "BAG_UPDATE_COOLDOWN",
+		"PLAYER_LEVEL_UP", "QUEST_DATA_LOAD_RESULT",
 	}) do
-		e:RegisterEvent(ev)
+		pcall(e.RegisterEvent, e, ev)
 	end
+	C_Timer.After(4, function() pcall(M.WatchClass, M) M:Update() end)
 	local pending, donePending
 	C_Timer.After(3, function() M:CheckDone() end)
-	e:SetScript("OnEvent", function(_, event)
+	e:SetScript("OnEvent", function(_, event, arg1, arg2)
+		if event == "QUEST_ACCEPTED" then
+			-- 클래식: (logIndex, questID) · 최신: (questID)
+			local qid = arg2 or arg1
+			C_Timer.After(0.3, function() pcall(M.WatchClass, M, qid) end)
+		end
 		if event == "QUEST_LOG_UPDATE" or event == "UNIT_QUEST_LOG_CHANGED" or event == "QUEST_ACCEPTED" then
 			if not donePending then
 				donePending = true

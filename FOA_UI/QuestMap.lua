@@ -123,6 +123,128 @@ local function NpcName(id)
 end
 
 -------------------------------------------------------------------------------
+-- 내 직업 퀘스트 (퀘스트 목록에서 씀)
+--  · 직업이 정해진 퀘스트(1~3개 직업만)만, 진영 · 종족 · 선행 · 택일 · 이미 깬 것 거르기
+--  · 너무 낮은 것(필요 레벨 + 10 < 내 레벨)은 빼고, 지금 받을 수 있는 것 + 다음 레벨에 열리는 것 하나
+-------------------------------------------------------------------------------
+local classSet
+function M:ClassSet()
+	if classSet then return classSet end
+	classSet = {}
+	local _, _, classID = UnitClass("player")
+	for _, r in ipairs(ns.QUEST_DB or {}) do
+		if #r[6] > 0 and #r[6] <= 3 and Has(r[6], classID) then classSet[r[1]] = r end
+	end
+	return classSet
+end
+
+local function ClassState(r, ctx)
+	local id, lvl, fac = r[1], r[3], r[4]
+	if fac ~= 0 and fac ~= ctx.fac then return 0 end
+	if #r[5] > 0 and not Has(r[5], ctx.race) then return 0 end
+	if r[11] > CUR_PATCH then return 0 end
+	if Done(id) or InLog(id) then return 0 end
+	for _, a in ipairs(r[8]) do if Done(a) or InLog(a) then return 0 end end
+	-- 직업 퀘스트 줄기는 도시마다 갈래가 나뉘었다 합쳐져서, 선행이 여러 개면 하나만 깨도 열린 걸로
+	if #r[7] > 0 then
+		local any = false
+		for _, q in ipairs(r[7]) do if Done(q) then any = true break end end
+		if not any then return 0 end
+	end
+	if r[9] ~= 0 and not KnownSkills()[r[9]] then return 0 end
+	if not RepOK(r[10]) then return 0 end
+	if lvl + 10 < ctx.level then return 0 end
+	return lvl > ctx.level and 2 or 1
+end
+
+function M:ClassQuests()
+	local avail, nextQ = {}, nil
+	if not ns.QUEST_DB then return avail end
+	local _, _, raceID = UnitRace("player")
+	local fg = UnitFactionGroup("player")
+	local ctx = { level = UnitLevel("player") or 1, race = raceID, fac = fg == "Horde" and 1 or (fg == "Alliance" and 2 or 0) }
+	for id, r in pairs(self:ClassSet()) do
+		local st = ClassState(r, ctx)
+		if st > 0 and r[2][1] then
+			local e = { id = id, lvl = r[3], map = r[2][1], x = r[2][2] / 100, y = r[2][3] / 100, npc = r[14], rep = r[12] == 1 }
+			if st == 1 then avail[#avail + 1] = e
+			elseif not nextQ or e.lvl < nextQ.lvl or (e.lvl == nextQ.lvl and e.id < nextQ.id) then nextQ = e end
+		end
+	end
+	table.sort(avail, function(a, b) if a.lvl ~= b.lvl then return a.lvl < b.lvl end return a.id < b.id end)
+	-- 같은 곳으로 이어지는 갈래(예: 스톰윈드 · 아이언포지 · 다르나서스에서 각각 시작)는 가장 가까운 하나만
+	local groups = {}
+	for _, e in ipairs(avail) do
+		local d = self:Descend(e.id)
+		local g
+		for _, gg in ipairs(groups) do
+			for k in pairs(d) do if gg.d[k] then g = gg break end end
+			if g then break end
+		end
+		if g then
+			g.list[#g.list + 1] = e
+			for k in pairs(d) do g.d[k] = true end
+		else
+			groups[#groups + 1] = { list = { e }, d = d }
+		end
+	end
+	local out = {}
+	for _, g in ipairs(groups) do
+		local best, bd = g.list[1], math.huge
+		for _, e in ipairs(g.list) do
+			local dist = self:DistTo(e)
+			if dist < bd then best, bd = e, dist end
+		end
+		best.alts = #g.list - 1
+		out[#out + 1] = best
+	end
+	if nextQ then nextQ.alts = 0 end
+	return out, nextQ
+end
+
+-- 이 퀘스트 뒤로 이어지는 직업 퀘스트들 (8단계까지)
+function M:Descend(id)
+	if not self.classFol then
+		self.classFol = {}
+		for qid, r in pairs(self:ClassSet()) do
+			for _, p in ipairs(r[7]) do
+				self.classFol[p] = self.classFol[p] or {}
+				table.insert(self.classFol[p], qid)
+			end
+		end
+	end
+	local out, frontier = {}, { id }
+	for _ = 1, 8 do
+		local nxt = {}
+		for _, q in ipairs(frontier) do
+			for _, f in ipairs(self.classFol[q] or {}) do
+				if not out[f] then out[f] = true; nxt[#nxt + 1] = f end
+			end
+		end
+		if #nxt == 0 then break end
+		frontier = nxt
+	end
+	return out
+end
+
+-- 내 위치에서 퀘스트 주는 곳까지 (다른 대륙이면 아주 멀게)
+function M:DistTo(e)
+	if not (C_Map.GetWorldPosFromMapPos and CreateVector2D and C_Map.GetBestMapForUnit) then return e.id end
+	local pm = C_Map.GetBestMapForUnit("player")
+	local pp = pm and C_Map.GetPlayerMapPosition and C_Map.GetPlayerMapPosition(pm, "player")
+	if not pp then return e.id end
+	local ok1, c1, w1 = pcall(C_Map.GetWorldPosFromMapPos, pm, pp)
+	local ok2, c2, w2 = pcall(C_Map.GetWorldPosFromMapPos, e.map, CreateVector2D(e.x, e.y))
+	if not (ok1 and ok2 and w1 and w2) then return e.id end
+	if c1 ~= c2 then return 1e7 + e.id end
+	local x1, y1 = w1:GetXY()
+	local x2, y2 = w2:GetXY()
+	return math.sqrt((x1 - x2) ^ 2 + (y1 - y2) ^ 2)
+end
+function M:QuestTitle(id) return QuestName(id) end
+function M:GiverName(id) return NpcName(id) end
+
+-------------------------------------------------------------------------------
 -- 핀
 -------------------------------------------------------------------------------
 local function Canvas()
