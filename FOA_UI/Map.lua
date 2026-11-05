@@ -63,6 +63,57 @@ local REWARDS = { { 10, "목걸이" }, { 20, "반지" }, { 25, "활 · 방패 ·
 local BOOK = { 0.79, 0.66, 1.00 }      -- 보라
 local BOOK_DONE = { 0.44, 0.83, 0.60 } -- 초록
 
+
+-------------------------------------------------------------------------------
+-- 대도시 주요 NPC (대표만 하나씩)
+--  비행 · 전문기술 상급자: AllTheThings 포에버 자료(MIT) / 연금술: warcraft.wiki.gg / 직업 상급자: 워크래프트 태번 포에버 가이드
+--  은행 · 경매장 · 여관 · 우편함 · 수리는 한 번 들르면 그 자리를 기억해서 채운다 (들른 자리가 위 자료보다 우선)
+-------------------------------------------------------------------------------
+local CAPITAL = { [1453] = 2, [1455] = 2, [1457] = 2, [1454] = 1, [1458] = 1, [1456] = 1 }
+local PROF_KO = { p171 = "연금술", p164 = "대장기술", p165 = "가죽세공", p197 = "재봉술", p202 = "기계공학", p333 = "마법부여",
+	p182 = "약초채집", p186 = "채광", p393 = "무두질", p185 = "요리", p129 = "응급치료", p356 = "낚시" }
+local CITY = {
+	[1453] = { flight = { 71, 72.5 }, p171 = { 55.6, 85.9 }, p164 = { 64, 37.2 }, p185 = { 78.2, 53 }, p333 = { 53, 73.8 }, p202 = { 62.2, 30.6 },
+		p129 = { 52.8, 44.8 }, p356 = { 55, 69.6 }, p182 = { 44.8, 77 }, p165 = { 72.4, 62.2 }, p186 = { 59.2, 37.6 }, p393 = { 72.6, 62 }, p197 = { 53.2, 81.6 },
+		c11 = { 34.3, 65.1 }, c3 = { 67.4, 36.3 }, c8 = { 48.3, 87.3 }, c2 = { 49.5, 49.7 }, c5 = { 50.8, 44.9 }, c4 = { 80.3, 68.7 }, c9 = { 39.4, 85.0 }, c1 = { 80.2, 61.6 } },
+	[1454] = { flight = { 45.2, 63.8 }, p171 = { 55.7, 45.8 }, p164 = { 79.6, 23.6 }, p185 = { 57.4, 53.6 }, p333 = { 53.8, 38.6 }, p202 = { 75.8, 25.2 },
+		p129 = { 34, 84.4 }, p356 = { 66.6, 41.6 }, p182 = { 55.6, 39.6 }, p165 = { 63.2, 44.4 }, p186 = { 73, 27 }, p393 = { 63.2, 45.2 }, p197 = { 63.6, 50 },
+		c3 = { 66.2, 18.6 }, c8 = { 38.6, 86.0 }, c5 = { 35.6, 87.6 }, c4 = { 42.8, 51.6 }, c7 = { 38.8, 36.6 }, c9 = { 48.0, 46.8 }, c1 = { 79.6, 31.6 } },
+	[1455] = { flight = { 55.6, 48 }, p164 = { 52.6, 40.8 }, p202 = { 68.8, 45.2 }, p171 = { 66.6, 55.2 },
+		c3 = { 71.6, 88.8 }, c8 = { 27.0, 8.2 }, c2 = { 24.8, 6.2 }, c5 = { 25.4, 8.4 }, c4 = { 52.0, 13.6 }, c7 = { 47.3, 13.5 }, c9 = { 50.8, 6.4 }, c1 = { 66.8, 87.6 } },
+	[1456] = { flight = { 46.8, 50 }, p165 = { 41.8, 42.6 }, p171 = { 46.8, 33.5 },
+		c11 = { 77.6, 29.0 }, c3 = { 57.6, 88.6 }, c8 = { 22.6, 15.8 }, c5 = { 25.8, 22.0 }, c7 = { 22.8, 19.4 }, c1 = { 57.8, 85.4 } },
+	[1457] = { p171 = { 55.0, 23.8 }, p165 = { 64.6, 21.6 },
+		c11 = { 34.8, 8.6 }, c3 = { 42.2, 7.6 }, c5 = { 38.6, 82.0 }, c4 = { 38.8, 21.2 }, c1 = { 58.6, 35.6 } },
+	[1458] = { flight = { 63.6, 48.6 }, p171 = { 47.7, 73.0 }, p197 = { 70.8, 29.2 },
+		c8 = { 85.0, 10.2 }, c5 = { 49.6, 17.2 }, c4 = { 83.8, 71.6 }, c9 = { 86.0, 15.6 }, c1 = { 48.2, 15.6 } },
+}
+local CLASS_KO = { c1 = "전사", c2 = "성기사", c3 = "사냥꾼", c4 = "도적", c5 = "사제", c7 = "주술사", c8 = "마법사", c9 = "흑마법사", c11 = "드루이드" }
+
+-- 훈련사 직함 → 대표 열쇠 (수습 · 숙련 · 전문 · 대가 대장장이 → p164 하나로)
+local PROF_WORD = {
+	{ "연금술", "p171" }, { "대장", "p164" }, { "가죽세공", "p165" }, { "재봉", "p197" }, { "기계공학", "p202" }, { "마법부여", "p333" },
+	{ "약초", "p182" }, { "채광", "p186" }, { "광부", "p186" }, { "무두", "p393" }, { "요리", "p185" }, { "응급치료", "p129" }, { "낚시", "p356" },
+	{ "Alchem", "p171" }, { "Blacksmith", "p164" }, { "Leatherwork", "p165" }, { "Tailor", "p197" }, { "Engineer", "p202" }, { "Enchant", "p333" },
+	{ "Herbalis", "p182" }, { "Mining", "p186" }, { "Miner", "p186" }, { "Skinn", "p393" }, { "Cook", "p185" }, { "First Aid", "p129" }, { "Fish", "p356" },
+}
+local CLASS_WORD = {
+	{ "흑마법사", "c9" }, { "마법사", "c8" }, { "전사", "c1" }, { "성기사", "c2" }, { "사냥꾼", "c3" }, { "도적", "c4" }, { "사제", "c5" },
+	{ "주술사", "c7" }, { "드루이드", "c11" },
+	{ "Warlock", "c9" }, { "Mage", "c8" }, { "Warrior", "c1" }, { "Paladin", "c2" }, { "Hunter", "c3" }, { "Rogue", "c4" }, { "Priest", "c5" },
+	{ "Shaman", "c7" }, { "Druid", "c11" },
+}
+local function TrainerKey(sub)
+	if type(sub) ~= "string" then return end
+	for _, w in ipairs(CLASS_WORD) do if sub:find(w[1], 1, true) then return w[2] end end
+	for _, w in ipairs(PROF_WORD) do if sub:find(w[1], 1, true) then return w[2] end end
+end
+M.TrainerKey = TrainerKey
+local KEY_ROLE = { flight = "flight", bank = "bank", auction = "auction", inn = "inn", mail = "mail", repair = "repair" }
+local KEY_LABEL = { flight = "비행", bank = "은행", auction = "경매장", inn = "여관", mail = "우편함", repair = "수리" }
+local function KeyLabel(k) return KEY_LABEL[k] or PROF_KO[k] or (CLASS_KO[k] and (CLASS_KO[k] .. " 상급자")) or k end
+local function KeyRole(k) return KEY_ROLE[k] or "trainer" end
+
 -------------------------------------------------------------------------------
 -- NPC 역할 → 지도 이름표 글자
 -------------------------------------------------------------------------------
@@ -188,13 +239,30 @@ function M:Refresh()
 		end
 	end
 
-	-- 2) 기억해 둔 주요 NPC
-	local spots = Ink.db.npcSpots and mapID and Ink.db.npcSpots[mapID]
-	if Ink.db.mapNpcs ~= false and spots then
-		for name, s in pairs(spots) do
-			local col = RoleColor(s.role)
-			local label = s.role == "trainer" and s.sub or ROLE_LABEL[s.role]
-			place(s.x, s.y, ROLE_ICON[s.role] or "NpcVendor", col, label, name, s.sub and ("<" .. s.sub .. ">") or nil)
+	-- 2) 대도시 주요 NPC: 대표만 하나씩 (들른 자리 > 자료 자리)
+	if Ink.db.mapNpcs ~= false and mapID and CAPITAL[mapID] then
+		local pick = {}
+		for k, xy in pairs(CITY[mapID] or {}) do pick[k] = { x = xy[1] / 100, y = xy[2] / 100, seed = true } end
+		local spots = Ink.db.npcSpots and Ink.db.npcSpots[mapID]
+		for name, sp in pairs(spots or {}) do
+			local k
+			local ranked = type(sp.sub) == "string" and (sp.sub:find("^수습 ") or sp.sub:find("^숙련 ") or sp.sub:find("^전문 ")
+				or sp.sub:find("^대가 ") or sp.sub:find("^장인 ") or sp.sub:find("상급자") or sp.sub:find("지도자"))
+			if sp.role == "trainer" or (ranked and TrainerKey(sp.sub)) then k = TrainerKey(sp.sub)
+			elseif KEY_ROLE[sp.role] then k = sp.role end
+			if k then
+				local cur = pick[k]
+				-- 수리는 대표 하나, 우편함도 하나 (가장 최근에 들른 곳)
+				if not cur or cur.seed or (sp.t or 0) >= (cur.t or 0) then
+					pick[k] = { x = sp.x, y = sp.y, name = name, sub = sp.sub, t = sp.t }
+				end
+			end
+		end
+		for k, sp in pairs(pick) do
+			local role = KeyRole(k)
+			local col = RoleColor(role)
+			local label = KeyLabel(k)
+			place(sp.x, sp.y, ROLE_ICON[role] or "NpcVendor", col, label, sp.name or label, sp.sub and ("<" .. sp.sub .. ">") or nil)
 		end
 	end
 
@@ -557,7 +625,10 @@ function M:Remember(event)
 	Ink.db.npcSpots = Ink.db.npcSpots or {}
 	local t = Ink.db.npcSpots[mapID] or {}
 	Ink.db.npcSpots[mapID] = t
-	t[name] = { x = math.floor(x * 1000 + 0.5) / 1000, y = math.floor(y * 1000 + 0.5) / 1000, role = role, sub = sub }
+	-- 훈련사로 보이는 직함(수습 · 숙련 · 전문 대장장이 등)은 수리가 아니라 훈련사
+	if sub and TrainerKey(sub) and (role == "repair" or role == "vendor") and event ~= "MERCHANT_SHOW" then role = "trainer" end
+	if event == "TRAINER_SHOW" then role = "trainer" end
+	t[name] = { x = math.floor(x * 1000 + 0.5) / 1000, y = math.floor(y * 1000 + 0.5) / 1000, role = role, sub = sub, t = time() }
 	if WorldMapFrame and WorldMapFrame:IsShown() then self:Refresh() end
 end
 

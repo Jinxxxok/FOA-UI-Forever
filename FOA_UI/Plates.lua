@@ -120,7 +120,12 @@ local function NpcRole(unit)
 	if type(name) == "string" and roleCache[name] ~= nil then return roleCache[name] or nil end
 	local sub = Subtitle(unit)
 	local found = false
-	if sub then
+	-- "수습 · 숙련 · 전문 · 대가 · 장인 ○○" 같은 직함은 전문기술 상급자 (대장장이라도 수리 아님)
+	if sub and (sub:find("^수습 ") or sub:find("^숙련 ") or sub:find("^전문 ") or sub:find("^대가 ") or sub:find("^장인 ")
+		or sub:find("^Apprentice ") or sub:find("^Journeyman ") or sub:find("^Expert ") or sub:find("^Artisan ") or sub:find("^Master ")) then
+		for _, r in ipairs(ROLES) do if r.key == "trainer" then found = r end end
+	end
+	if sub and not found then
 		for _, r in ipairs(ROLES) do
 			for _, w in ipairs(r.words) do
 				if sub:find(w, 1, true) then found = r break end
