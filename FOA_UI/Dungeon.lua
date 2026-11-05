@@ -267,6 +267,34 @@ M.INV2EJ = INV2EJ
 
 local SECONDARY = { "ITEM_MOD_CRIT_RATING_SHORT", "ITEM_MOD_HASTE_RATING_SHORT", "ITEM_MOD_MASTERY_RATING_SHORT", "ITEM_MOD_VERSATILITY" }
 
+-- 아이템 정보 요청은 아이템마다 한 번만 (계속 다시 요청하면 서버가 늦게 주거나 안 준다)
+--  도착하면 잠깐 모아서 한 번에 다시 그린다 (답이 안 오면 30초 뒤 한 번 더)
+local requested = {}
+local arrivePending
+local function ItemArrived()
+	if arrivePending then return end
+	arrivePending = true
+	C_Timer.After(0.6, function()
+		arrivePending = nil
+		M.dirty = true
+		pcall(M.PaintSidebar, M)
+		pcall(M.PaintBis, M)
+	end)
+end
+local function RequestItem(id)
+	-- 답이 안 오면 30초 뒤에야 다시 요청
+	local now = GetTime()
+	if requested[id] and now - requested[id] < 30 then return end
+	requested[id] = now
+	if Item and Item.CreateFromItemID then
+		local it = Item:CreateFromItemID(id)
+		if it.IsItemEmpty and it:IsItemEmpty() then return end
+		it:ContinueOnItemLoad(ItemArrived)
+	elseif C_Item.RequestLoadItemDataByID then
+		pcall(C_Item.RequestLoadItemDataByID, id)
+	end
+end
+
 local function ItemStats(id)
 	local ok, st = pcall(C_Item.GetItemStats, "item:" .. id)
 	return ok and st or nil
@@ -283,8 +311,8 @@ local function Weights(spec)
 				w[k] = (w[k] or 0) + v
 				total = total + v
 			end
-		elseif C_Item.RequestLoadItemDataByID then
-			pcall(C_Item.RequestLoadItemDataByID, id)
+		else
+			RequestItem(id)
 		end
 	end
 	if total <= 0 then return nil end
@@ -304,7 +332,7 @@ end
 local function LooseItem(id)
 	local _, _, _, _, icon = C_Item.GetItemInfoInstant(id)
 	local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
-	if not name and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+	if not name then RequestItem(id) end
 	local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
 	local _, link = C_Item.GetItemInfo(id)
 	local data = ns.BIS
@@ -362,19 +390,25 @@ ForeverScan = function(key)
 	for bi, b in ipairs(d.bosses) do
 		local boss = { index = bi, name = b[1], items = {} }
 		for _, id in ipairs(b[2]) do
-			local _, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
-			local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
-			local iname, link = C_Item.GetItemInfo(id) -- 서버에 정보를 요청하는 역할도 한다
-			name = name or iname
-			if not name then
-				data.missing = data.missing + 1
-				if C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
+			-- 게임 자료에 없는 아이템(패치로 바뀐 번호)은 건너뛴다. 안 그러면 영원히 "불러오는 중"
+			if iid then
+				local cached = not C_Item.IsItemDataCachedByID or C_Item.IsItemDataCachedByID(id)
+				local name, link
+				if cached then
+					name, link = C_Item.GetItemInfo(id)
+					name = name or (C_Item.GetItemNameByID and C_Item.GetItemNameByID(id))
+				end
+				if not name then
+					data.missing = data.missing + 1
+					RequestItem(id)
+				end
+				local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
+				table.insert(boss.items, {
+					id = id, name = name, link = link, icon = icon, slot = loc and EQUIP_EJ[loc], quality = q or 2,
+					inst = key, boss = bi, bossName = b[1],
+				})
 			end
-			local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
-			table.insert(boss.items, {
-				id = id, name = name, link = link, icon = icon, slot = loc and EQUIP_EJ[loc], quality = q or 2,
-				inst = key, boss = bi, bossName = b[1],
-			})
 		end
 		data.bosses[bi] = boss
 	end
@@ -807,6 +841,7 @@ function M:PaintSidebar()
 	local f = self.sidebar
 	if not f or not f:IsShown() then return end
 	local jid = self.showing
+	if self.sbFor ~= jid then self.sbFor, self.sbRetry = jid, 0 end
 	local data = jid and self:Scan(jid)
 	self:BuildRanks(jid)
 	local key, _, _, specName, class = SpecKey()
@@ -877,7 +912,7 @@ function M:PaintSidebar()
 				row.itemID, row.link = it.id, it.link
 				row.icon:Set(it.icon, it.quality, SLOT_GLYPH[it.slot or -1])
 				local q = QCOL[it.quality or 1] or QCOL[1]
-				row.name:SetText(it.name or "불러오는 중…")
+				row.name:SetText(it.name or (((self.sbRetry or 0) >= 20) and ("아이템 #" .. it.id .. " (마우스를 올려 보기)") or "불러오는 중…"))
 				row.name:SetTextColor(q[1], q[2], q[3])
 				local sub = it.slotText or SLOT_NAME[it.slot or -1] or ""
 				if it.armor and it.armor ~= "" then sub = sub .. " · " .. it.armor end
@@ -1312,7 +1347,7 @@ local function SetLine(r, id, label, name, quality)
 		local _, _, _, _, icon = C_Item.GetItemInfoInstant(id)
 		local nm = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
 		if not nm then
-			if C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+			RequestItem(id)
 			M.prepMissing = true
 		end
 		local q = quality or (C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)) or 1
@@ -1634,6 +1669,14 @@ end
 -- 테스트 모드: 지도 없이도 사이드바 · 알림을 볼 수 있게
 -------------------------------------------------------------------------------
 function M:SetTest(on)
+	if FOREVER then
+		-- 포에버는 던전 도감이 비어 있어서 지도 옆 칸 예시를 포에버 던전 목록으로
+		if not (Ink.db.dungeon and ns.FOREVER_LOOT) then return end
+		self.testing = on
+		if not on then self:HideSidebar(); self:UpdateMap(); return end
+		self:ShowFor(self:ForeverCurrent(), nil)
+		return
+	end
 	if not Available() or not Ink.db.dungeon then return end
 	self.testing = on
 	if not on then
