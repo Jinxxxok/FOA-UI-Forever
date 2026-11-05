@@ -272,7 +272,8 @@ end
 
 function M:PaintTraitFrame()
 	local tf, host = TraitFrame()
-	if not tf or not host or not host:IsShown() then if self.panel then self.panel:Hide() end return end
+	-- 특성 탭이 보일 때만 (같은 창의 마법책 탭에서는 숨김 → 거기엔 배울 주문 안내가 뜬다)
+	if not tf or not host or not host:IsShown() or not tf:IsVisible() then if self.panel then self.panel:Hide() end return end
 	local nxt = self:Next(8)
 	local first = nxt[1]
 	-- 이전 강조 지우기
@@ -432,7 +433,10 @@ function M:HookTraitFrame()
 	self.traitHooked = true
 	host:HookScript("OnShow", function() C_Timer.After(0.1, function() M:PaintFrame() end) end)
 	host:HookScript("OnHide", function() if M.panel then M.panel:Hide() end end)
-	if tf.HookScript then tf:HookScript("OnShow", function() C_Timer.After(0.1, function() M:PaintFrame() end) end) end
+	if tf.HookScript then
+		tf:HookScript("OnShow", function() C_Timer.After(0.1, function() M:PaintFrame() end) end)
+		tf:HookScript("OnHide", function() if M.panel then M.panel:Hide() end end)
+	end
 end
 
 function M:HookFrame()

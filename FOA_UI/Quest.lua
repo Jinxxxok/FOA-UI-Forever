@@ -64,8 +64,9 @@ local function ObjectiveLine(row, i)
 	o.text:SetWidth(W - 50)
 	o.count = Ink:Text(o, F.latin, 10, C.soft, "RIGHT")
 	o.count:SetPoint("TOPRIGHT")
-	o.bar = Ink:Bar(o, W, 2, C.text, C.track)
-	o.bar:SetPoint("TOPLEFT", 0, -19)
+	-- 진행 막대: 숫자 아래 짧게 (전체 폭이면 퀘스트 사이 구분선처럼 보여서)
+	o.bar = Ink:Bar(o, 54, 3, C.accent, { 1, 1, 1, 0.1 })
+	o.bar:SetPoint("TOPRIGHT", 0, -15)
 	row.objs[i] = o
 	return o
 end
@@ -86,6 +87,12 @@ local function Row(i)
 	r.mark:SetPoint("RIGHT", r.title, "LEFT", -6, 0)
 	r.mark:SetRotation(math.rad(45))
 	r.objs = {}
+	-- 퀘스트 사이 구분선 (모든 퀘스트 사이에 똑같이, 아주 옅게)
+	r.div = r:CreateTexture(nil, "BACKGROUND")
+	r.div:SetColorTexture(1, 1, 1, 0.07)
+	r.div:SetHeight(1)
+	r.div:SetPoint("BOTTOMLEFT", r, "TOPLEFT", 0, 6)
+	r.div:SetPoint("BOTTOMRIGHT", r, "TOPRIGHT", 0, 6)
 	r:SetScript("OnClick", function(self, btn)
 		local id = self.questID
 		if not id then return end
@@ -195,6 +202,7 @@ function M:Update()
 		else
 			r.title:SetText(title)
 		end
+		r.div:SetShown(idx > 1)
 		local isSuper = (super == id)
 		r.title:SetTextColor(isSuper and C.accent[1] or C.text[1], isSuper and C.accent[2] or C.text[2], isSuper and C.accent[3] or C.text[3])
 		r.mark:SetShown(isSuper)
@@ -240,9 +248,13 @@ function M:Update()
 					if req > 1 then
 						o.bar:SetMinMaxValues(0, req)
 						o.bar:SetValue(ful)
+						local bc = ob.finished and C.green or C.accent
+						o.bar:SetStatusBarColor(bc[1], bc[2], bc[3], ob.finished and 0.8 or 0.9)
+						o.text:SetWidth(W - 66)
 						o.bar:Show()
-						oy = oy - 23
+						oy = oy - 20
 					else
+						o.text:SetWidth(W - 50)
 						o.bar:Hide()
 						oy = oy - 16
 					end

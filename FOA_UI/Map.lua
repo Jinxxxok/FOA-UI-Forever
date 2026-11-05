@@ -83,7 +83,8 @@ local CITY = {
 		c3 = { 71.6, 88.8 }, c8 = { 27.0, 8.2 }, c2 = { 24.8, 6.2 }, c5 = { 25.4, 8.4 }, c4 = { 52.0, 13.6 }, c7 = { 47.3, 13.5 }, c9 = { 50.8, 6.4 }, c1 = { 66.8, 87.6 } },
 	[1456] = { flight = { 46.8, 50 }, p165 = { 41.8, 42.6 }, p171 = { 46.8, 33.5 },
 		c11 = { 77.6, 29.0 }, c3 = { 57.6, 88.6 }, c8 = { 22.6, 15.8 }, c5 = { 25.8, 22.0 }, c7 = { 22.8, 19.4 }, c1 = { 57.8, 85.4 } },
-	[1457] = { p171 = { 55.0, 23.8 }, p165 = { 64.6, 21.6 },
+	[1457] = { bank = { 40.0, 42.0 }, auction = { 55.0, 58.5 }, inn = { 62.5, 29.8 }, mail = { 44.9, 47.7 }, flight = { 36.6, 44.8 },
+		p164 = { 57.0, 50.0 }, p171 = { 55.0, 23.8 }, p165 = { 64.6, 21.6 },
 		c11 = { 34.8, 8.6 }, c3 = { 42.2, 7.6 }, c5 = { 38.6, 82.0 }, c4 = { 38.8, 21.2 }, c1 = { 58.6, 35.6 } },
 	[1458] = { flight = { 63.6, 48.6 }, p171 = { 47.7, 73.0 }, p197 = { 70.8, 29.2 },
 		c8 = { 85.0, 10.2 }, c5 = { 49.6, 17.2 }, c4 = { 83.8, 71.6 }, c9 = { 86.0, 15.6 }, c1 = { 48.2, 15.6 } },
@@ -479,6 +480,7 @@ function M:Refresh()
 	for i = n + 1, #(self.pins or {}) do self.pins[i]:Hide() end
 	self:DrawBooks(mapID, cv, pinScale)
 	self:PaintBooks(mapID)
+	pcall(self.DrawEntrances, self, mapID, cv, pinScale)
 end
 
 -------------------------------------------------------------------------------
@@ -705,6 +707,238 @@ function M:DrawBooks(mapID, cv, pinScale)
 		end
 	end
 	for i = n + 1, #(self.bookPins or {}) do self.bookPins[i]:Hide() end
+end
+
+-------------------------------------------------------------------------------
+-- 던전 입구: 지역 지도에만 (대륙 · 세계 지도에는 안 찍는다)
+--  금테 아치 + 보랏빛 차원문 그림, 옆에 이름 · 권장 레벨 알약 (내 레벨 기준 색)
+--  누르면 지도 옆 전리품 칸이 그 던전으로, 오른쪽 클릭은 이 지도에만 길 표시
+-------------------------------------------------------------------------------
+local PORTAL_TEX = "Interface\\AddOns\\FOA_UI\\Media\\Textures\\Portal"
+-- 자료에 없는 입구 (지역 지도 좌표)
+local EXTRA_ENTR = {
+	thanes = { { 1455, 43.6, 51.7 } },
+	dm_east = { { 1444, 59.2, 44.8 } }, dm_west = { { 1444, 59.2, 44.8 } }, dm_north = { { 1444, 59.2, 44.8 } },
+	strat_live = { { 1423, 27.0, 11.5 } }, strat_ud = { { 1423, 43.0, 18.0 } },
+	brd = { { 1427, 34.8, 85.3 }, { 1428, 29.4, 37.6 } },
+	lbrs = { { 1427, 34.8, 85.3 }, { 1428, 29.4, 37.6 } },
+	ubrs = { { 1427, 34.8, 85.3 }, { 1428, 29.4, 37.6 } },
+}
+local SKIP_ATT_ENTR = { brd = true }  -- 검은바위 산 안쪽 지도 좌표 대신 산 입구로
+
+local function EntrLevelColor(lo, hi)
+	local lv = UnitLevel("player") or 1
+	if lv < lo - 2 then return C.red end
+	if lv < lo then return C.orange end
+	if lv <= hi then return { 0.44, 0.83, 0.6 } end
+	return C.muted
+end
+
+-- 같은 자리 입구는 하나로 묶는다 (붉은십자군 날개 · 혈투의 전장 · 검은바위 산)
+local function EntranceGroups()
+	local groups, byPos = {}, {}
+	for _, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
+		if not d.soon then
+			local pts = {}
+			if d.entr and not SKIP_ATT_ENTR[d.key] then pts[#pts + 1] = d.entr end
+			for _, e in ipairs(EXTRA_ENTR[d.key] or {}) do pts[#pts + 1] = e end
+			for _, e in ipairs(pts) do
+				local k = e[1] .. ":" .. math.floor(e[2] * 2 + 0.5) .. ":" .. math.floor(e[3] * 2 + 0.5)
+				local g = byPos[k]
+				if not g then
+					g = { map = e[1], x = e[2] / 100, y = e[3] / 100, list = {} }
+					byPos[k] = g
+					groups[#groups + 1] = g
+				end
+				g.list[#g.list + 1] = d
+			end
+		end
+	end
+	return groups
+end
+
+local function GroupTitle(g)
+	local first = g.list[1]
+	if #g.list == 1 then return first.ko end
+	local same = first.groupKo
+	for _, d in ipairs(g.list) do if d.groupKo ~= same then same = nil break end end
+	if same then return same end
+	return "검은바위 산"
+end
+
+function M:EntrancePin(i)
+	self.entrPins = self.entrPins or {}
+	local p = self.entrPins[i]
+	if p then return p end
+	p = CreateFrame("Button", nil, self.layer)
+	p:SetSize(26, 26)
+	p:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	p.art = CreateFrame("Frame", nil, p)
+	p.art:SetPoint("CENTER")
+	p.art:SetSize(30, 30)
+	p.halo = p.art:CreateTexture(nil, "BACKGROUND")
+	p.halo:SetTexture(Ink.tex.glow)
+	p.halo:SetSize(52, 52)
+	p.halo:SetPoint("CENTER", 0, -1)
+	p.halo:SetBlendMode("ADD")
+	p.halo:SetVertexColor(0.62, 0.52, 1, 0.22)
+	p.icon = p.art:CreateTexture(nil, "ARTWORK")
+	p.icon:SetTexture(PORTAL_TEX)
+	p.icon:SetAllPoints()
+	-- 이름 알약
+	p.pill = CreateFrame("Frame", nil, p)
+	p.pill:SetHeight(18)
+	p.pill:SetPoint("LEFT", p, "RIGHT", 1, -1)
+	p.pill.bg = Ink:Round(p.pill, "BACKGROUND", true, false)
+	p.pill.bg:SetAllPoints()
+	p.pill.bg:SetVertexColor(0.035, 0.04, 0.052, 0.88)
+	p.pill.bd = Ink:Round(p.pill, "BORDER", true, true)
+	p.pill.bd:SetAllPoints()
+	p.pill.bd:SetVertexColor(0.89, 0.75, 0.48, 0.45)
+	p.pill.name = Ink:Text(p.pill, F.semi, 10, C.text, "LEFT")
+	p.pill.name:SetPoint("LEFT", 7, 0)
+	p.pill.lvl = Ink:Text(p.pill, F.numR or F.semi, 10, C.soft, "LEFT")
+	p.pill.lvl:SetPoint("LEFT", p.pill.name, "RIGHT", 6, 0)
+	-- 입구 버튼으로 찾아왔을 때 몇 초 동안 물결
+	p.ping = p:CreateTexture(nil, "BACKGROUND")
+	p.ping:SetTexture(Ink.tex.ring)
+	p.ping:SetSize(30, 30)
+	p.ping:SetPoint("CENTER")
+	p.ping:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0)
+	local ag = p.ping:CreateAnimationGroup()
+	ag:SetLooping("REPEAT")
+	local s1 = ag:CreateAnimation("Scale"); s1:SetScaleFrom(0.6, 0.6); s1:SetScaleTo(2.4, 2.4); s1:SetDuration(1.2); s1:SetSmoothing("OUT")
+	local a1 = ag:CreateAnimation("Alpha"); a1:SetFromAlpha(1); a1:SetToAlpha(0); a1:SetDuration(1.2)
+	p.pingAG = ag
+	HoverArt(p)
+	p:SetScript("OnEnter", function(self)
+		self.grow:Play()
+		self.halo:SetVertexColor(0.62, 0.52, 1, 0.45)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:AddLine(GroupTitle(self.g) .. "  입구", 1, 1, 1)
+		for _, d in ipairs(self.g.list) do
+			local c = EntrLevelColor(d.lo, d.hi)
+			local nb = 0
+			for _, b in ipairs(d.bosses) do if b[4] ~= 1 then nb = nb + 1 end end
+			GameTooltip:AddDoubleLine((d.wing and #self.g.list > 1 and d.groupKo == GroupTitle(self.g)) and d.wing or d.ko,
+				"Lv " .. d.lo .. "–" .. d.hi .. "  ·  보스 " .. nb, 0.86, 0.87, 0.9, c[1], c[2], c[3])
+		end
+		GameTooltip:AddLine(" ")
+		GameTooltip:AddLine("클릭: 전리품 · 진행 경로 보기", 0.6, 0.62, 0.66)
+		GameTooltip:AddLine("오른쪽 클릭: 이 지역 지도에 길 표시", 0.6, 0.62, 0.66)
+		GameTooltip:Show()
+	end)
+	p:SetScript("OnLeave", function(self)
+		self.grow:Stop(); self.art:SetScale(1)
+		self.halo:SetVertexColor(0.62, 0.52, 1, 0.22)
+		GameTooltip:Hide()
+	end)
+	p:SetScript("OnClick", function(self, btn)
+		if btn == "RightButton" then
+			local mapID = WorldMapFrame:GetMapID()
+			if mapID and C_Map.CanSetUserWaypointOnMap and C_Map.CanSetUserWaypointOnMap(mapID) then
+				C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(mapID, self.wx, self.wy))
+			end
+			return
+		end
+		local D = Ink.modules.Dungeon
+		local pick = self.g.list[1]
+		local lv = UnitLevel("player") or 1
+		for _, d in ipairs(self.g.list) do if lv >= d.lo - 1 and lv <= d.hi then pick = d break end end
+		if D and D.SelectForever then
+			if not (D.sidebar and D.sidebar:IsShown()) and D.ShowFor then D:ShowFor(pick.key, WorldMapFrame) end
+			D:SelectForever(pick.key)
+		end
+	end)
+	self.entrPins[i] = p
+	return p
+end
+
+function M:DrawEntrances(mapID, cv, pinScale)
+	local n = 0
+	local info = mapID and C_Map.GetMapInfo(mapID)
+	local mt = info and info.mapType
+	-- 지역(3) · 작은 지역(5) · 따로 떨어진 지도(6)에만. 세계(1) · 대륙(2) · 던전(4)은 빼기
+	local zoneLike = mt == 3 or mt == 5 or mt == 6
+	if Ink.db.mapEntrances ~= false and zoneLike then
+		self.entrGroups = self.entrGroups or EntranceGroups()
+		local W, H = cv:GetWidth(), cv:GetHeight()
+		for _, g in ipairs(self.entrGroups) do
+			local x, y = ToMap(g.map, g.x, g.y, mapID)
+			if x then
+				n = n + 1
+				local p = self:EntrancePin(n)
+				p.g = g
+				local sc = pinScale
+				p:ClearAllPoints()
+				p:SetScale(sc)
+				p:SetPoint("CENTER", cv, "TOPLEFT", x * W / sc, -y * H / sc)
+				p:SetFrameLevel(self.layer:GetFrameLevel() + 25)
+				p.wx, p.wy = x, y
+				local lo, hi = 99, 0
+				for _, d in ipairs(g.list) do lo = math.min(lo, d.lo); hi = math.max(hi, d.hi) end
+				p.pill.name:SetText(GroupTitle(g))
+				local c = EntrLevelColor(lo, hi)
+				p.pill.lvl:SetText(lo == hi and tostring(lo) or (lo .. "–" .. hi))
+				p.pill.lvl:SetTextColor(c[1], c[2], c[3])
+				p.pill:SetWidth(math.ceil(p.pill.name:GetStringWidth() + p.pill.lvl:GetStringWidth()) + 20)
+				local flash = false
+				for _, d in ipairs(g.list) do if d.key == self.flashKey then flash = true end end
+				if flash then p.pingAG:Play() else p.pingAG:Stop() end
+				p:Show()
+			end
+		end
+	end
+	for i = n + 1, #(self.entrPins or {}) do self.entrPins[i]:Hide() end
+	self:HideBlizzardEntrances()
+end
+
+-- 같은 던전의 블리자드 동그란 입구 표시는 숨긴다 (우리 표시와 겹치지 않게 · 대륙 지도 포함)
+function M:HideBlizzardEntrances()
+	local wm = WorldMapFrame
+	if Ink.db.mapEntrances == false or not (wm and wm.EnumeratePinsByTemplate) then return end
+	if not self.entrNames then
+		self.entrNames = {}
+		for _, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
+			for _, s in ipairs({ d.ko, d.en, d.groupKo }) do if s then self.entrNames[s] = true end end
+		end
+		self.entrNames["검은바위 산"], self.entrNames["Blackrock Mountain"] = true, true
+		self.entrNames["붉은십자군 수도원"], self.entrNames["Scarlet Monastery"] = true, true
+		self.entrNames["혈투의 전장"], self.entrNames["Dire Maul"] = true, true
+		self.entrNames["스트라솔름"], self.entrNames["Stratholme"] = true, true
+	end
+	for _, tpl in ipairs({ "DungeonEntrancePinTemplate", "EncounterJournalPinTemplate" }) do
+		local ok, iter = pcall(wm.EnumeratePinsByTemplate, wm, tpl)
+		if ok and iter then
+			for pin in iter do
+				local nm = pin.name or (pin.poiInfo and pin.poiInfo.name)
+				if nm and self.entrNames[nm] then pin:SetAlpha(0); if pin.EnableMouse then pin:EnableMouse(false) end end
+			end
+		end
+	end
+end
+
+-- 던전 입구 자리 (지역 지도, 0~100 좌표): 전리품 칸의 "입구" 버튼용
+function M:EntrancePoint(key)
+	self.entrGroups = self.entrGroups or EntranceGroups()
+	for _, g in ipairs(self.entrGroups) do
+		for _, d in ipairs(g.list) do
+			if d.key == key then return { g.map, g.x * 100, g.y * 100 } end
+		end
+	end
+end
+
+-- 전리품 칸의 "입구" 버튼: 그 지역 지도를 열고 입구 표시에 물결 (몇 초)
+function M:FocusEntrance(key, mapID)
+	self.flashKey = key
+	if not (WorldMapFrame and WorldMapFrame:IsShown()) then
+		if OpenWorldMap then pcall(OpenWorldMap, mapID) elseif ToggleWorldMap then ToggleWorldMap() end
+	end
+	if WorldMapFrame and WorldMapFrame.SetMapID then WorldMapFrame:SetMapID(mapID) end
+	self:Refresh()
+	C_Timer.After(6, function()
+		if M.flashKey == key then M.flashKey = nil; if WorldMapFrame and WorldMapFrame:IsShown() then M:Refresh() end end
+	end)
 end
 
 -------------------------------------------------------------------------------
