@@ -83,6 +83,37 @@ local CITY = {
 		c3 = { 71.6, 88.8 }, c8 = { 27.0, 8.2 }, c2 = { 24.8, 6.2 }, c5 = { 25.4, 8.4 }, c4 = { 52.0, 13.6 }, c7 = { 47.3, 13.5 }, c9 = { 50.8, 6.4 }, c1 = { 66.8, 87.6 } },
 	[1456] = { flight = { 46.8, 50 }, p165 = { 41.8, 42.6 }, p171 = { 46.8, 33.5 },
 		c11 = { 77.6, 29.0 }, c3 = { 57.6, 88.6 }, c8 = { 22.6, 15.8 }, c5 = { 25.8, 22.0 }, c7 = { 22.8, 19.4 }, c1 = { 57.8, 85.4 } },
+	-- 다르나서스: 직업 상급자 (와우헤드 불성 클래식 다르나서스 상급자 안내 · 같은 자리) / 전문기술 상급자 (장인의 정원 등)
+	[1457] = { bank = { 40.0, 42.0 }, auction = { 55.0, 58.5 }, inn = { 62.5, 29.8 }, mail = { 44.9, 47.7 }, flight = { 36.6, 44.8 },
+		p171 = { 54.9, 24.0 }, p165 = { 64.4, 21.5 }, p393 = { 64.1, 22.3 }, p333 = { 58.4, 13.1 }, p197 = { 63.8, 22.1 }, p182 = { 47.9, 68.0 },
+		p129 = { 54.5, 23.4 }, p185 = { 49.0, 21.2 }, p356 = { 47.9, 56.7 }, p164 = { 57.0, 50.0 },
+		c11 = { 34.8, 7.4 }, c3 = { 40.4, 8.6 }, c5 = { 39.5, 81.2 }, c4 = { 37.0, 21.9 }, c1 = { 58.7, 34.9 } },
+	[1458] = { 74.0, 32.4, "오웬 사드", "사서 · 호드 — 마법 지구, 계산대 뒤", 1 },
+}
+local REWARDS = { { 10, "목걸이" }, { 20, "반지" }, { 25, "활 · 방패 · 보조장비" } }
+local BOOK = { 0.79, 0.66, 1.00 }      -- 보라
+local BOOK_DONE = { 0.44, 0.83, 0.60 } -- 초록
+
+
+-------------------------------------------------------------------------------
+-- 대도시 주요 NPC (대표만 하나씩)
+--  비행 · 전문기술 상급자: AllTheThings 포에버 자료(MIT) / 연금술: warcraft.wiki.gg / 직업 상급자: 워크래프트 태번 포에버 가이드
+--  은행 · 경매장 · 여관 · 우편함 · 수리는 한 번 들르면 그 자리를 기억해서 채운다 (들른 자리가 위 자료보다 우선)
+-------------------------------------------------------------------------------
+local CAPITAL = { [1453] = 2, [1455] = 2, [1457] = 2, [1454] = 1, [1458] = 1, [1456] = 1 }
+local PROF_KO = { p171 = "연금술", p164 = "대장기술", p165 = "가죽세공", p197 = "재봉술", p202 = "기계공학", p333 = "마법부여",
+	p182 = "약초채집", p186 = "채광", p393 = "무두질", p185 = "요리", p129 = "응급치료", p356 = "낚시" }
+local CITY = {
+	[1453] = { flight = { 71, 72.5 }, p171 = { 55.6, 85.9 }, p164 = { 64, 37.2 }, p185 = { 78.2, 53 }, p333 = { 53, 73.8 }, p202 = { 62.2, 30.6 },
+		p129 = { 52.8, 44.8 }, p356 = { 55, 69.6 }, p182 = { 44.8, 77 }, p165 = { 72.4, 62.2 }, p186 = { 59.2, 37.6 }, p393 = { 72.6, 62 }, p197 = { 53.2, 81.6 },
+		c11 = { 34.3, 65.1 }, c3 = { 67.4, 36.3 }, c8 = { 48.3, 87.3 }, c2 = { 49.5, 49.7 }, c5 = { 50.8, 44.9 }, c4 = { 80.3, 68.7 }, c9 = { 39.4, 85.0 }, c1 = { 80.2, 61.6 } },
+	[1454] = { flight = { 45.2, 63.8 }, p171 = { 55.7, 45.8 }, p164 = { 79.6, 23.6 }, p185 = { 57.4, 53.6 }, p333 = { 53.8, 38.6 }, p202 = { 75.8, 25.2 },
+		p129 = { 34, 84.4 }, p356 = { 66.6, 41.6 }, p182 = { 55.6, 39.6 }, p165 = { 63.2, 44.4 }, p186 = { 73, 27 }, p393 = { 63.2, 45.2 }, p197 = { 63.6, 50 },
+		c3 = { 66.2, 18.6 }, c8 = { 38.6, 86.0 }, c5 = { 35.6, 87.6 }, c4 = { 42.8, 51.6 }, c7 = { 38.8, 36.6 }, c9 = { 48.0, 46.8 }, c1 = { 79.6, 31.6 } },
+	[1455] = { flight = { 55.6, 48 }, p164 = { 52.6, 40.8 }, p202 = { 68.8, 45.2 }, p171 = { 66.6, 55.2 },
+		c3 = { 71.6, 88.8 }, c8 = { 27.0, 8.2 }, c2 = { 24.8, 6.2 }, c5 = { 25.4, 8.4 }, c4 = { 52.0, 13.6 }, c7 = { 47.3, 13.5 }, c9 = { 50.8, 6.4 }, c1 = { 66.8, 87.6 } },
+	[1456] = { flight = { 46.8, 50 }, p165 = { 41.8, 42.6 }, p171 = { 46.8, 33.5 },
+		c11 = { 77.6, 29.0 }, c3 = { 57.6, 88.6 }, c8 = { 22.6, 15.8 }, c5 = { 25.8, 22.0 }, c7 = { 22.8, 19.4 }, c1 = { 57.8, 85.4 } },
 	[1457] = { bank = { 40.0, 42.0 }, auction = { 55.0, 58.5 }, inn = { 62.5, 29.8 }, mail = { 44.9, 47.7 }, flight = { 36.6, 44.8 },
 		p164 = { 57.0, 50.0 }, p171 = { 55.0, 23.8 }, p165 = { 64.6, 21.6 },
 		c11 = { 34.8, 8.6 }, c3 = { 42.2, 7.6 }, c5 = { 38.6, 82.0 }, c4 = { 38.8, 21.2 }, c1 = { 58.6, 35.6 } },
@@ -337,6 +368,22 @@ local function StylePin(p, kind, key, off)
 	p.tipR, p.tipG, p.tipB = col[1], col[2], col[3]
 end
 
+-- 넓은 지도용 작은 비행 지점: 가 본 곳 = 하늘색 점 + 얇은 고리, 안 가 본 곳 = 속이 빈 회색 고리
+local function MiniFlight(p, off)
+	local a = p.art
+	local size = 12
+	p:SetSize(size + 4, size + 4); a:SetSize(size, size)
+	a.pill:Hide()
+	a.glow:SetVertexColor(FLIGHT_ON[1], FLIGHT_ON[2], FLIGHT_ON[3], off and 0 or 0.18)
+	a.disc:SetVertexColor(0.03, 0.035, 0.05, off and 0.55 or 0.92)
+	a.icon:SetTexture(Ink.tex.disc)
+	a.icon:SetSize(off and 3 or 5, off and 3 or 5)
+	a.icon:SetTexCoord(0, 1, 0, 1)
+	a.icon:SetVertexColor(off and 0.6 or FLIGHT_ON[1], off and 0.62 or FLIGHT_ON[2], off and 0.66 or FLIGHT_ON[3])
+	a.icon:SetAlpha(off and 0.7 or 1)
+	a.ring:SetVertexColor(off and 0.6 or FLIGHT_ON[1], off and 0.62 or FLIGHT_ON[2], off and 0.66 or FLIGHT_ON[3], off and 0.55 or 1)
+end
+
 -- 비행 지점을 알고 있는지 (비행 조련사 지도를 열 때 기억)
 local function FlightKnown(id)
 	return Ink.cdb and Ink.cdb.flightKnown and Ink.cdb.flightKnown[id]
@@ -390,11 +437,15 @@ function M:Refresh()
 		placed[#placed + 1] = { px, py, r }
 		return px, py
 	end
+	-- 대륙 · 세계 지도: 비행 지점은 작고 깔끔한 점으로 (책 표시와 겹쳐도 덜 어지럽게)
+	local mInfo = mapID and C_Map.GetMapInfo(mapID)
+	local wide = mInfo and mInfo.mapType and mInfo.mapType <= 2
 	local function put(x, y, kind, key, title, sub, note, off)
 		n = n + 1
 		local p = self:CityPin(n)
 		StylePin(p, kind, key, off)
-		local r = (kind == "svc" and 15 or 12) * pinScale
+		if kind == "flight" and wide then MiniFlight(p, off) end
+		local r = ((kind == "flight" and wide) and 6 or (kind == "svc" and 15 or 12)) * pinScale
 		local px, py = spread(x, y, r)
 		p:ClearAllPoints()
 		p:SetScale(pinScale)
@@ -675,7 +726,9 @@ function M:DrawBooks(mapID, cv, pinScale)
 	local function put(x, y, small)
 		n = n + 1
 		local p = self:BookPin(n)
-		local sc = pinScale * (small and 0.62 or 1)
+		local mi = mapID and C_Map.GetMapInfo(mapID)
+		local wide = mi and mi.mapType and mi.mapType <= 2
+		local sc = pinScale * (small and (wide and 0.5 or 0.62) or 1)
 		p:ClearAllPoints()
 		p:SetScale(sc)
 		p:SetPoint("CENTER", cv, "TOPLEFT", x * W / sc, -y * H / sc)

@@ -75,7 +75,10 @@ ns.AHPrice = function(item) return M:Price(item) end
 -------------------------------------------------------------------------------
 local function Modern() return C_AuctionHouse and C_AuctionHouse.ReplicateItems and true or false end
 
+local SCAN_GAP = 15 * 60 + 5
 function M:CanScan()
+	local last = self:Store().scan or 0
+	if time() - last < SCAN_GAP then return false end
 	if Modern() then return true end
 	if CanSendAuctionQuery then
 		local ok, _, all = pcall(CanSendAuctionQuery)
@@ -89,7 +92,8 @@ function M:Scan()
 	self.scanning = true
 	self.seen = {}
 	self.cur = self:Store()
-	self:Status("목록 받는 중…")
+	self:Status("경매장 가격 받는 중…")
+	self:Busy(true)
 	if Modern() then
 		pcall(C_AuctionHouse.ReplicateItems)
 	elseif QueryAuctionItems then
@@ -98,7 +102,7 @@ function M:Scan()
 		self.scanning = nil
 	end
 	-- 응답이 없으면 1분 뒤 풀기
-	C_Timer.After(60, function() if M.scanning then M.scanning = nil; M:Status("응답이 없어요 · 잠시 뒤 다시") end end)
+	C_Timer.After(60, function() if M.scanning then M.scanning = nil; M:Busy(false); M:Status("응답이 없어요 · 잠시 뒤 자동으로 다시") end end)
 end
 
 function M:ReadReplicate()
@@ -139,7 +143,8 @@ function M:Finish(cnt)
 	for _ in pairs(s.p) do total = total + 1 end
 	self.scanning = nil
 	self.cur = nil
-	self:Status(string.format("스캔 완료 · 매물 %d개 · 아이템 %d종 가격", cnt, total))
+	self:Busy(false)
+	self:Status(string.format("|cff6FD39A스캔 완료|r · 매물 %d개 · 아이템 %d종 가격", cnt, total))
 	print(string.format("|cffFFF468FOA|r 경매장 가격 스캔 완료 · 아이템 %d종", total))
 end
 
@@ -160,6 +165,40 @@ end
 -------------------------------------------------------------------------------
 function M:Status(t)
 	if self.bar then self.bar.status:SetText(t or self:LastText()) end
+end
+
+-- 받는 동안 막대 위로 빛이 흐른다
+function M:Busy(on)
+	local b = self.bar
+	if not b then return end
+	b.track:SetShown(on)
+	b.shine:SetShown(on)
+	if on then
+		local t0 = GetTime()
+		b:SetScript("OnUpdate", function(self)
+			local w = self.track:GetWidth()
+			local x = ((GetTime() - t0) * 160) % (w + 60) - 60
+			self.shine:ClearAllPoints()
+			self.shine:SetPoint("LEFT", self.track, "LEFT", math.max(0, x), 0)
+			self.shine:SetWidth(math.max(1, math.min(60, w - math.max(0, x), x + 60)))
+		end)
+	else
+		b:SetScript("OnUpdate", nil)
+	end
+end
+
+-- 경매장에 들어오면 자동으로 (마지막 스캔이 15분 넘었으면) · 열려 있는 동안 15분마다
+function M:AutoScan()
+	if Ink.db.ahAuto == false or self.scanning then return end
+	local f = _G.AuctionHouseFrame or _G.AuctionFrame
+	if not (f and f:IsShown()) then return end
+	if self:CanScan() then
+		self:Scan()
+	else
+		local s = self:Store()
+		local wait = math.max(1, math.ceil((SCAN_GAP - (time() - (s.scan or 0))) / 60))
+		self:Status(self:LastText() .. string.format("  ·  %d분 뒤 자동 스캔", wait))
+	end
 end
 
 function M:LastText()
@@ -195,7 +234,8 @@ function M:BuildBar(parent)
 	b.btn.t:SetPoint("CENTER")
 	b.btn.t:SetText("가격 스캔")
 	b.btn:SetScript("OnClick", function()
-		if not M:CanScan() then M:Status("전체 스캔은 15분마다 한 번 · 잠시 뒤 다시") return end
+		if M.scanning then return end
+		if not M:CanScan() then M:AutoScan() return end
 		M:Scan()
 	end)
 	b.btn:SetScript("OnEnter", function(self)
@@ -203,13 +243,23 @@ function M:BuildBar(parent)
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
 		GameTooltip:AddLine("경매장 전체 가격 스캔", 1, 1, 1)
 		GameTooltip:AddLine("모든 매물의 최저 단가를 기억해서 아이템 툴팁에 보여 줘요", 0.7, 0.72, 0.75, true)
-		GameTooltip:AddLine("서버가 15분에 한 번만 허락해요", 0.55, 0.57, 0.6)
+		GameTooltip:AddLine("경매장에 들어오면 자동으로 해요 (서버가 15분에 한 번만 허락)", 0.55, 0.57, 0.6, true)
 		GameTooltip:Show()
 	end)
 	b.btn:SetScript("OnLeave", function(self) self.bg:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.14); GameTooltip:Hide() end)
 	b.status = Ink:Text(b, F.sans, 10, C.soft, "LEFT")
-	b.status:SetPoint("LEFT", b.btn, "RIGHT", 10, 0)
-	b.status:SetPoint("RIGHT", -8, 0)
+	b.status:SetPoint("LEFT", b.btn, "RIGHT", 10, 2)
+	b.status:SetPoint("RIGHT", -8, 2)
+	b.track = b:CreateTexture(nil, "ARTWORK")
+	b.track:SetColorTexture(1, 1, 1, 0.08)
+	b.track:SetHeight(2)
+	b.track:SetPoint("BOTTOMLEFT", b.btn, "BOTTOMRIGHT", 10, 1)
+	b.track:SetPoint("BOTTOMRIGHT", -8, 5)
+	b.track:Hide()
+	b.shine = b:CreateTexture(nil, "OVERLAY")
+	b.shine:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.9)
+	b.shine:SetHeight(2)
+	b.shine:Hide()
 	self.bar = b
 end
 
@@ -222,6 +272,15 @@ function M:OnShow()
 	self.bar:SetPoint("BOTTOMRIGHT", parent, "TOPRIGHT", 0, 4)
 	self.bar:Show()
 	self:Status()
+	-- 창이 다 뜬 뒤 자동 스캔, 열려 있는 동안 1분마다 확인
+	C_Timer.After(1.2, function() pcall(M.AutoScan, M) end)
+	if not self.ticker and C_Timer.NewTicker then
+		self.ticker = C_Timer.NewTicker(60, function()
+			local f = _G.AuctionHouseFrame or _G.AuctionFrame
+			if not (f and f:IsShown()) then if M.ticker then M.ticker:Cancel(); M.ticker = nil end return end
+			pcall(M.AutoScan, M)
+		end)
+	end
 end
 
 -------------------------------------------------------------------------------
