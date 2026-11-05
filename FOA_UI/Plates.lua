@@ -86,7 +86,8 @@ local ROLES = {
 	{ key = "barber", icon = "NpcBarber", color = "E4E8F2", words = { "미용", "Barber" } },
 	{ key = "quartermaster", icon = "NpcQuartermaster", color = "86E06C", words = { "병참", "보급관", "명예", "정복", "용맹", "평판",
 		"Quartermaster", "Honor", "Conquest", "Valor", "Renown" } },
-	{ key = "trainer", icon = "NpcTrainer", color = "B9A4FF", words = { "지도자", "교관", "전문기술자", "Trainer" } },
+	{ key = "librarian", icon = "Journal", color = "C9A8FF", words = { "사서", "Librarian" } },
+	{ key = "trainer", icon = "NpcTrainer", color = "B9A4FF", words = { "지도자", "교관", "전문기술자", "상급자", "숙련자", "Trainer" } },
 	{ key = "repair", icon = "NpcRepair", color = "C9CED6", words = { "대장장이", "방어구", "갑옷", "무기", "수리", "정비",
 		"Armorer", "Weaponsmith", "Blacksmith", "Repair" } },
 	{ key = "vendor", icon = "NpcVendor", color = "FFF468", words = { "상인", "용품", "음식", "음료", "판매", "공급", "잡화", "상점",
@@ -490,6 +491,7 @@ local function IsObject(unit)
 	return type(g) == "string" and g:find("^GameObject") ~= nil
 end
 M.IsObject = IsObject
+M.NpcRole, M.Subtitle, M.ROLES = NpcRole, Subtitle, ROLES
 
 local function ObjectQuestInfo(unit)
 	if Ink.db.questObjects == false then return end
