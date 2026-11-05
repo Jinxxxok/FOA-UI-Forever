@@ -901,6 +901,12 @@ end
 -- 채팅 글꼴: 설정(db.chatFont) = set(FOA 글꼴 묶음) / game(게임 기본) / pretendard / mubig, 테두리(db.chatOutline)
 local CHAT_GAME = ChatFontNormal and ChatFontNormal:GetFont() or "Fonts\\2002.ttf"
 function M:ChatFont()
+	-- 채팅 글꼴 고르기 창(톱니바퀴)에서 고른 파일이 있으면 그걸로
+	local pick = Ink.db and Ink.db.chatFontPath
+	if pick and (self.chatPickOK == pick or Ink:FontExists(pick)) then
+		self.chatPickOK = pick
+		return pick, (Ink.db and Ink.db.chatOutline) and "OUTLINE" or ""
+	end
 	local k = Ink.db and Ink.db.chatFont or "set"
 	local path = F.sans
 	if k == "game" then path = CHAT_GAME

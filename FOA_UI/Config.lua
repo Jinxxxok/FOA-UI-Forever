@@ -1283,8 +1283,14 @@ function M:SyncFontButton()
 	if p.chatFont then
 		local CF = { set = "FOA 글꼴 따라감", game = "게임 기본", pretendard = "선명한 글꼴 (굵게)", mubig = "무빅 (세방고딕)" }
 		local ck = Ink.db.chatFont or "set"
-		p.chatFont.text:SetText("채팅 글꼴: " .. (CF[ck] or ck))
-		p.chatFont:SetActive(ck ~= "set")
+		local pick = Ink.db.chatFontPath
+		if pick then
+			local nm = pick:match("([^\\]+)%.[^.]+$") or pick
+			p.chatFont.text:SetText("채팅 글꼴: " .. nm)
+		else
+			p.chatFont.text:SetText("채팅 글꼴: " .. (CF[ck] or ck))
+		end
+		p.chatFont:SetActive(pick ~= nil or ck ~= "set")
 		p.chatLine:SetActive(Ink.db.chatOutline and true or false)
 		local Q = Ink.modules.Quest
 		if p.qSound and Q and Q.SOUND_NAME then
@@ -1292,7 +1298,7 @@ function M:SyncFontButton()
 			p.qSound.text:SetText("퀘스트 완료 소리: " .. (Q.SOUND_NAME[qk] or qk))
 			p.qSound:SetActive(qk ~= "off")
 		end
-		p.chatDesc:SetText("채팅 · 바로 바뀌어요. 무빅은 글꼴 파일을 넣어 둔 경우에만 · 테두리를 켜면 밝은 배경에서도 또렷해요 · 완료 소리는 누르면 미리 들려줘요")
+		p.chatDesc:SetText("채팅 · 바로 바뀌어요. 무빅은 글꼴 파일을 넣어 둔 경우에만 · 테두리를 켜면 밝은 배경에서도 또렷해요 · 채팅창 오른쪽 위 톱니바퀴로 글꼴을 미리 보며 고를 수 있어요 · 완료 소리는 누르면 미리 들려줘요")
 	end
 	local mode = Ink.db.renderMode or "auto"
 	local auto = Ink.autoTier or "1x"
@@ -1475,6 +1481,7 @@ function M:BuildPanel()
 	-- 채팅 글꼴 (바로 적용)
 	p.chatFont = Button(p, "채팅 글꼴", 230, function()
 		Ink.db.chatFont = Cycle({ "set", "game", "pretendard", "mubig" }, Ink.db.chatFont or "set")
+		Ink.db.chatFontPath = nil -- 고르기 창에서 고른 글꼴은 풀기
 		local bz = Ink.modules.Blizzard
 		if bz and bz.ApplyChatFont then bz:ApplyChatFont() end
 		M:SyncFontButton()

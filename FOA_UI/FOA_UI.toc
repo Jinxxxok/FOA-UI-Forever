@@ -2,7 +2,7 @@
 ## Title: |cffFFF468FOA|r UI
 ## Notes: FOA (First of All) 통합 UI
 ## Author: hyeokjiny
-## Version: 0.42.0
+## Version: 0.43.0
 ## SavedVariables: InkUIDB
 ## SavedVariablesPerCharacter: InkUICharDB
 ## IconTexture: Interface\AddOns\FOA_UI\Media\Textures\Logo
@@ -48,4 +48,5 @@ MapRevealData.lua
 MapReveal.lua
 QuestDB.lua
 QuestMap.lua
+ChatFonts.lua
 Config.lua
