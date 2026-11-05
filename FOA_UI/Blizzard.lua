@@ -501,6 +501,7 @@ end
 function M:LayoutMinimap()
 	Ink:Fit(Minimap, self.mmAnchor, "TOPRIGHT", 200, 200)
 	safe(Minimap.SetMaskTexture, Minimap, 130937)
+	Minimap.foaSquare = true -- 네모 미니맵 (미니맵 퀘스트 표시가 테두리를 네모로 계산)
 	if Minimap.SetArchBlobRingScalar then safe(Minimap.SetArchBlobRingScalar, Minimap, 0) end
 	if Minimap.SetQuestBlobRingScalar then safe(Minimap.SetQuestBlobRingScalar, Minimap, 0) end
 	local mc = MinimapCluster

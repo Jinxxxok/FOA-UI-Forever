@@ -2004,6 +2004,195 @@ function M:BuildBoard()
 	self.board = b
 end
 
+-- 던전 지도 (게임 파일의 던전 지도 타일 · 보스 위치는 게임의 던전 도감 표 · DungeonMaps.lua)
+--  층이 여러 개면 위에 층 단추. 처음엔 다음 보스가 있는 층
+local MAP_W, MAP_H = 1002, 668
+function M:BoardFloors(key, data)
+	local dm = ns.DUNGEON_MAPS
+	local fl = dm and dm.floors and dm.floors[key]
+	if not (fl and #fl > 0) then return end
+	local withBoss, any = {}, false
+	for _, u in ipairs(fl) do withBoss[u] = 0 end
+	for _, x in ipairs(data.bosses) do
+		local ps = x.npc and dm.pos[x.npc]
+		if ps and withBoss[ps[1]] then withBoss[ps[1]] = withBoss[ps[1]] + 1; any = true end
+	end
+	if not any then return end
+	local list = {}
+	for _, u in ipairs(fl) do if withBoss[u] > 0 then list[#list + 1] = u end end
+	return list
+end
+
+function M:PaintBoardMap(b, data, leftW, top, avail)
+	local dm = ns.DUNGEON_MAPS
+	b.dmap = b.dmap or self:BuildBoardMap(b)
+	local mf = b.dmap
+	local floors = self:BoardFloors(self.showing, data)
+	if not floors then
+		mf:Hide()
+		for _, t in ipairs(mf.tabs) do t:Hide() end
+		return
+	end
+	-- 고른 층: 직접 고른 것 → 다음 보스 층 → 첫 층
+	local floor = mf.pick and mf.pickFor == self.showing and mf.pick or nil
+	if not floor then
+		for _, x in ipairs(data.bosses) do
+			local ps = x.npc and dm.pos[x.npc]
+			if ps and not x.killed and not x.rare then floor = ps[1] break end
+		end
+	end
+	local okFloor = false
+	for _, u in ipairs(floors) do if u == floor then okFloor = true end end
+	if not okFloor then floor = floors[1] end
+	-- 크기: 왼쪽 칸 폭에 맞추고 높이가 넘치면 줄이기
+	local tabsH = #floors > 1 and 30 or 0
+	local w = leftW
+	local h = w * MAP_H / MAP_W
+	if h > avail - tabsH - 70 then h = math.max(160, avail - tabsH - 70); w = h * MAP_W / MAP_H end
+	local x0 = 28 + (leftW - w) / 2
+	local oy = top + tabsH
+	mf:ClearAllPoints()
+	mf:SetPoint("TOPLEFT", b, "TOPLEFT", x0, -oy)
+	mf:SetSize(w, h)
+	mf:Show()
+	-- 타일 (4 × 3, 256 단위 · 오른쪽 · 아래 끝은 잘라서)
+	local ids = {}
+	for id in (dm.tiles[floor] or ""):gmatch("%d+") do ids[#ids + 1] = tonumber(id) end
+	local k = w / MAP_W
+	for r = 0, 2 do
+		for c = 0, 3 do
+			local t = mf.tiles[r * 4 + c + 1]
+			local fid = ids[r * 4 + c + 1]
+			local pw = math.min(256, MAP_W - c * 256)
+			local ph = math.min(256, MAP_H - r * 256)
+			if fid and pw > 0 and ph > 0 then
+				t:SetTexture(fid, nil, nil, "TRILINEAR")
+				t:SetTexCoord(0, pw / 256, 0, ph / 256)
+				t:SetSize(pw * k, ph * k)
+				t:ClearAllPoints()
+				t:SetPoint("TOPLEFT", mf, "TOPLEFT", c * 256 * k, -r * 256 * k)
+				t:Show()
+			else
+				t:Hide()
+			end
+		end
+	end
+	-- 층 단추
+	for _, t in ipairs(mf.tabs) do t:Hide() end
+	if #floors > 1 then
+		local tx = 0
+		for i, u in ipairs(floors) do
+			local t = mf.tabs[i]
+			if not t then
+				t = Chip(b, 22)
+				t:SetScript("OnClick", function(self) mf.pick, mf.pickFor = self.floor, M.showing; M:PaintSidebar() end)
+				mf.tabs[i] = t
+			end
+			t.floor = u
+			local on = u == floor
+			local cnt = 0
+			for _, x in ipairs(data.bosses) do local ps = x.npc and dm.pos[x.npc]; if ps and ps[1] == u then cnt = cnt + 1 end end
+			t.text:SetText(i .. "구역  ·  보스 " .. cnt)
+			local a = C.accent
+			t.text:SetTextColor(on and a[1] or C.soft[1], on and a[2] or C.soft[2], on and a[3] or C.soft[3])
+			t.bg:SetVertexColor(on and a[1] or 1, on and a[2] or 1, on and a[3] or 1, on and 0.1 or 0.03)
+			t.bd:SetVertexColor(on and a[1] or 1, on and a[2] or 1, on and a[3] or 1, on and 0.55 or 0.08)
+			t:SetWidth(math.ceil(t.text:GetStringWidth()) + 18)
+			t:ClearAllPoints()
+			t:SetPoint("TOPLEFT", b, "TOPLEFT", x0 + tx, -(top + 2))
+			t:Show()
+			tx = tx + t:GetWidth() + 6
+		end
+	end
+	-- 보스 핀 + 진행 선 (이 층에 있는 보스만, 순서대로)
+	local inside = self:MatchInstance() == self.showing
+	local nextB
+	for _, x in ipairs(data.bosses) do if not x.rare and not x.killed then nextB = x break end end
+	local pts = {}
+	local np = 0
+	for _, x in ipairs(data.bosses) do
+		local ps = x.npc and dm.pos[x.npc]
+		if ps and ps[1] == floor then
+			np = np + 1
+			local nd = mf.pins[np] or RouteNode(mf)
+			mf.pins[np] = nd
+			nd.bi = x.index
+			nd:SetFrameLevel(mf:GetFrameLevel() + 10)
+			nd:ClearAllPoints()
+			nd:SetPoint("CENTER", mf, "TOPLEFT", ps[2] * w, -ps[3] * h)
+			local isNext = inside and x == nextB
+			nd.disc:SetVertexColor(0.05, 0.055, 0.07, 0.95)
+			nd.dot:Hide()
+			if x.killed then
+				nd.disc:SetVertexColor(DOWN_C[1] * 0.25, DOWN_C[2] * 0.25, DOWN_C[3] * 0.25, 0.95)
+				nd.ring:SetVertexColor(DOWN_C[1], DOWN_C[2], DOWN_C[3], 1)
+				nd.icon:SetTexture(Ink.icon("Check")); nd.icon:SetVertexColor(DOWN_C[1], DOWN_C[2], DOWN_C[3]); nd.icon:Show()
+				nd.num:SetText("")
+			elseif x.rare then
+				nd.ring:SetVertexColor(RARE_C[1], RARE_C[2], RARE_C[3], 0.9)
+				nd.icon:Hide(); nd.num:SetText("·"); nd.num:SetTextColor(RARE_C[1], RARE_C[2], RARE_C[3])
+			else
+				local c = isNext and C.accent or { 0.92, 0.93, 0.95 }
+				nd.ring:SetVertexColor(c[1], c[2], c[3], isNext and 1 or 0.85)
+				nd.icon:Hide()
+				nd.num:SetText(x.order or "")
+				nd.num:SetTextColor(c[1], c[2], c[3])
+				local rec = false
+				for _, it in ipairs(x.items) do if self.ranks[it.id] then rec = true break end end
+				nd.dot:SetShown(rec)
+			end
+			nd.glow:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
+			nd.glow:SetShown(isNext)
+			if isNext then nd.pulse:Play() else nd.pulse:Stop() end
+			nd.label:ClearAllPoints()
+			nd.label:SetWidth(110)
+			nd.label:SetPoint("TOP", mf, "TOPLEFT", ps[2] * w, -ps[3] * h - 14)
+			nd.label:SetText(BossName(x))
+			local lc = x.killed and C.dim or (isNext and C.accent or C.text)
+			nd.label:SetTextColor(lc[1], lc[2], lc[3])
+			nd.label:Show()
+			nd:Show()
+			if not x.rare then pts[#pts + 1] = { ps[2] * w, -ps[3] * h, x.killed } end
+		end
+	end
+	for i = np + 1, #mf.pins do mf.pins[i]:Hide(); mf.pins[i].label:Hide() end
+	-- 진행 선
+	for _, l in ipairs(mf.lines) do l:Hide() end
+	if mf.CreateLine then
+		for i = 1, #pts - 1 do
+			local l = mf.lines[i]
+			if not l then
+				l = mf:CreateLine(nil, "ARTWORK", nil, 2)
+				l:SetThickness(2)
+				mf.lines[i] = l
+			end
+			local a1, a2 = pts[i], pts[i + 1]
+			l:SetStartPoint("TOPLEFT", mf, a1[1], a1[2])
+			l:SetEndPoint("TOPLEFT", mf, a2[1], a2[2])
+			if a1[3] and a2[3] then l:SetColorTexture(DOWN_C[1], DOWN_C[2], DOWN_C[3], 0.85)
+			else l:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.55) end
+			l:Show()
+		end
+	end
+	return oy, h
+end
+
+function M:BuildBoardMap(b)
+	local mf = CreateFrame("Frame", nil, b)
+	mf:SetFrameLevel(b:GetFrameLevel() + 2)
+	mf.bd = Ink:Round(mf, "OVERLAY", false, true)
+	mf.bd:SetAllPoints()
+	mf.bd:SetVertexColor(1, 1, 1, 0.1)
+	mf.tiles, mf.pins, mf.lines, mf.tabs = {}, {}, {}, {}
+	for i = 1, 12 do mf.tiles[i] = mf:CreateTexture(nil, "BACKGROUND") end
+	-- 아래쪽을 살짝 어둡게 (글자가 잘 보이게)
+	mf.shade = mf:CreateTexture(nil, "BORDER")
+	mf.shade:SetAllPoints()
+	mf.shade:SetColorTexture(0, 0, 0, 0.18)
+	mf:Hide()
+	return mf
+end
+
 function M:ShowBoard(key)
 	if not self.board then self:BuildBoard() end
 	if not self.sidebar then self:BuildSidebar() end
@@ -2051,14 +2240,24 @@ function M:PaintBoard(data)
 	local bw, bh = b:GetWidth(), b:GetHeight()
 	local leftW = math.max(260, bw - SB_W - 28 - 56)
 	local top, bottom = 150, 120
-	local s = math.max(1, math.min(1.6, leftW / 430))
-	b.route:SetScale(s)
-	local W = leftW / s
-	local h = self:PaintRoute(b.route, data, W, false) * s
 	local avail = bh - top - bottom
-	local oy = top + math.max(0, (avail - h) / 2 - 10)
-	b.route:ClearAllPoints()
-	b.route:SetPoint("TOPLEFT", b, "TOPLEFT", 28 / s, -oy / s)
+	local oy, h
+	-- 던전 지도 그림이 있으면 진짜 지도 위에 보스 위치 · 진행 선, 없으면 순서 그림
+	local mapOy, mapH = self:PaintBoardMap(b, data, leftW, top, avail)
+	if mapOy then
+		self:PaintRoute(b.route, data, leftW, true)
+		oy, h = mapOy, mapH
+		b.routeT:SetText("DUNGEON MAP")
+	else
+		local s = math.max(1, math.min(1.6, leftW / 430))
+		b.route:SetScale(s)
+		local W = leftW / s
+		h = self:PaintRoute(b.route, data, W, false) * s
+		oy = top + math.max(0, (avail - h) / 2 - 10)
+		b.route:ClearAllPoints()
+		b.route:SetPoint("TOPLEFT", b, "TOPLEFT", 28 / s, -oy / s)
+		b.routeT:SetText("ROUTE")
+	end
 	b.routeT:ClearAllPoints()
 	b.routeT:SetPoint("BOTTOMLEFT", b, "TOPLEFT", 28, -oy + 14)
 	b.shine:SetSize(leftW * 1.6, bh * 1.2)

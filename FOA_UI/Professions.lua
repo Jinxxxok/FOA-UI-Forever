@@ -123,6 +123,70 @@ local function Price(name, itemID)
 end
 
 -------------------------------------------------------------------------------
+-- 제조법 파는 상인 (RecipeVendors.lua): 만드는 것 이름(주문 이름) → 상인 목록
+-------------------------------------------------------------------------------
+local vendorIdx = {}
+local function SpellName(id)
+	if C_Spell and C_Spell.GetSpellName then local ok, n = pcall(C_Spell.GetSpellName, id); if ok and n then return n end end
+	if GetSpellInfo then local n = GetSpellInfo(id); return n end
+end
+local function VendorIndex(prof)
+	if vendorIdx[prof] then return vendorIdx[prof] end
+	local idx = {}
+	for item, e in pairs(ns.RECIPE_VENDORS or {}) do
+		if prof and (e[1] == prof or prof:find(e[1], 1, true)) then
+			local n = SpellName(e[2])
+			if n then idx[n] = { item = item, req = e[3], list = e[4] } end
+		end
+	end
+	vendorIdx[prof] = idx
+	return idx
+end
+local function MyFac()
+	local f = UnitFactionGroup and UnitFactionGroup("player")
+	return f == "Horde" and 1 or (f == "Alliance" and 2 or 0)
+end
+-- 내 진영에서 살 수 있는 상인 하나 (같은 지역이면 우선)
+local function PickVendor(v)
+	if not v then return end
+	local fac, best = MyFac(), nil
+	local here = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	for _, x in ipairs(v.list) do
+		if x[5] == 0 or x[5] == fac then
+			if not best or (x[2] == here and best[2] ~= here) then best = x end
+		end
+	end
+	return best
+end
+local function NpcName(id)
+	local D = Ink.modules.Dungeon
+	if D and D.BossName then return D.BossName({ npc = id, name = nil }) end
+end
+local function VendorText(x)
+	if not x then return end
+	local who = NpcName(x[1]) or "상인"
+	local zone = x[2] > 0 and C_Map.GetMapInfo and (C_Map.GetMapInfo(x[2]) or {}).name or nil
+	local where = zone and string.format("%s %.0f, %.0f", zone, x[3], x[4]) or ""
+	local price = ""
+	if x[7] and x[7] > 0 then
+		local iname = C_Item.GetItemNameByID and C_Item.GetItemNameByID(x[7])
+		if not iname and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, x[7]) end
+		price = (iname or ("아이템 #" .. x[7])) .. " " .. (x[8] or 1) .. "개와 교환"
+	elseif x[6] and x[6] > 0 then
+		price = Money(x[6])
+	end
+	return who, where, price
+end
+local function Waypoint(x)
+	if not (x and x[2] and x[2] > 0) then return end
+	if C_Map.CanSetUserWaypointOnMap and C_Map.CanSetUserWaypointOnMap(x[2]) then
+		C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(x[2], x[3] / 100, x[4] / 100))
+		if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
+		print(string.format("|cffFFF468FOA|r 지도에 상인 위치를 찍었어요 (%s)", (C_Map.GetMapInfo(x[2]) or {}).name or ""))
+	end
+end
+
+-------------------------------------------------------------------------------
 -- 패널
 -------------------------------------------------------------------------------
 local function Host()
@@ -178,6 +242,7 @@ local function Row(body)
 		GameTooltip:Show()
 	end)
 	r:SetScript("OnLeave", function(self) self.hl:SetVertexColor(1, 1, 1, 0); GameTooltip:Hide() end)
+	r:SetScript("OnClick", function(self) if self.vendor then Waypoint(self.vendor) end end)
 	return r
 end
 
@@ -239,6 +304,29 @@ function M:Build(host)
 	end
 	c.cost = Ink:Text(c, F.sans, 10, GOLD, "LEFT")
 	c.src = Ink:Text(c, F.sans, 10, C.muted, "RIGHT")
+	-- 상인 줄: 누르면 지도에 위치
+	c.vend = CreateFrame("Button", nil, c)
+	c.vend:SetHeight(28)
+	c.vend:SetPoint("BOTTOMLEFT", 8, 6)
+	c.vend:SetPoint("BOTTOMRIGHT", -8, 6)
+	c.vend.bg = Ink:Round(c.vend, "BACKGROUND", true, false)
+	c.vend.bg:SetAllPoints()
+	c.vend.bg:SetVertexColor(1, 1, 1, 0.04)
+	c.vend.icon = c.vend:CreateTexture(nil, "ARTWORK")
+	c.vend.icon:SetTexture(Ink.icon("NpcVendor"))
+	c.vend.icon:SetSize(14, 14)
+	c.vend.icon:SetPoint("LEFT", 8, 0)
+	c.vend.icon:SetVertexColor(GOLD[1], GOLD[2], GOLD[3])
+	c.vend.t = Ink:Text(c.vend, F.semi, 10, C.text, "LEFT")
+	c.vend.t:SetPoint("TOPLEFT", c.vend.icon, "TOPRIGHT", 8, 6)
+	c.vend.t:SetPoint("RIGHT", -8, 0)
+	c.vend.s = Ink:Text(c.vend, F.sans, 9, C.muted, "LEFT")
+	c.vend.s:SetPoint("BOTTOMLEFT", c.vend.icon, "BOTTOMRIGHT", 8, -6)
+	c.vend.s:SetPoint("RIGHT", -8, 0)
+	c.vend:SetScript("OnClick", function(self) Waypoint(self.x) end)
+	c.vend:SetScript("OnEnter", function(self) self.bg:SetVertexColor(1, 1, 1, 0.09) end)
+	c.vend:SetScript("OnLeave", function(self) self.bg:SetVertexColor(1, 1, 1, 0.04) end)
+	c.vend:Hide()
 	p.card = c
 	-- 목록
 	local sf = CreateFrame("ScrollFrame", nil, p)
@@ -331,7 +419,19 @@ function M:Paint()
 		c.src:ClearAllPoints()
 		c.src:SetPoint("TOPRIGHT", -12, -y)
 		c.src:SetText(kr and "|cff6FD39A배움|r" or ("배우는 곳  " .. (cur[6] or "")))
-		c:SetHeight(y + 20)
+		-- 아직 안 배운 제조법이 상인 판매면: 상인 · 위치 · 값 (누르면 지도)
+		local vx = (not kr) and PickVendor(VendorIndex(name)[cur[3]])
+		if vx then
+			local who, where, price = VendorText(vx)
+			c.vend.x = vx
+			c.vend.t:SetText(who .. (price ~= "" and ("  ·  |cffFFD15F" .. price .. "|r") or ""))
+			c.vend.s:SetText(where .. "  ·  누르면 지도에 표시")
+			c.vend:Show()
+			c:SetHeight(y + 20 + 34)
+		else
+			c.vend:Hide()
+			c:SetHeight(y + 20)
+		end
 		c:Show()
 	elseif skill >= (max > 0 and max or 300) then
 		c.k:SetText("숙련 최대")
@@ -340,6 +440,7 @@ function M:Paint()
 		c.sub:SetText("")
 		for _, m in ipairs(c.mats) do m:Hide() end
 		c.cost:SetText(""); c.src:SetText("")
+		c.vend:Hide()
 		c:SetHeight(70)
 	else
 		c.k:SetText("빠른 레벨링 경로가 없는 전문기술")
@@ -348,6 +449,7 @@ function M:Paint()
 		c.sub:SetText("아래 주황 · 노랑 제조법으로 올리세요")
 		for _, m in ipairs(c.mats) do m:Hide() end
 		c.cost:SetText(""); c.src:SetText("")
+		c.vend:Hide()
 		c:SetHeight(70)
 	end
 	-- 2) 목록
@@ -374,6 +476,7 @@ function M:Paint()
 		r.right:SetText(right or "")
 		if dotC then r.dot:SetVertexColor(dotC[1], dotC[2], dotC[3]); r.dot:Show() else r.dot:Hide() end
 		r.tip = tip
+		r.vendor = nil
 		r:ClearAllPoints(); r:SetPoint("TOPLEFT", 0, -y); r:Show()
 		y = y + ROW + 2
 	end
@@ -407,12 +510,43 @@ function M:Paint()
 				local kr = byName[s[3]]
 				local mats = {}
 				for _, m in ipairs(s[5]) do mats[#mats + 1] = m[1] .. " " .. m[2] end
-				row(kr and kr.icon or 134400, s[3], string.format("%d → %d  ·  %d번", s[1], s[2], s[4]), kr and "|cff6FD39A배움|r" or (s[6] or ""), nil,
-					{ s[3], string.format("숙련 %d → %d · %d번 만들기", s[1], s[2], s[4]), "재료: " .. table.concat(mats, ", "), "배우는 곳: " .. (s[6] or "?") }, not kr)
+				local vx = (not kr) and PickVendor(VendorIndex(name)[s[3]])
+				local tip = { s[3], string.format("숙련 %d → %d · %d번 만들기", s[1], s[2], s[4]), "재료: " .. table.concat(mats, ", "), "배우는 곳: " .. (s[6] or "?") }
+				if vx then
+					local who, where, price = VendorText(vx)
+					tip[#tip + 1] = "상인: " .. who .. " · " .. where .. (price ~= "" and (" · " .. price) or "")
+					tip[#tip + 1] = "누르면 지도에 상인 위치"
+				end
+				row(kr and kr.icon or 134400, s[3], string.format("%d → %d  ·  %d번", s[1], s[2], s[4]), kr and "|cff6FD39A배움|r" or (s[6] or ""), nil, tip, not kr)
+				p.rows[nr].vendor = vx or nil
 				if shown >= 4 then break end
 			end
 		end
 		if shown > 0 then y = y + 6 end
+	end
+	-- 상인에게 사는 제조법 (지금 숙련 ± 범위 · 안 배운 것 · 내 진영)
+	do
+		local list = {}
+		for craft, v in pairs(VendorIndex(name)) do
+			if not byName[craft] and (v.req or 0) <= skill + 20 and (v.req or 0) >= skill - 40 then
+				local vx = PickVendor(v)
+				if vx then list[#list + 1] = { craft = craft, v = v, x = vx } end
+			end
+		end
+		table.sort(list, function(a, b) return (a.v.req or 0) < (b.v.req or 0) end)
+		if #list > 0 then
+			head("상인에게 사는 제조법", "누르면 지도")
+			for i = 1, math.min(6, #list) do
+				local e = list[i]
+				local who, where, price = VendorText(e.x)
+				local icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(e.v.item) or 134939
+				local req = e.v.req or 0
+				row(icon, e.craft, who .. " · " .. where, price ~= "" and price or ("숙련 " .. req), req <= skill and GREEN or nil,
+					{ e.craft, "필요 숙련 " .. req, "상인: " .. who, where, price ~= "" and ("값: " .. price) or "", "누르면 지도에 상인 위치" }, req > skill)
+				p.rows[nr].vendor = e.x
+			end
+			y = y + 6
+		end
 	end
 	-- 훈련사에게 배울 제조법 (훈련사 창을 열었을 때 기억한 것)
 	local tr

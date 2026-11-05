@@ -2,7 +2,7 @@
 ## Title: |cffFFF468FOA|r UI
 ## Notes: FOA (First of All) 통합 UI
 ## Author: hyeokjiny
-## Version: 0.41.0
+## Version: 0.42.0
 ## SavedVariables: InkUIDB
 ## SavedVariablesPerCharacter: InkUICharDB
 ## IconTexture: Interface\AddOns\FOA_UI\Media\Textures\Logo
@@ -25,6 +25,7 @@ ClassSpells.lua
 Training.lua
 AHPrice.lua
 ProfessionRoutes.lua
+RecipeVendors.lua
 Professions.lua
 Group.lua
 Quest.lua
@@ -39,6 +40,7 @@ Plates.lua
 BISData.lua
 ForeverBIS.lua
 ForeverLoot.lua
+DungeonMaps.lua
 Dungeon.lua
 FlightDB.lua
 Map.lua

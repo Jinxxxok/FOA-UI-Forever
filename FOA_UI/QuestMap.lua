@@ -303,6 +303,83 @@ function M:PaintLegend(nOn, nSoon, nRep)
 end
 
 -------------------------------------------------------------------------------
+-- 지도 하나의 받을 수 있는 퀘스트 묶음 (같은 NPC끼리)
+-------------------------------------------------------------------------------
+function M:Groups(mapID)
+	local list = mapID and Index()[mapID]
+	local order, cnt = {}, { on = 0, soon = 0, rep = 0 }
+	if not list then return order, cnt end
+	local _, _, raceID = UnitRace("player")
+	local _, _, classID = UnitClass("player")
+	local fg = UnitFactionGroup("player")
+	local ctx = { level = UnitLevel("player") or 1, race = raceID, class = classID, fac = fg == "Horde" and 1 or (fg == "Alliance" and 2 or 0) }
+	local groups = {}
+	for _, e in ipairs(list) do
+		local st = State(e.r, ctx)
+		if st > 0 then
+			local key = (e.r[14] ~= 0 and ("n" .. e.r[14])) or string.format("%.3f:%.3f", e.x, e.y)
+			local g = groups[key]
+			if not g then
+				g = { x = e.x, y = e.y, list = {}, giver = e.r[14], state = 2, rep = true }
+				groups[key] = g
+				order[#order + 1] = g
+			end
+			g.list[#g.list + 1] = { r = e.r, state = st }
+			if st == 1 then g.state = 1 end
+			if bit.band(e.r[12], 1) == 0 then g.rep = false end
+			if st == 2 then cnt.soon = cnt.soon + 1 elseif bit.band(e.r[12], 1) ~= 0 then cnt.rep = cnt.rep + 1 else cnt.on = cnt.on + 1 end
+		end
+	end
+	return order, cnt
+end
+
+-- 보고할 퀘스트 (다 끝낸 것): 게임이 알려 주는 보고 위치 → 없으면 받은 NPC 자리(보통 같은 NPC에게 보고)
+local byQuest
+local function QuestRow(id)
+	if not byQuest then
+		byQuest = {}
+		for _, r in ipairs(ns.QUEST_DB or {}) do byQuest[r[1]] = r end
+	end
+	return byQuest[id]
+end
+local function Ready(id)
+	if C_QuestLog.ReadyForTurnIn then return C_QuestLog.ReadyForTurnIn(id) end
+	return C_QuestLog.IsComplete and C_QuestLog.IsComplete(id)
+end
+function M:TurnIns(mapID)
+	local out, seen = {}, {}
+	if not mapID then return out end
+	if C_QuestLog.GetQuestsOnMap then
+		local ok, list = pcall(C_QuestLog.GetQuestsOnMap, mapID)
+		for _, q in ipairs(ok and list or {}) do
+			if q.questID and q.x and q.y and Ready(q.questID) then
+				seen[q.questID] = true
+				out[#out + 1] = { x = q.x, y = q.y, ids = { q.questID }, poi = true }
+			end
+		end
+	end
+	local n = C_QuestLog.GetNumQuestLogEntries and select(1, C_QuestLog.GetNumQuestLogEntries()) or 0
+	for i = 1, n do
+		local info = C_QuestLog.GetInfo and C_QuestLog.GetInfo(i)
+		local id = info and not info.isHeader and info.questID
+		if id and not seen[id] and Ready(id) then
+			local r = QuestRow(id)
+			local pts = r and r[2] or {}
+			for k = 1, #pts, 3 do
+				if pts[k] == mapID then
+					local x, y = pts[k + 1] / 100, pts[k + 2] / 100
+					local host
+					for _, o in ipairs(out) do if not o.poi and math.abs(o.x - x) < 0.004 and math.abs(o.y - y) < 0.004 then host = o end end
+					if host then host.ids[#host.ids + 1] = id else out[#out + 1] = { x = x, y = y, ids = { id }, giver = r[14] } end
+					break
+				end
+			end
+		end
+	end
+	return out
+end
+
+-------------------------------------------------------------------------------
 -- 그리기
 -------------------------------------------------------------------------------
 function M:Refresh()
@@ -313,28 +390,8 @@ function M:Refresh()
 	local list = mapID and Index()[mapID]
 	local n, nOn, nSoon, nRep = 0, 0, 0, 0
 	if list and not Ink.db.questMapHide then
-		local _, _, raceID = UnitRace("player")
-		local _, _, classID = UnitClass("player")
-		local fg = UnitFactionGroup("player")
-		local ctx = { level = UnitLevel("player") or 1, race = raceID, class = classID, fac = fg == "Horde" and 1 or (fg == "Alliance" and 2 or 0) }
-		-- 같은 자리(같은 NPC)끼리 묶기
-		local groups, order = {}, {}
-		for _, e in ipairs(list) do
-			local st = State(e.r, ctx)
-			if st > 0 then
-				local key = (e.r[14] ~= 0 and ("n" .. e.r[14])) or string.format("%.3f:%.3f", e.x, e.y)
-				local g = groups[key]
-				if not g then
-					g = { x = e.x, y = e.y, list = {}, giver = e.r[14], state = 2, rep = true }
-					groups[key] = g
-					order[#order + 1] = g
-				end
-				g.list[#g.list + 1] = { r = e.r, state = st }
-				if st == 1 then g.state = 1 end
-				if bit.band(e.r[12], 1) == 0 then g.rep = false end
-				if st == 2 then nSoon = nSoon + 1 elseif bit.band(e.r[12], 1) ~= 0 then nRep = nRep + 1 else nOn = nOn + 1 end
-			end
-		end
+		local order, cnt = self:Groups(mapID)
+		nOn, nSoon, nRep = cnt.on, cnt.soon, cnt.rep
 		local W, H = cv:GetWidth(), cv:GetHeight()
 		local scale = (wm.GetCanvasScale and wm:GetCanvasScale()) or 1
 		-- 가까이 붙은 핀(마을 한가운데 여러 NPC)은 하나로 합친다. 확대할수록 덜 합친다
@@ -378,7 +435,48 @@ function M:Refresh()
 		end
 	end
 	for i = n + 1, #(self.pins or {}) do self.pins[i]:Hide() end
+	-- 보고할 퀘스트 "?"
+	local nt = 0
+	if mapID and not Ink.db.questMapHide and Ink.db.questTurnIn ~= false then
+		local W, H = cv:GetWidth(), cv:GetHeight()
+		local scale = (wm.GetCanvasScale and wm:GetCanvasScale()) or 1
+		local pinScale = math.max(0.5, math.min(1.5, 1.05 / scale))
+		for _, t in ipairs(self:TurnIns(mapID)) do
+			nt = nt + 1
+			self.tpins = self.tpins or {}
+			local p = self.tpins[nt]
+			if not p then
+				p = NewPin(self.layer)
+				p.bang:SetTexture(Ink.icon("QuestTurnIn"))
+				p:SetScript("OnEnter", function(self) self.hover:Play(); M:TurnTip(self) end)
+				self.tpins[nt] = p
+			end
+			p:ClearAllPoints()
+			p.baseScale = pinScale * 1.06
+			p:SetScale(p.baseScale)
+			p:SetPoint("CENTER", cv, "TOPLEFT", t.x * W / p.baseScale, -t.y * H / p.baseScale)
+			p.ids, p.giver, p.poi, p.mapID, p.wx, p.wy = t.ids, t.giver, t.poi, mapID, t.x, t.y
+			Paint(p, GOLD, false, #t.ids)
+			p.glow:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 0.45)
+			p.lv:SetText("")
+			p:SetFrameLevel(self.layer:GetFrameLevel() + 8)
+			p:Show()
+		end
+	end
+	for i = nt + 1, #(self.tpins or {}) do self.tpins[i]:Hide() end
 	self:PaintLegend(nOn, nSoon, nRep)
+end
+
+function M:TurnTip(p)
+	GameTooltip:SetOwner(p, "ANCHOR_RIGHT", 4, 0)
+	GameTooltip:AddLine((NpcName(p.giver) and (NpcName(p.giver) .. " · ") or "") .. "보고할 퀘스트", 1, 0.82, 0.32)
+	for _, id in ipairs(p.ids or {}) do
+		GameTooltip:AddLine("|T" .. Ink.icon("Check") .. ":12:12:0:0:64:64:0:64:0:64:111:211:154|t " .. (QuestName(id) or ("퀘스트 #" .. id)), 0.96, 0.95, 0.9)
+	end
+	if not p.poi then GameTooltip:AddLine("퀘스트를 받은 곳 · 보통 같은 NPC에게 보고해요", 0.56, 0.58, 0.61, true) end
+	GameTooltip:AddLine(" ")
+	GameTooltip:AddLine("클릭: 길 안내 표시", 0.56, 0.58, 0.61)
+	GameTooltip:Show()
 end
 
 local refreshQueued
@@ -405,9 +503,153 @@ function M:Hook()
 	if wm.OnCanvasScaleChanged then hooksecurefunc(wm, "OnCanvasScaleChanged", function() M:Refresh() end) end
 end
 
+
+-------------------------------------------------------------------------------
+-- 미니맵: 받을 수 있는 퀘스트(느낌표) · 보고할 퀘스트(물음표)
+--  미니맵 범위 안이면 그 자리에 항상, 밖이면 가까운 몇 개만 테두리에 작게 (방향)
+-------------------------------------------------------------------------------
+local MINI_OUT = { 466.6667, 400, 333.3333, 266.6667, 200, 133.3333 }   -- 미니맵 확대 단계별 지름(야드) · 바깥
+local MINI_IN = { 300, 240, 180, 120, 80, 50 }                          -- 실내
+local MAX_EDGE = 3
+
+local function MiniPin(parent)
+	local p = CreateFrame("Button", nil, parent)
+	p:SetSize(16, 16)
+	p:RegisterForClicks("LeftButtonUp")
+	p.disc = p:CreateTexture(nil, "BACKGROUND")
+	p.disc:SetTexture(Ink.tex.disc)
+	p.disc:SetAllPoints()
+	p.disc:SetVertexColor(0.035, 0.04, 0.055, 0.92)
+	p.ring = p:CreateTexture(nil, "BORDER")
+	p.ring:SetTexture(Ink.tex.ring)
+	p.ring:SetAllPoints()
+	p.icon = p:CreateTexture(nil, "ARTWORK")
+	p.icon:SetSize(10, 10)
+	p.icon:SetPoint("CENTER")
+	p:SetScript("OnEnter", function(self)
+		if self.turn then M:TurnTip(self) else M:Tip(self) end
+	end)
+	p:SetScript("OnLeave", GameTooltip_Hide)
+	p:SetScript("OnClick", function(self) M:Waypoint(self) end)
+	p.hover = { Play = function() end }
+	return p
+end
+
+function M:MiniPoints()
+	local mapID = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	if not mapID then return end
+	if self.miniFor ~= mapID or self.miniDirty then
+		self.miniFor, self.miniDirty = mapID, nil
+		local pts = {}
+		if not Ink.db.questMapHide then
+			for _, g in ipairs(self:Groups(mapID)) do
+				if g.state == 1 then pts[#pts + 1] = { x = g.x, y = g.y, list = g.list, giver = g.giver, state = g.state, rep = g.rep } end
+			end
+			if Ink.db.questTurnIn ~= false then
+				for _, t in ipairs(self:TurnIns(mapID)) do
+					pts[#pts + 1] = { x = t.x, y = t.y, ids = t.ids, giver = t.giver, poi = t.poi, turn = true }
+				end
+			end
+		end
+		self.miniPts = pts
+	end
+	return mapID, self.miniPts
+end
+
+function M:MiniUpdate()
+	local mm = Minimap
+	if not (mm and mm:IsVisible()) or Ink.db.questMinimap == false then
+		for _, p in ipairs(self.mpins or {}) do p:Hide() end
+		return
+	end
+	local mapID, pts = self:MiniPoints()
+	local pos = mapID and C_Map.GetPlayerMapPosition and C_Map.GetPlayerMapPosition(mapID, "player")
+	local px, py
+	if pos then px, py = pos:GetXY() end
+	px, py = plain(px), plain(py)
+	local ww, wh
+	if C_Map.GetMapWorldSize and mapID then ww, wh = C_Map.GetMapWorldSize(mapID) end
+	if not (px and py and ww and ww > 0 and pts and #pts > 0) then
+		for _, p in ipairs(self.mpins or {}) do p:Hide() end
+		return
+	end
+	local zoom = (mm:GetZoom() or 0) + 1
+	local diam = (IsIndoors and IsIndoors()) and (MINI_IN[zoom] or 300) or (MINI_OUT[zoom] or 466)
+	local rad = diam / 2
+	local half = mm:GetWidth() / 2
+	local k = half / rad
+	local rot = GetCVar and GetCVar("rotateMinimap") == "1"
+	local face = rot and GetPlayerFacing and plain(GetPlayerFacing()) or 0
+	local cs, sn = math.cos(face or 0), math.sin(face or 0)
+	local round = not (GetMinimapShape and GetMinimapShape() == "SQUARE") and not mm.foaSquare
+	-- 거리 계산
+	local list = {}
+	for _, q in ipairs(pts) do
+		local dx, dy = (q.x - px) * ww, (q.y - py) * wh
+		if rot then dx, dy = dx * cs - dy * sn, dx * sn + dy * cs end
+		q.dx, q.dy, q.d = dx, dy, math.sqrt(dx * dx + dy * dy)
+		list[#list + 1] = q
+	end
+	table.sort(list, function(a, b) return a.d < b.d end)
+	self.mpins = self.mpins or {}
+	local n, edge = 0, 0
+	local superWP = C_Map.GetUserWaypoint and C_Map.GetUserWaypoint()
+	for _, q in ipairs(list) do
+		local inside = q.d <= rad * 0.94
+		if inside or edge < MAX_EDGE then
+			if not inside then edge = edge + 1 end
+			n = n + 1
+			local p = self.mpins[n] or MiniPin(mm)
+			self.mpins[n] = p
+			p:SetFrameLevel(mm:GetFrameLevel() + 12)
+			local x, y = q.dx * k, -q.dy * k
+			if not inside then
+				-- 테두리에 붙이기 (둥근 미니맵 = 원, 네모 = 네모)
+				local lim = half - 8
+				if round then
+					local d = math.sqrt(x * x + y * y)
+					x, y = x / d * lim, y / d * lim
+				else
+					local m = math.max(math.abs(x), math.abs(y))
+					x, y = x / m * lim, y / m * lim
+				end
+			end
+			p:ClearAllPoints()
+			p:SetPoint("CENTER", mm, "CENTER", x, y)
+			p.turn = q.turn
+			p.list, p.giver, p.state, p.ids, p.poi = q.list, q.giver, q.state, q.ids, q.poi
+			p.mapID, p.wx, p.wy = mapID, q.x, q.y
+			p.icon:SetTexture(Ink.icon(q.turn and "QuestTurnIn" or "QuestBang"))
+			local col = q.turn and GOLD or (q.rep and BLUE or GOLD)
+			p.icon:SetVertexColor(col[1], col[2], col[3])
+			p.ring:SetVertexColor(col[1], col[2], col[3], inside and 1 or 0.6)
+			local sz = inside and (q.turn and 17 or 16) or 11
+			p:SetSize(sz, sz)
+			p.icon:SetSize(sz * 0.62, sz * 0.62)
+			p:SetAlpha(inside and 1 or 0.75)
+			p:Show()
+		end
+	end
+	for i = n + 1, #self.mpins do self.mpins[i]:Hide() end
+end
+
+function M:InitMinimap()
+	if Ink.db.questMinimap == false or not Minimap then return end
+	local f = CreateFrame("Frame")
+	local acc = 0
+	f:SetScript("OnUpdate", function(_, el)
+		acc = acc + el
+		if acc < 0.15 then return end
+		acc = 0
+		pcall(M.MiniUpdate, M)
+	end)
+	self.miniTicker = f
+end
+
 function M:Init()
 	if not ns.QUEST_DB or Ink.db.questMap == false then return end
 	self:Hook()
+	self:InitMinimap()
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({ "ADDON_LOADED", "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_REMOVED", "QUEST_LOG_UPDATE",
 		"PLAYER_LEVEL_UP", "SKILL_LINES_CHANGED", "QUEST_DATA_LOAD_RESULT", "UPDATE_FACTION" }) do
@@ -424,6 +666,7 @@ function M:Init()
 			if owner and owner.list and owner.hover then M:Tip(owner) end
 			return
 		end
+		M.miniDirty = true
 		M:Queue()
 	end)
 end
