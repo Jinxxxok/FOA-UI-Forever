@@ -287,7 +287,8 @@ function M:PaintLegend(nOn, nSoon, nRep)
 	else
 		b:SetPoint("TOPRIGHT", wm, "BOTTOMRIGHT", 0, -6)
 	end
-	if nOn + nSoon + nRep == 0 and not Ink.db.questMapHide then b:Hide() return end
+	local Map = Ink.modules.Map
+	if nOn + nSoon + nRep == 0 and not Ink.db.questMapHide then b:Hide() if Map and Map.LayoutUnder then Map:LayoutUnder() end return end
 	local parts
 	if Ink.db.questMapHide then
 		parts = "|cff8E939B퀘스트 숨김 · 눌러서 보기|r"
@@ -300,6 +301,7 @@ function M:PaintLegend(nOn, nSoon, nRep)
 	b:SetWidth(b.t:GetStringWidth() + 36)
 	b.icon:SetDesaturated(Ink.db.questMapHide and true or false)
 	b:Show()
+	if Map and Map.LayoutUnder then Map:LayoutUnder() end
 end
 
 -------------------------------------------------------------------------------

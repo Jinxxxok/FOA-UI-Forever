@@ -824,14 +824,14 @@ function M:EntrancePin(i)
 	local p = self.entrPins[i]
 	if p then return p end
 	p = CreateFrame("Button", nil, self.layer)
-	p:SetSize(26, 26)
+	p:SetSize(18, 18)
 	p:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	p.art = CreateFrame("Frame", nil, p)
 	p.art:SetPoint("CENTER")
-	p.art:SetSize(30, 30)
+	p.art:SetSize(21, 21)
 	p.halo = p.art:CreateTexture(nil, "BACKGROUND")
 	p.halo:SetTexture(Ink.tex.glow)
-	p.halo:SetSize(52, 52)
+	p.halo:SetSize(36, 36)
 	p.halo:SetPoint("CENTER", 0, -1)
 	p.halo:SetBlendMode("ADD")
 	p.halo:SetVertexColor(0.62, 0.52, 1, 0.22)
@@ -840,7 +840,7 @@ function M:EntrancePin(i)
 	p.icon:SetAllPoints()
 	-- 이름 알약
 	p.pill = CreateFrame("Frame", nil, p)
-	p.pill:SetHeight(18)
+	p.pill:SetHeight(15)
 	p.pill:SetPoint("LEFT", p, "RIGHT", 1, -1)
 	p.pill.bg = Ink:Round(p.pill, "BACKGROUND", true, false)
 	p.pill.bg:SetAllPoints()
@@ -848,14 +848,14 @@ function M:EntrancePin(i)
 	p.pill.bd = Ink:Round(p.pill, "BORDER", true, true)
 	p.pill.bd:SetAllPoints()
 	p.pill.bd:SetVertexColor(0.89, 0.75, 0.48, 0.45)
-	p.pill.name = Ink:Text(p.pill, F.semi, 10, C.text, "LEFT")
-	p.pill.name:SetPoint("LEFT", 7, 0)
-	p.pill.lvl = Ink:Text(p.pill, F.numR or F.semi, 10, C.soft, "LEFT")
-	p.pill.lvl:SetPoint("LEFT", p.pill.name, "RIGHT", 6, 0)
+	p.pill.name = Ink:Text(p.pill, F.semi, 9, C.text, "LEFT")
+	p.pill.name:SetPoint("LEFT", 6, 0)
+	p.pill.lvl = Ink:Text(p.pill, F.numR or F.semi, 9, C.soft, "LEFT")
+	p.pill.lvl:SetPoint("LEFT", p.pill.name, "RIGHT", 5, 0)
 	-- 입구 버튼으로 찾아왔을 때 몇 초 동안 물결
 	p.ping = p:CreateTexture(nil, "BACKGROUND")
 	p.ping:SetTexture(Ink.tex.ring)
-	p.ping:SetSize(30, 30)
+	p.ping:SetSize(21, 21)
 	p.ping:SetPoint("CENTER")
 	p.ping:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0)
 	local ag = p.ping:CreateAnimationGroup()
@@ -934,7 +934,7 @@ function M:DrawEntrances(mapID, cv, pinScale)
 				local c = EntrLevelColor(lo, hi)
 				p.pill.lvl:SetText(lo == hi and tostring(lo) or (lo .. "–" .. hi))
 				p.pill.lvl:SetTextColor(c[1], c[2], c[3])
-				p.pill:SetWidth(math.ceil(p.pill.name:GetStringWidth() + p.pill.lvl:GetStringWidth()) + 20)
+				p.pill:SetWidth(math.ceil(p.pill.name:GetStringWidth() + p.pill.lvl:GetStringWidth()) + 17)
 				local flash = false
 				for _, d in ipairs(g.list) do if d.key == self.flashKey then flash = true end end
 				if flash then p.pingAG:Play() else p.pingAG:Stop() end
@@ -1000,7 +1000,7 @@ end
 function M:PaintBooks(mapID)
 	local box = self.books
 	if not box then return end
-	if Ink.db.mapBooks == false or not mapID then box:Hide() return end
+	if Ink.db.mapBooks == false or not mapID then box:Hide() self:LayoutUnder() return end
 	local fac = MyFaction()
 	local lines = {}
 	for _, b in ipairs(BOOKS) do
@@ -1011,15 +1011,11 @@ function M:PaintBooks(mapID)
 		end
 	end
 	local lib = LIBRARIANS[mapID]
-	if #lines == 0 and not lib then box:Hide() return end
+	if #lines == 0 and not lib then box:Hide() self:LayoutUnder() return end
 	-- 지도를 크게(최대화) 띄우면 아래 칸이 화면 밖이라 지도 안 왼쪽 아래로
 	local wm = WorldMapFrame
 	box:ClearAllPoints()
-	if wm.IsMaximized and wm:IsMaximized() then
-		box:SetPoint("BOTTOMLEFT", wm.ScrollContainer, "BOTTOMLEFT", 10, 10)
-	else
-		box:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", 0, -6)
-	end
+	box:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", 0, -6)
 	local have, total = self:BookCount()
 	local nextR
 	for _, r in ipairs(REWARDS) do if have < r[1] then nextR = r break end end
@@ -1031,6 +1027,38 @@ function M:PaintBooks(mapID)
 	box.text:SetShown(#lines > 0)
 	box:SetHeight(64 + (#lines > 0 and (box.text:GetStringHeight() + 8) or 0))
 	box:Show()
+	self:LayoutUnder()
+end
+
+-- 지도 아래 칸 자리 잡기 (겹치지 않게)
+--  창 지도: 첫 줄 = 대도시 범례(왼쪽) · 받을 수 있는 퀘스트(오른쪽), 그 아래 도서관 책 상자
+--  큰 지도: 지도 안 아래쪽 = 책 상자(왼쪽) · 범례(가운데) · 퀘스트(오른쪽)
+function M:LayoutUnder()
+	local wm = WorldMapFrame
+	if not wm then return end
+	local big = wm.IsMaximized and wm:IsMaximized()
+	local box, bar = self.books, self.cityBar
+	local Q = Ink.modules.QuestMap
+	local leg = Q and Q.legend
+	local row = (bar and bar:IsShown()) or (leg and leg:IsShown())
+	if bar then
+		bar:ClearAllPoints()
+		if big then bar:SetPoint("BOTTOM", wm.ScrollContainer, "BOTTOM", 0, 10)
+		else bar:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", 0, -6) end
+	end
+	if box then
+		box:ClearAllPoints()
+		if big then
+			box:SetPoint("BOTTOMLEFT", wm.ScrollContainer, "BOTTOMLEFT", 10, 10)
+			-- 책 상자가 범례 위로 올라오지 않게: 범례가 있으면 그 위로
+			if bar and bar:IsShown() then
+				box:ClearAllPoints()
+				box:SetPoint("BOTTOMLEFT", wm.ScrollContainer, "BOTTOMLEFT", 10, 44)
+			end
+		else
+			box:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", 0, row and -38 or -6)
+		end
+	end
 end
 
 function M:BuildBooks()
@@ -1123,14 +1151,7 @@ end
 function M:PaintCityLegend(mapID)
 	local bar = self.cityBar
 	if not bar then return end
-	if not (mapID and CAPITAL[mapID]) or Ink.db.mapNpcs == false then bar:Hide() return end
-	local wm = WorldMapFrame
-	bar:ClearAllPoints()
-	if wm.IsMaximized and wm:IsMaximized() then
-		bar:SetPoint("BOTTOM", wm.ScrollContainer, "BOTTOM", 0, 10)
-	else
-		bar:SetPoint("TOP", wm, "BOTTOM", 0, -6)
-	end
+	if not (mapID and CAPITAL[mapID]) or Ink.db.mapNpcs == false then bar:Hide() self:LayoutUnder() return end
 	local cat = Ink.db.mapCat or {}
 	for _, b in ipairs(bar.chips) do
 		local on = cat[b.key] ~= false
@@ -1141,6 +1162,7 @@ function M:PaintCityLegend(mapID)
 		b.t:SetTextColor(on and C.text[1] or C.dim[1], on and C.text[2] or C.dim[2], on and C.text[3] or C.dim[3])
 	end
 	bar:Show()
+	self:LayoutUnder()
 end
 
 -- 경비병에게 길을 물으면 지도에 찍히는 표시(은행 · 경매장 · 여관 · 훈련사 …)를 그 자리로 기억
