@@ -309,37 +309,40 @@ end
 -- 게임 설정(ESC → 설정 → 행동 단축바)에서 "행동 단축바 2~8"을 켜고 끄면 FOA 바도 따라간다.
 --  블리자드 값이 바뀐 순간만 따라가고, FOA 편집 모드에서 바꾼 값은 그대로 둔다.
 local function BlizzBarShown(n)
-	if not (Settings and Settings.GetValue) then return nil end
-	local ok, v = pcall(Settings.GetValue, "PROXY_SHOW_ACTIONBAR_" .. n)
+	-- 이 파일의 Settings 는 FOA 설정 함수라서 블리자드 설정 표는 _G 에서 꺼낸다
+	local BS = _G.Settings
+	if type(BS) ~= "table" or not BS.GetValue then return nil end
+	local ok, v = pcall(BS.GetValue, "PROXY_SHOW_ACTIONBAR_" .. n)
 	if ok and v ~= nil then return v and true or false end
 end
 
 function M:SyncBlizzToggles()
 	if not Ink.cdb.barsImported then return end
-	-- 처음 한 번: 블리자드 설정에서 이미 켜 둔 바는 FOA 에서도 켠다 (끄지는 않는다)
-	local first = Ink.cdb.bars.blizzSeen == nil
 	local seen = Ink.cdb.bars.blizzSeen or {}
-	Ink.cdb.bars.blizzSeen = seen
-	local changed
+	local changed, any
 	for n = 2, 8 do
 		local v = BlizzBarShown(n)
 		local key = "bar" .. n
 		if v ~= nil and DEF[key] then
-			if seen[n] ~= nil and seen[n] ~= v then
-				Settings(key).on = v
-				changed = true
-			elseif first and v and Settings(key).on == false then
-				Settings(key).on = true
+			any = true
+			local s = Settings(key)
+			if seen[n] == nil then
+				-- 처음 보는 값: 블리자드 설정에서 켜 둔 바는 FOA 에서도 켠다 (끄지는 않는다)
+				if v and s.on == false then s.on = true; changed = true end
+			elseif seen[n] ~= v then
+				s.on = v
 				changed = true
 			end
 			seen[n] = v
 		end
 	end
+	if any then Ink.cdb.bars.blizzSeen = seen end
 	if changed then
 		self:LayoutAll()
 		for _, d in ipairs(self.list) do Ink:ApplyPos(d.key) end
 		if Ink.modules.Config and Ink.modules.Config.SyncOpts then pcall(Ink.modules.Config.SyncOpts, Ink.modules.Config) end
 	end
+	return any
 end
 
 -- 블리자드가 숨긴 태세 · 소환수 버튼(쓸 수 없는 칸)은 블리자드 판단대로 둔다
@@ -544,7 +547,15 @@ function M:Init()
 	self:LayoutAll()
 	for _, d in ipairs(self.list) do Ink:ApplyPos(d.key) end
 	if Ink.cdb.barsImported then self:UpdateBindings() end
-	self:SyncBlizzToggles()
+	-- 블리자드 설정 값이 늦게 잡힐 수 있어서 접속 직후 몇 번 더 본다
+	local tries = 0
+	local function retry()
+		tries = tries + 1
+		if InCombatLockdown() then M.pendingSync = true
+		elseif not M:SyncBlizzToggles() and tries < 10 then C_Timer.After(2, retry) end
+	end
+	retry()
+	C_Timer.After(5, function() if InCombatLockdown() then M.pendingSync = true else M:SyncBlizzToggles() end end)
 	if MultiActionBar_Update then
 		hooksecurefunc("MultiActionBar_Update", function()
 			C_Timer.After(0, function()
