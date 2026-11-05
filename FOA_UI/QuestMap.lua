@@ -1,0 +1,395 @@
+-- FOA UI · 지도에 받을 수 있는 퀘스트 (포에버)
+--  퀘스트 시작 위치 자료(QuestDB.lua, AllTheThings MIT)로 "지금 받을 수 있는" 퀘스트만 골라 지도에 찍는다.
+--   · 진영 · 종족 · 직업 · 선행 퀘스트 · 택일 퀘스트 · 전문기술 · 평판 · 이미 깬/진행 중인 퀘스트를 거른다
+--   · 너무 낮은 퀘스트(회색)는 뺀다. 1~2레벨 뒤에 받을 수 있는 건 흐리게 미리 보여 준다
+--   · 같은 NPC가 여러 개 주면 핀 하나 + 개수 배지, 마우스를 올리면 목록
+--   · 클릭하면 그 자리에 길 안내 표시
+--  핀: 유리 같은 어두운 원 + 금색 고리 + 직접 그린 느낌표 (반복 = 파랑, 곧 = 회색)
+
+local _, ns = ...
+local Ink = ns.Ink
+local M = Ink:Module("QuestMap")
+local F, C = Ink.font, Ink.c
+local plain = Ink.plain
+
+local GOLD = { 1.00, 0.80, 0.30 }
+local BLUE = { 0.40, 0.75, 1.00 }
+local SOON = { 0.62, 0.64, 0.68 }
+
+-------------------------------------------------------------------------------
+-- 자료 정리: 지도별로 묶기
+-------------------------------------------------------------------------------
+local byMap
+local function Index()
+	if byMap then return byMap end
+	byMap = {}
+	for _, r in ipairs(ns.QUEST_DB or {}) do
+		local pts = r[2]
+		for i = 1, #pts, 3 do
+			local m = pts[i]
+			byMap[m] = byMap[m] or {}
+			table.insert(byMap[m], { r = r, x = pts[i + 1] / 100, y = pts[i + 2] / 100 })
+		end
+	end
+	return byMap
+end
+
+local function Has(list, v)
+	for _, x in ipairs(list) do if x == v then return true end end
+	return false
+end
+
+local CUR_PATCH = (function()
+	local v = GetBuildInfo() or "1.60.1"
+	local a, b, c = v:match("(%d+)%.(%d+)%.(%d+)")
+	return (tonumber(a) or 1) * 10000 + (tonumber(b) or 60) * 100 + (tonumber(c) or 1)
+end)()
+
+local profSkills
+local function KnownSkills()
+	if profSkills then return profSkills end
+	profSkills = {}
+	if GetProfessions then
+		for _, idx in ipairs({ GetProfessions() }) do
+			if idx then
+				local _, _, _, _, _, _, line = GetProfessionInfo(idx)
+				if line then profSkills[line] = true end
+			end
+		end
+	end
+	return profSkills
+end
+
+local function RepOK(rep)
+	if not rep[1] then return true end
+	local fid, need = rep[1], rep[2] or 0
+	if C_Reputation and C_Reputation.GetFactionDataByID then
+		local ok, d = pcall(C_Reputation.GetFactionDataByID, fid)
+		if ok and d and d.currentStanding then return d.currentStanding >= need end
+	end
+	if GetFactionInfoByID then
+		local ok, _, _, _, _, _, bar = pcall(GetFactionInfoByID, fid)
+		if ok and bar then return bar >= need end
+	end
+	return true
+end
+
+local function Done(id)
+	return C_QuestLog.IsQuestFlaggedCompleted and C_QuestLog.IsQuestFlaggedCompleted(id)
+end
+local function InLog(id)
+	if C_QuestLog.IsOnQuest then return C_QuestLog.IsOnQuest(id) end
+	return C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(id) ~= nil
+end
+
+-- 0 = 안 보임, 1 = 받을 수 있음, 2 = 곧(1~2레벨 뒤)
+local function State(r, ctx)
+	local id, lvl, fac = r[1], r[3], r[4]
+	if fac ~= 0 and fac ~= ctx.fac then return 0 end
+	if #r[5] > 0 and not Has(r[5], ctx.race) then return 0 end
+	if #r[6] > 0 and not Has(r[6], ctx.class) then return 0 end
+	if r[11] > CUR_PATCH then return 0 end
+	if Done(id) or InLog(id) then return 0 end
+	for _, a in ipairs(r[8]) do if Done(a) or InLog(a) then return 0 end end
+	for _, s in ipairs(r[7]) do if not Done(s) then return 0 end end
+	if r[9] ~= 0 and not KnownSkills()[r[9]] then return 0 end
+	if not RepOK(r[10]) then return 0 end
+	if lvl > ctx.level then
+		return (lvl <= ctx.level + 2 and Ink.db.questMapSoon ~= false) and 2 or 0
+	end
+	-- 너무 낮은 퀘스트: 필요 레벨이 내 레벨보다 10 넘게 낮으면 회색으로 보고 뺀다 (10레벨 아래는 다 보여 줌)
+	if not Ink.db.questMapLow and ctx.level >= 10 and lvl < ctx.level - 9 then return 0 end
+	return 1
+end
+
+-------------------------------------------------------------------------------
+-- 이름 (게임에 물어보고, 아직 없으면 요청해 두고 나중에)
+-------------------------------------------------------------------------------
+local function QuestName(id)
+	local t = C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(id)
+	if t and t ~= "" then return t end
+	if C_QuestLog.RequestLoadQuestByID then pcall(C_QuestLog.RequestLoadQuestByID, id) end
+end
+
+local npcName = {}
+local function NpcName(id)
+	if not id or id == 0 then return end
+	if npcName[id] ~= nil then return npcName[id] or nil end
+	if C_TooltipInfo and C_TooltipInfo.GetHyperlink then
+		local ok, d = pcall(C_TooltipInfo.GetHyperlink, ("unit:Creature-0-0-0-0-%d-0000000000"):format(id))
+		local t = ok and d and d.lines and d.lines[1] and plain(d.lines[1].leftText)
+		if type(t) == "string" and t ~= "" then npcName[id] = t; return t end
+	end
+end
+
+-------------------------------------------------------------------------------
+-- 핀
+-------------------------------------------------------------------------------
+local function Canvas()
+	local wm = WorldMapFrame
+	return wm and wm.ScrollContainer and wm.ScrollContainer.Child
+end
+
+local function NewPin(parent)
+	local p = CreateFrame("Button", nil, parent)
+	p:SetSize(24, 24)
+	p:RegisterForClicks("LeftButtonUp")
+	p.glow = p:CreateTexture(nil, "BACKGROUND", nil, -1)
+	p.glow:SetTexture(Ink.tex.glow)
+	p.glow:SetPoint("TOPLEFT", -9, 9)
+	p.glow:SetPoint("BOTTOMRIGHT", 9, -9)
+	p.glow:SetBlendMode("ADD")
+	p.disc = p:CreateTexture(nil, "BACKGROUND")
+	p.disc:SetTexture(Ink.tex.disc)
+	p.disc:SetAllPoints()
+	p.disc:SetVertexColor(0.035, 0.04, 0.055, 0.94)
+	p.shine = p:CreateTexture(nil, "BORDER")
+	p.shine:SetTexture(Ink.tex.disc)
+	p.shine:SetPoint("TOPLEFT", 3, -2)
+	p.shine:SetPoint("BOTTOMRIGHT", -3, 10)
+	p.shine:SetVertexColor(1, 1, 1, 0.06)
+	p.ring = p:CreateTexture(nil, "ARTWORK")
+	p.ring:SetTexture(Ink.tex.ring)
+	p.ring:SetAllPoints()
+	p.bang = p:CreateTexture(nil, "OVERLAY")
+	p.bang:SetTexture(Ink.icon("QuestBang"))
+	p.bang:SetSize(16, 16)
+	p.bang:SetPoint("CENTER", 0, 0)
+	-- 여러 퀘스트 배지
+	p.badge = CreateFrame("Frame", nil, p)
+	p.badge:SetSize(14, 14)
+	p.badge:SetPoint("CENTER", p, "TOPRIGHT", -3, -3)
+	p.badge.bg = p.badge:CreateTexture(nil, "ARTWORK")
+	p.badge.bg:SetTexture(Ink.tex.disc)
+	p.badge.bg:SetAllPoints()
+	p.badge.t = Ink:Text(p.badge, F.latinB, 9, { 0.05, 0.05, 0.06 }, "CENTER")
+	p.badge.t:SetPoint("CENTER", 0, 0)
+	p.badge:Hide()
+	-- 곧 받을 수 있는 퀘스트 레벨
+	p.lv = Ink:Text(p, F.latinB, 9, SOON, "CENTER")
+	p.lv:SetPoint("TOP", p, "BOTTOM", 0, -1)
+	p.lv:SetShadowColor(0, 0, 0, 1)
+	-- 마우스 올리면 살짝 커짐
+	local ag = p:CreateAnimationGroup()
+	local sc = ag:CreateAnimation("Scale")
+	sc:SetDuration(0.12); sc:SetScaleFrom(1, 1); sc:SetScaleTo(1.18, 1.18); sc:SetSmoothing("OUT")
+	ag:SetScript("OnFinished", function() p:SetScale((p.baseScale or 1) * 1.18) end)
+	p.hover = ag
+	p:SetScript("OnEnter", function(self) self.hover:Play(); M:Tip(self) end)
+	p:SetScript("OnLeave", function(self) GameTooltip:Hide(); self.hover:Stop(); self:SetScale(self.baseScale or 1) end)
+	p:SetScript("OnClick", function(self) M:Waypoint(self) end)
+	return p
+end
+
+function M:Pin(i)
+	self.pins = self.pins or {}
+	local p = self.pins[i]
+	if not p then p = NewPin(self.layer); self.pins[i] = p end
+	return p
+end
+
+local function Paint(p, col, soon, count)
+	p.ring:SetVertexColor(col[1], col[2], col[3], soon and 0.55 or 1)
+	p.bang:SetVertexColor(col[1], col[2], col[3], soon and 0.7 or 1)
+	p.glow:SetVertexColor(col[1], col[2], col[3], soon and 0 or 0.28)
+	p.disc:SetAlpha(soon and 0.75 or 1)
+	if count and count > 1 then
+		p.badge.bg:SetVertexColor(col[1], col[2], col[3], 1)
+		p.badge.t:SetText(count > 9 and "9+" or tostring(count))
+		p.badge:Show()
+	else
+		p.badge:Hide()
+	end
+end
+
+-------------------------------------------------------------------------------
+-- 툴팁 · 길 안내
+-------------------------------------------------------------------------------
+function M:Tip(p)
+	GameTooltip:SetOwner(p, "ANCHOR_RIGHT", 4, 0)
+	local giver = NpcName(p.giver)
+	GameTooltip:AddLine(giver or (p.state == 2 and "곧 받을 수 있는 퀘스트" or "받을 수 있는 퀘스트"), 1, 0.82, 0.32)
+	for _, q in ipairs(p.list) do
+		local r = q.r
+		local name = QuestName(r[1]) or ("퀘스트 #" .. r[1] .. " (불러오는 중)")
+		local tag = {}
+		if q.state == 2 then tag[#tag + 1] = "|cffA0A4AA" .. r[3] .. "레벨부터|r" else tag[#tag + 1] = "|cff8E939B필요 " .. r[3] .. "|r" end
+		if bit.band(r[12], 1) ~= 0 then tag[#tag + 1] = "|cff66BFFF반복|r" end
+		if bit.band(r[12], 2) ~= 0 then tag[#tag + 1] = "|cffB4B8BF다른 지역으로 안내|r" end
+		if r[13] ~= 0 then tag[#tag + 1] = "|cffE3C07A아이템으로 시작|r" end
+		local c = q.state == 2 and SOON or (bit.band(r[12], 1) ~= 0 and BLUE or { 0.96, 0.95, 0.90 })
+		GameTooltip:AddDoubleLine(name, table.concat(tag, "  "), c[1], c[2], c[3], 1, 1, 1)
+	end
+	GameTooltip:AddLine(" ")
+	GameTooltip:AddLine("클릭: 길 안내 표시", 0.56, 0.58, 0.61)
+	GameTooltip:Show()
+end
+
+function M:Waypoint(p)
+	if not (C_Map.CanSetUserWaypointOnMap and C_Map.CanSetUserWaypointOnMap(p.mapID)) then return end
+	local pt = UiMapPoint.CreateFromCoordinates(p.mapID, p.wx, p.wy)
+	C_Map.SetUserWaypoint(pt)
+	if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
+	PlaySound(SOUNDKIT and SOUNDKIT.UI_MAP_WAYPOINT_CONTROL_CLICK or 170270)
+end
+
+-------------------------------------------------------------------------------
+-- 지도 위 범례 (받을 수 있음 n · 곧 n · 반복 n), 누르면 켜고 끄기
+-------------------------------------------------------------------------------
+function M:BuildLegend()
+	local wm = WorldMapFrame
+	local b = CreateFrame("Button", nil, wm.ScrollContainer)
+	b:SetSize(10, 24)
+	b:SetPoint("TOPRIGHT", wm.ScrollContainer, "TOPRIGHT", -10, -10)
+	b:SetFrameStrata("HIGH")
+	b.bg = Ink:Round(b, "BACKGROUND", true, false)
+	b.bg:SetAllPoints()
+	b.bg:SetVertexColor(0.04, 0.045, 0.06, 0.88)
+	b.bd = Ink:Round(b, "BORDER", true, true)
+	b.bd:SetAllPoints()
+	b.bd:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 0.45)
+	b.icon = b:CreateTexture(nil, "ARTWORK")
+	b.icon:SetTexture(Ink.icon("QuestBang"))
+	b.icon:SetSize(12, 12)
+	b.icon:SetPoint("LEFT", 9, 0)
+	b.icon:SetVertexColor(GOLD[1], GOLD[2], GOLD[3])
+	b.t = Ink:Text(b, F.semi, 11, C.text, "LEFT")
+	b.t:SetPoint("LEFT", b.icon, "RIGHT", 5, 0)
+	b:SetScript("OnClick", function()
+		Ink.db.questMapHide = not Ink.db.questMapHide or nil
+		M:Refresh()
+	end)
+	b:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+		GameTooltip:AddLine("받을 수 있는 퀘스트", 1, 0.82, 0.32)
+		GameTooltip:AddLine("금색 = 지금 받을 수 있음 · 파랑 = 반복 · 회색 = 1~2레벨 뒤", 0.75, 0.77, 0.8, true)
+		GameTooltip:AddLine("누르면 지도에서 숨기기 / 보이기", 0.56, 0.58, 0.61)
+		GameTooltip:Show()
+	end)
+	b:SetScript("OnLeave", GameTooltip_Hide)
+	self.legend = b
+end
+
+function M:PaintLegend(nOn, nSoon, nRep)
+	local b = self.legend
+	if not b then return end
+	if nOn + nSoon + nRep == 0 and not Ink.db.questMapHide then b:Hide() return end
+	local parts
+	if Ink.db.questMapHide then
+		parts = "|cff8E939B퀘스트 숨김 · 눌러서 보기|r"
+	else
+		parts = string.format("받을 수 있는 퀘스트 |cffFFCC4D%d|r", nOn)
+		if nRep > 0 then parts = parts .. string.format("  |cff66BFFF반복 %d|r", nRep) end
+		if nSoon > 0 then parts = parts .. string.format("  |cffA0A4AA곧 %d|r", nSoon) end
+	end
+	b.t:SetText(parts)
+	b:SetWidth(b.t:GetStringWidth() + 36)
+	b.icon:SetDesaturated(Ink.db.questMapHide and true or false)
+	b:Show()
+end
+
+-------------------------------------------------------------------------------
+-- 그리기
+-------------------------------------------------------------------------------
+function M:Refresh()
+	local wm = WorldMapFrame
+	local cv = Canvas()
+	if not (wm and cv and wm:IsShown() and self.layer) then return end
+	local mapID = wm:GetMapID()
+	local list = mapID and Index()[mapID]
+	local n, nOn, nSoon, nRep = 0, 0, 0, 0
+	if list and not Ink.db.questMapHide then
+		local _, _, raceID = UnitRace("player")
+		local _, _, classID = UnitClass("player")
+		local fg = UnitFactionGroup("player")
+		local ctx = { level = UnitLevel("player") or 1, race = raceID, class = classID, fac = fg == "Horde" and 1 or (fg == "Alliance" and 2 or 0) }
+		-- 같은 자리(같은 NPC)끼리 묶기
+		local groups, order = {}, {}
+		for _, e in ipairs(list) do
+			local st = State(e.r, ctx)
+			if st > 0 then
+				local key = (e.r[14] ~= 0 and ("n" .. e.r[14])) or string.format("%.3f:%.3f", e.x, e.y)
+				local g = groups[key]
+				if not g then
+					g = { x = e.x, y = e.y, list = {}, giver = e.r[14], state = 2, rep = true }
+					groups[key] = g
+					order[#order + 1] = g
+				end
+				g.list[#g.list + 1] = { r = e.r, state = st }
+				if st == 1 then g.state = 1 end
+				if bit.band(e.r[12], 1) == 0 then g.rep = false end
+				if st == 2 then nSoon = nSoon + 1 elseif bit.band(e.r[12], 1) ~= 0 then nRep = nRep + 1 else nOn = nOn + 1 end
+			end
+		end
+		local W, H = cv:GetWidth(), cv:GetHeight()
+		local scale = (wm.GetCanvasScale and wm:GetCanvasScale()) or 1
+		local pinScale = math.max(0.5, math.min(1.5, 1.05 / scale))
+		for _, g in ipairs(order) do
+			table.sort(g.list, function(a, b)
+				if a.state ~= b.state then return a.state < b.state end
+				return a.r[3] > b.r[3]
+			end)
+			n = n + 1
+			local p = self:Pin(n)
+			p:ClearAllPoints()
+			p:SetPoint("CENTER", cv, "TOPLEFT", g.x * W, -g.y * H)
+			p.baseScale = pinScale * (g.state == 2 and 0.85 or 1)
+			p:SetScale(p.baseScale)
+			p.list, p.giver, p.state, p.mapID, p.wx, p.wy = g.list, g.giver, g.state, mapID, g.x, g.y
+			local col = (g.state == 2) and SOON or (g.rep and BLUE or GOLD)
+			Paint(p, col, g.state == 2, #g.list)
+			p.lv:SetText(g.state == 2 and ("Lv" .. g.list[1].r[3]) or "")
+			p:SetFrameLevel(self.layer:GetFrameLevel() + (g.state == 2 and 1 or 5))
+			p:Show()
+		end
+	end
+	for i = n + 1, #(self.pins or {}) do self.pins[i]:Hide() end
+	self:PaintLegend(nOn, nSoon, nRep)
+end
+
+local refreshQueued
+function M:Queue()
+	if refreshQueued then return end
+	refreshQueued = true
+	C_Timer.After(0.3, function()
+		refreshQueued = nil
+		profSkills = nil
+		if WorldMapFrame and WorldMapFrame:IsShown() then M:Refresh() end
+	end)
+end
+
+function M:Hook()
+	local wm = WorldMapFrame
+	if not wm or self.hooked or not Canvas() then return end
+	self.hooked = true
+	self.layer = CreateFrame("Frame", nil, Canvas())
+	self.layer:SetAllPoints()
+	self.layer:SetFrameLevel(Canvas():GetFrameLevel() + 2300)
+	self:BuildLegend()
+	wm:HookScript("OnShow", function() M:Queue() end)
+	if wm.OnMapChanged then hooksecurefunc(wm, "OnMapChanged", function() M:Refresh() end) end
+	if wm.OnCanvasScaleChanged then hooksecurefunc(wm, "OnCanvasScaleChanged", function() M:Refresh() end) end
+end
+
+function M:Init()
+	if not ns.QUEST_DB or Ink.db.questMap == false then return end
+	self:Hook()
+	local e = CreateFrame("Frame")
+	for _, ev in ipairs({ "ADDON_LOADED", "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_REMOVED", "QUEST_LOG_UPDATE",
+		"PLAYER_LEVEL_UP", "SKILL_LINES_CHANGED", "QUEST_DATA_LOAD_RESULT", "UPDATE_FACTION" }) do
+		pcall(e.RegisterEvent, e, ev)
+	end
+	e:SetScript("OnEvent", function(_, event)
+		if event == "ADDON_LOADED" then
+			if not M.hooked then M:Hook() end
+			return
+		end
+		if event == "QUEST_DATA_LOAD_RESULT" then
+			-- 이름이 도착하면 열린 툴팁만 다시
+			local owner = GameTooltip:IsShown() and GameTooltip:GetOwner()
+			if owner and owner.list and owner.hover then M:Tip(owner) end
+			return
+		end
+		M:Queue()
+	end)
+end
