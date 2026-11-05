@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.44.0"
+Ink.version = "0.45.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1033,6 +1033,7 @@ local defaults = {
 	mapLayer = true,
 	questMap = true,
 	questClass = true,
+	bisCrafts = true,
 }
 
 local ev = CreateFrame("Frame")

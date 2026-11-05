@@ -394,6 +394,13 @@ end
 
 function M:SourceText(it)
 	if it.srcText then return it.srcText end
+	if it.craft then
+		local t = "제작 · " .. (M.CRAFT_PROF and M.CRAFT_PROF[it.craft] or "전문기술")
+		local price = ns.AHPrice and ns.AHPrice(it.id)
+		local A = Ink.modules.AHPrice
+		if price and A and A.Money then t = t .. "  ·  경매장 " .. A.Money(price) end
+		return t
+	end
 	if FOREVER and it.inst then
 		local d = FLoot(it.inst)
 		local bn = M.BossName and M.BossName({ npc = it.npc, name = it.bossName }) or it.bossName
@@ -470,7 +477,7 @@ end
 function M:BuildRanksForever()
 	local lvl = UnitLevel("player") or 60
 	local skey = SpecKey()
-	local key = skey .. ":" .. lvl
+	local key = skey .. ":" .. lvl .. (Ink.db.bisCrafts == false and "" or ":c")
 	if self.rankKey == key and not self.dirty then return end
 	self.rankKey, self.dirty = key, nil
 	wipe(self.ranks)
@@ -497,7 +504,10 @@ function M:BuildRanksForever()
 	end
 	-- 만렙 전: 공략 BIS(만렙 기준) 대신 지금 레벨에 착용 가능한 최고템 (아래 BuildLevelRanks)
 	self.levelMode = lvl < 60
-	if self.levelMode then return self:BuildLevelRanks(pool, lvl) end
+	if self.levelMode then
+		self:AddCrafts(pool, lvl)
+		return self:BuildLevelRanks(pool, lvl)
+	end
 	local function Fill()
 		-- 공략 대체가 3개 안 되는 칸은 던전 전리품 중 FOA 점수(직업 · 특성 가중치) 높은 순으로 채운다
 		local sc = ns.Score
@@ -648,7 +658,7 @@ end
 -- 자료 출처 한 줄
 function M:SourceLabel()
 	if FOREVER and self.levelMode then
-		return "레벨업: 지금 레벨(" .. (UnitLevel("player") or 1) .. ")에 착용 가능한 던전 전리품 중 FOA 점수 순"
+		return (UnitLevel("player") or 1) .. "레벨 착용 가능\n던전 전리품" .. (Ink.db.bisCrafts ~= false and ns.FOREVER_CRAFTS and " + 제작템" or "") .. " · FOA 점수 순"
 	end
 	if FOREVER then
 		return self.spec and ("BIS · 대체: " .. self.spec.src .. " (레이드 전) + FOA 점수") or "대체: FOA 점수 (공략 BIS 준비 중)"
@@ -902,6 +912,41 @@ local function ForMyClass(it)
 	return ok
 end
 M.ForMyClass = ForMyClass
+
+-- 제작 장비도 후보로 (ForeverCrafts.lua · 게임 파일에서 뽑은 제작 주문 → 만들어지는 아이템)
+--  요구 레벨은 아이템 정보를 받아야 알 수 있어서, 숙련(노란색 시작)으로 대충 레벨 창을 먼저 좁힌다 (요구 레벨 ≈ 숙련 / 6)
+local CRAFT_PROF = { "대장기술", "가죽세공", "재봉술", "기계공학", "마법부여" }
+M.CRAFT_PROF = CRAFT_PROF
+function M:AddCrafts(pool, lvl)
+	if Ink.db.bisCrafts == false or not ns.FOREVER_CRAFTS then return end
+	self.craftById = self.craftById or {}
+	for _, c in ipairs(ns.FOREVER_CRAFTS) do
+		local id, prof, spell, triv = c[1], c[2], c[3], c[4]
+		local est = triv / 6
+		if est <= lvl + 6 and est >= lvl - 22 then
+			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
+			local slot = iid and loc and EQUIP_EJ[loc]
+			if slot then
+				local it = self.craftById[id]
+				if not it then
+					it = { id = id, icon = icon, slot = slot, craft = prof, spell = spell }
+					self.craftById[id] = it
+				end
+				if not it.name then
+					local cached = not C_Item.IsItemDataCachedByID or C_Item.IsItemDataCachedByID(id)
+					if cached then
+						local name, link, q = C_Item.GetItemInfo(id)
+						it.name, it.link, it.quality = name, link, q or 2
+					end
+				end
+				if ForMyClass(it) then
+					pool[slot] = pool[slot] or {}
+					table.insert(pool[slot], it)
+				end
+			end
+		end
+	end
+end
 
 -- 만렙 전 "레벨 최고템": 부위마다 지금 착용 가능한(요구 레벨 ≤ 내 레벨) 내 직업 장비를 FOA 점수 순으로 4개
 --  두 손 무기를 드는 직업(도적 · 20레벨부터 전사 · 사냥꾼)은 한손 무기를 보조장비 칸에도 (보조 손 점수로)
@@ -1798,7 +1843,7 @@ function M:PaintRetailTop(f, data, jid)
 	f.spec:SetText((UnitClass("player") or "") .. " · " .. (specName or ""))
 	f.spec:SetTextColor(cr, cg, cb)
 	f.pills:Refresh()
-	f.example:SetText(FOREVER and self:SourceLabel() or (self.isExample and "예시 순위 (BIS 자료 없음)" or ("BIS · " .. self.spec.src)))
+	f.example:SetText(FOREVER and (self:SourceLabel():gsub("\n", " · ")) or (self.isExample and "예시 순위 (BIS 자료 없음)" or ("BIS · " .. self.spec.src)))
 	if f.lvl then
 		f.lvl:SetText(data and data.lo and string.format("권장 %d–%d 레벨", data.lo, data.hi) or "")
 	end
@@ -2551,7 +2596,11 @@ function M:BuildBisPanel()
 	p.pills = SpecPills(p, 24)
 	p.pills:SetPoint("TOPRIGHT", -16, -12)
 	p.example = Ink:Text(p, F.sans, 10, C.dim, "RIGHT")
-	p.example:SetPoint("TOPRIGHT", p.pills, "BOTTOMRIGHT", 0, -12)
+	p.example:SetPoint("TOPRIGHT", p.pills, "BOTTOMRIGHT", 0, -10)
+	-- 왼쪽 "n / 16 칸 …" · 가운데 장비/준비물 탭과 겹치지 않게 오른쪽 좁은 칸에서 줄바꿈
+	p.example:SetWidth(BP_W - 330)
+	p.example:SetWordWrap(true)
+	p.example:SetSpacing(2)
 	p.sumN = Ink:Text(p, F.num, 26, C.text, "LEFT")
 	p.sumN:SetPoint("TOPLEFT", p.title, "BOTTOMLEFT", 0, -10)
 	p.sumL = Ink:Text(p, F.sans, 10, C.muted, "LEFT")
@@ -3025,7 +3074,7 @@ function M:PaintBis()
 		if self.levelMode then
 			row.name:SetText(self.levelPending and "아이템 정보를 받아 오는 중…" or "지금 갈 수 있는 던전에 이 부위 템이 없어요")
 			row.name:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
-			row.src:SetText("내 레벨 + 4 까지의 던전 전리품에서 골라요 · 퀘스트 보상 · 제작템은 아직 안 들어가요")
+			row.src:SetText("내 레벨 + 4 까지의 던전 전리품과 제작템에서 골라요 · 퀘스트 보상은 아직 안 들어가요")
 		else
 			row.name:SetText("이 부위는 레이드 · 던전 전리품에 없어요")
 			row.name:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
