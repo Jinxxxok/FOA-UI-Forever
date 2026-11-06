@@ -2244,29 +2244,102 @@ function M:PaintBoardMap(b, data, leftW, top, avail)
 			nd.label:SetTextColor(lc[1], lc[2], lc[3])
 			nd.label:Show()
 			nd:Show()
-			if not x.rare then pts[#pts + 1] = { ps[2] * w, -ps[3] * h, x.killed } end
+			if not x.rare then pts[#pts + 1] = { ps[2] * w, -ps[3] * h, x.killed, npc = x.npc } end
 		end
 	end
 	for i = np + 1, #mf.pins do mf.pins[i]:Hide(); mf.pins[i].label:Hide() end
-	-- 진행 선
+	-- 진행 선: 입구 → 1번 → 2번 … 통로를 따라 꺾이고(DungeonRoutes.lua) 가운데에 진행 방향 화살표
+	self:PaintRouteLines(mf, floor, pts, w, h, data)
+	return oy, h
+end
+
+-- 진행 선 그리기
+--  via[npc] = 그 보스로 가는 길의 꺾이는 점들 (같은 층의 앞 보스 · 입구에서 출발, 다른 층에서 오면 첫 점이 도착 지점)
+function M:PaintRouteLines(mf, floor, pts, w, h, data)
 	for _, l in ipairs(mf.lines) do l:Hide() end
-	if mf.CreateLine then
-		for i = 1, #pts - 1 do
-			local l = mf.lines[i]
-			if not l then
-				l = mf:CreateLine(nil, "ARTWORK", nil, 2)
-				l:SetThickness(2)
-				mf.lines[i] = l
-			end
-			local a1, a2 = pts[i], pts[i + 1]
-			l:SetStartPoint("TOPLEFT", mf, a1[1], a1[2])
-			l:SetEndPoint("TOPLEFT", mf, a2[1], a2[2])
-			if a1[3] and a2[3] then l:SetColorTexture(DOWN_C[1], DOWN_C[2], DOWN_C[3], 0.85)
-			else l:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.55) end
+	for _, a in ipairs(mf.arrows or {}) do a:Hide() end
+	if mf.entr then mf.entr:Hide(); mf.entrLabel:Hide() end
+	if not mf.CreateLine then return end
+	local R = ns.DUNGEON_ROUTES and ns.DUNGEON_ROUTES[self.showing] or {}
+	local via = R.via or {}
+	local sk = ns.DUNGEON_SKETCH and ns.DUNGEON_SKETCH[floor]
+	-- 입구 (이 층에 있을 때)
+	local entr
+	if R.entr and R.entr[1] == floor then entr = { R.entr[2] / 100, R.entr[3] / 100 }
+	elseif sk and sk.entr then entr = sk.entr end
+	local firstMain
+	for _, x in ipairs(data.bosses) do if not x.rare then firstMain = x break end end
+	local nl, na = 0, 0
+	local A = C.accent
+	local function seg(x1, y1, x2, y2, done)
+		nl = nl + 1
+		local l = mf.lines[nl]
+		if not l then l = mf:CreateLine(nil, "ARTWORK", nil, 2); mf.lines[nl] = l end
+		l:SetThickness(2)
+		l:SetStartPoint("TOPLEFT", mf, x1, y1)
+		l:SetEndPoint("TOPLEFT", mf, x2, y2)
+		if done then l:SetColorTexture(DOWN_C[1], DOWN_C[2], DOWN_C[3], 0.8) else l:SetColorTexture(A[1], A[2], A[3], 0.75) end
+		l:Show()
+	end
+	local function arrow(x1, y1, x2, y2, done)
+		local dx, dy = x2 - x1, y2 - y1
+		local len = math.sqrt(dx * dx + dy * dy)
+		if len < 34 then return end
+		dx, dy = dx / len, dy / len
+		local mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+		local tipx, tipy = mx + dx * 5, my + dy * 5
+		for _, sgn in ipairs({ 1, -1 }) do
+			na = na + 1
+			mf.arrows = mf.arrows or {}
+			local l = mf.arrows[na]
+			if not l then l = mf:CreateLine(nil, "ARTWORK", nil, 3); mf.arrows[na] = l end
+			l:SetThickness(2)
+			local bx, by = mx - dx * 4 - dy * 5 * sgn, my - dy * 4 + dx * 5 * sgn
+			l:SetStartPoint("TOPLEFT", mf, bx, by)
+			l:SetEndPoint("TOPLEFT", mf, tipx, tipy)
+			if done then l:SetColorTexture(DOWN_C[1], DOWN_C[2], DOWN_C[3], 0.95) else l:SetColorTexture(A[1], A[2], A[3], 1) end
 			l:Show()
 		end
 	end
-	return oy, h
+	local function poly(list, done)
+		-- 가장 긴 구간 하나에만 화살표 (너무 많으면 어지러워서)
+		local best, bl = nil, 0
+		for i = 1, #list - 1 do
+			local a, b = list[i], list[i + 1]
+			seg(a[1], a[2], b[1], b[2], done)
+			local L = (b[1] - a[1]) ^ 2 + (b[2] - a[2]) ^ 2
+			if L > bl then best, bl = i, L end
+		end
+		if best then arrow(list[best][1], list[best][2], list[best + 1][1], list[best + 1][2], done) end
+	end
+	local prev
+	if entr and pts[1] and firstMain and pts[1].npc == firstMain.npc then prev = { entr[1] * w, -entr[2] * h } end
+	for _, p in ipairs(pts) do
+		local list = {}
+		local v = p.npc and via[p.npc]
+		if prev then list[1] = prev end
+		if v then for i = 1, #v - 1, 2 do list[#list + 1] = { v[i] / 100 * w, -v[i + 1] / 100 * h } end end
+		list[#list + 1] = { p[1], p[2] }
+		if #list >= 2 then poly(list, p[3]) end
+		prev = { p[1], p[2] }
+	end
+	-- 입구 표시 (구조도는 스스로 그린다)
+	if entr and not sk then
+		if not mf.entr then
+			mf.entr = mf:CreateTexture(nil, "OVERLAY", nil, 2)
+			mf.entr:SetTexture(Ink.icon("Door"))
+			mf.entr:SetSize(16, 16)
+			mf.entrLabel = Ink:Text(mf, F.semi, 10, C.accent, "CENTER")
+			mf.entrLabel:SetText("입구")
+		end
+		mf.entr:ClearAllPoints()
+		mf.entr:SetPoint("CENTER", mf, "TOPLEFT", entr[1] * w, -entr[2] * h)
+		mf.entr:SetVertexColor(A[1], A[2], A[3], 1)
+		mf.entr:Show()
+		mf.entrLabel:ClearAllPoints()
+		mf.entrLabel:SetPoint("TOP", mf.entr, "BOTTOM", 0, -1)
+		mf.entrLabel:Show()
+	end
 end
 
 -- FOA 구조도 그리기 (DungeonSketch.lua): 어두운 바탕 + 성벽 선 + 통로 + 방 · 물 + 이름 + 입구
