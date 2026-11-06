@@ -2012,7 +2012,8 @@ end
 function M:BuildBoard()
 	local wm = WorldMapFrame
 	local b = CreateFrame("Frame", "FOADungeonBoard", wm)
-	b:SetAllPoints(wm)
+	b:SetPoint("CENTER", wm, "CENTER")
+	b:SetSize(wm:GetWidth(), wm:GetHeight())
 	b:SetFrameStrata("DIALOG")
 	b:SetFrameLevel(20)
 	b:EnableMouse(true)
@@ -2173,6 +2174,7 @@ function M:PaintBoardMap(b, data, leftW, top, avail)
 	for _, t in ipairs(mf.tabs) do t:Hide() end
 	if #floors > 1 then
 		local tx = 0
+		local shownTabs = {}
 		for i, u in ipairs(floors) do
 			local t = mf.tabs[i]
 			if not t then
@@ -2190,10 +2192,16 @@ function M:PaintBoardMap(b, data, leftW, top, avail)
 			t.bg:SetVertexColor(on and a[1] or 1, on and a[2] or 1, on and a[3] or 1, on and 0.1 or 0.03)
 			t.bd:SetVertexColor(on and a[1] or 1, on and a[2] or 1, on and a[3] or 1, on and 0.55 or 0.08)
 			t:SetWidth(math.ceil(t.text:GetStringWidth()) + 18)
-			t:ClearAllPoints()
-			t:SetPoint("TOPLEFT", b, "TOPLEFT", x0 + tx, -(top + 2))
 			t:Show()
+			shownTabs[#shownTabs + 1] = t
 			tx = tx + t:GetWidth() + 6
+		end
+		-- 오른쪽 끝에 맞춰 늘어놓는다 (왼쪽 "DUNGEON MAP" 글자와 안 겹치게)
+		local cx = x0 + w - (tx - 6)
+		for _, t in ipairs(shownTabs) do
+			t:ClearAllPoints()
+			t:SetPoint("TOPLEFT", b, "TOPLEFT", cx, -(top + 2))
+			cx = cx + t:GetWidth() + 6
 		end
 	end
 	-- 보스 핀 + 진행 선 (이 층에 있는 보스만, 순서대로)
@@ -2475,6 +2483,7 @@ function M:ShowBoard(key)
 	local b, f = self.board, self.sidebar
 	self.boardOn = true
 	self.showing = key
+	self:SizeBoard()
 	b:Show()
 	f:ClearAllPoints()
 	f:SetFrameStrata("DIALOG")
@@ -2485,6 +2494,19 @@ function M:ShowBoard(key)
 	f:Show()
 	f.sf:SetVerticalScroll(0)
 	self:PaintSidebar()
+end
+
+-- 던전 화면 크기: 세계 지도보다 크게 (지도를 작게 써도 던전 지도는 크게) · 화면 밖으로는 안 나가게
+function M:SizeBoard()
+	local b, wm = self.board, WorldMapFrame
+	if not (b and wm) then return end
+	local k = (wm:GetEffectiveScale() or 1) / (UIParent:GetEffectiveScale() or 1)
+	local maxW, maxH = UIParent:GetWidth() * 0.94 / k, UIParent:GetHeight() * 0.9 / k
+	local w = math.min(maxW, math.max(wm:GetWidth() or 0, 1240))
+	local h = math.min(maxH, math.max(wm:GetHeight() or 0, 860))
+	b:ClearAllPoints()
+	b:SetPoint("CENTER", wm, "CENTER")
+	b:SetSize(w, h)
 end
 
 function M:HideBoard()
@@ -2515,7 +2537,7 @@ function M:PaintBoard(data)
 	-- 경로: 왼쪽 칸 크기에 맞춰 배율을 고른다
 	local bw, bh = b:GetWidth(), b:GetHeight()
 	local leftW = math.max(260, bw - SB_W - 28 - 56)
-	local top, bottom = 150, 120
+	local top, bottom = 150, 96
 	local avail = bh - top - bottom
 	local oy, h
 	-- 던전 지도 그림이 있으면 진짜 지도 위에 보스 위치 · 진행 선, 없으면 순서 그림
@@ -2535,7 +2557,9 @@ function M:PaintBoard(data)
 		b.routeT:SetText("ROUTE")
 	end
 	b.routeT:ClearAllPoints()
-	b.routeT:SetPoint("BOTTOMLEFT", b, "TOPLEFT", 28, -oy + 14)
+	-- 층 단추가 있으면 그 위로 (겹치지 않게)
+	local tabsUp = mapOy and b.dmap and b.dmap.tabs[1] and b.dmap.tabs[1]:IsShown()
+	b.routeT:SetPoint("BOTTOMLEFT", b, "TOPLEFT", 28, tabsUp and -(top - 6) or (-oy + 14))
 	b.shine:SetSize(leftW * 1.6, bh * 1.2)
 	b.shine:ClearAllPoints()
 	b.shine:SetPoint("CENTER", b, "TOPLEFT", 28 + leftW / 2, -oy - h / 2)

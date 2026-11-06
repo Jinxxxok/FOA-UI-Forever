@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.53.3"
+Ink.version = "0.53.4"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1143,7 +1143,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 			-- 화면에 영향이 없으니 채팅에는 안 띄운다 (/foa log 에는 남김)
 			local fn = tostring(arg2)
 			if fn:find("^MultiBar") or fn:find("^MainActionBar") or fn:find("^MainMenuBar[:%.]") or fn:find("^StanceBar") or fn:find("^PetActionBar")
-				or fn:find("^ActionButton%d") then
+				or fn:find("^ActionButton%d") or fn:find("^StanceButton") or fn:find("^PetActionButton") or fn:find("^MultiCastActionBar") then
 				return
 			end
 			-- 같은 동작은 30초에 한 번만 알린다 (채팅창 도배 방지)
