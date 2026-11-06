@@ -186,6 +186,8 @@ local function Waypoint(x)
 	end
 end
 
+M.PickVendor, M.VendorText, M.Waypoint = PickVendor, VendorText, Waypoint
+
 -------------------------------------------------------------------------------
 -- 패널
 -------------------------------------------------------------------------------

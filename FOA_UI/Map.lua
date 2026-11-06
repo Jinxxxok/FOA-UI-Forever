@@ -332,6 +332,7 @@ local function StylePin(p, kind, key, off)
 	a.icon:SetDesaturated(false)
 	a.icon:SetAlpha(1)
 	a.pill:Hide()
+	p.foaHiddenLabel = nil
 	local col
 	if kind == "svc" or kind == "flight" then
 		local v = SVC[key == "flight" and "flight" or key]
@@ -532,6 +533,138 @@ function M:Refresh()
 	self:DrawBooks(mapID, cv, pinScale)
 	self:PaintBooks(mapID)
 	pcall(self.DrawEntrances, self, mapID, cv, pinScale)
+	self:QueueDeclutter()
+end
+
+-------------------------------------------------------------------------------
+-- 지도 위 이름표 정리 (대도시처럼 표시가 많을 때)
+--  · 모든 표시(서비스 · 상급자 · 비행 · 던전 입구 · 퀘스트 · 책)의 동그라미를 "장애물"로 깔고
+--  · 이름표를 중요한 것부터 아래 → 위 → 오른쪽 → 왼쪽 순서로 빈 자리에 붙인다
+--  · 어디에도 안 들어가면 이름표를 숨기고, 그 표시에 마우스를 올릴 때만 보여 준다
+--  · 마우스를 올린 표시는 맨 위로 올라와서 다른 표시에 가리지 않는다
+-------------------------------------------------------------------------------
+local function Rect(f)
+	if not (f and f:IsShown()) then return end
+	local l, b, w, h = f:GetRect()
+	if not l then return end
+	local s = f:GetEffectiveScale()
+	return { l * s, b * s, (l + w) * s, (b + h) * s }
+end
+local function Hit(a, b, pad)
+	pad = pad or 0
+	return a[1] < b[3] + pad and a[3] > b[1] - pad and a[2] < b[4] + pad and a[4] > b[2] - pad
+end
+
+local function HoverHooks(pin, label)
+	if pin.foaDecl then return end
+	pin.foaDecl = true
+	pin:HookScript("OnEnter", function(self)
+		self.foaLevel = self:GetFrameLevel()
+		self:SetFrameLevel(self.foaLevel + 300)
+		if self.foaHiddenLabel and self.foaLabel then self.foaLabel:Show() end
+	end)
+	pin:HookScript("OnLeave", function(self)
+		if self.foaLevel then self:SetFrameLevel(self.foaLevel); self.foaLevel = nil end
+		if self.foaHiddenLabel and self.foaLabel then self.foaLabel:Hide() end
+	end)
+end
+
+-- 이름표 자리 후보: 표시(icon) 기준으로 붙이는 방법들
+local SIDES = {
+	{ "TOP", "BOTTOM", 0, -2 },   -- 아래
+	{ "BOTTOM", "TOP", 0, 2 },    -- 위
+	{ "LEFT", "RIGHT", 2, 0 },    -- 오른쪽
+	{ "RIGHT", "LEFT", -2, 0 },   -- 왼쪽
+}
+local function CandRect(ir, w, h, side, s)
+	local cx, cy = (ir[1] + ir[3]) / 2, (ir[2] + ir[4]) / 2
+	local dx, dy = side[3] * s, side[4] * s
+	if side[1] == "TOP" then return { cx - w / 2, ir[2] + dy - h, cx + w / 2, ir[2] + dy } end
+	if side[1] == "BOTTOM" then return { cx - w / 2, ir[4] + dy, cx + w / 2, ir[4] + dy + h } end
+	if side[1] == "LEFT" then return { ir[3] + dx, cy - h / 2, ir[3] + dx + w, cy + h / 2 } end
+	return { ir[1] + dx - w, cy - h / 2, ir[1] + dx, cy + h / 2 }
+end
+
+function M:QueueDeclutter()
+	if self.declQueued then return end
+	self.declQueued = true
+	C_Timer.After(0, function()
+		M.declQueued = nil
+		local ok, err = pcall(M.Declutter, M)
+		if not ok and Ink.LogError then Ink:LogError(err) end
+	end)
+end
+
+function M:Declutter()
+	local wm = WorldMapFrame
+	if not (wm and wm:IsShown()) then return end
+	local view = Rect(wm.ScrollContainer)
+	local Q = Ink.modules.QuestMap
+	local items, obstacles = {}, {}
+	local function add(pin, icon, label, prio, defSide, relTo)
+		local ir = Rect(icon or pin)
+		if not ir then return end
+		obstacles[#obstacles + 1] = ir
+		if label then
+			items[#items + 1] = { pin = pin, icon = icon or pin, rel = relTo or icon or pin, label = label, prio = prio, side = defSide, ir = ir }
+		end
+	end
+	for _, p in ipairs(self.entrPins or {}) do if p:IsShown() then add(p, p, p.pill, 1, 3) end end
+	for _, p in ipairs(self.cityPins or {}) do
+		if p:IsShown() then
+			local pill = p.art and p.art.pill
+			add(p, p.art, (pill and (pill:IsShown() or p.foaHiddenLabel) and (pill.t:GetText() or "") ~= "") and pill or nil, 2, 1)
+		end
+	end
+	for _, p in ipairs(self.bookPins or {}) do if p:IsShown() then add(p, p.art or p, nil) end end
+	if Q then
+		for _, pool in ipairs({ Q.pins or {}, Q.tpins or {} }) do
+			for _, p in ipairs(pool) do
+				if p:IsShown() then add(p, p, (p.lv and (p.lv:GetText() or "") ~= "") and p.lv or nil, 3, 1) end
+			end
+		end
+	end
+	table.sort(items, function(a, b) return a.prio < b.prio end)
+	local taken = {}
+	for _, it in ipairs(items) do
+		local lab = it.label
+		HoverHooks(it.pin, lab)
+		it.pin.foaLabel = lab
+		local s = lab:GetEffectiveScale()
+		local w, h = (lab:GetWidth() or 0) * s, (lab:GetHeight() or 0) * s
+		if lab.GetStringWidth and lab:GetObjectType() == "FontString" then w = (lab:GetStringWidth() or 0) * s end
+		local order = { it.side }
+		for i = 1, 4 do if i ~= it.side then order[#order + 1] = i end end
+		local chosen
+		for _, si in ipairs(order) do
+			local r = CandRect(it.ir, w, h, SIDES[si], s)
+			local bad = view and (r[1] < view[1] or r[3] > view[3] or r[2] < view[2] or r[4] > view[4])
+			if not bad then
+				for _, o in ipairs(obstacles) do
+					if o ~= it.ir and Hit(r, o, -1) then bad = true break end
+				end
+			end
+			if not bad then
+				for _, o in ipairs(taken) do if Hit(r, o, 1) then bad = true break end end
+			end
+			if not bad then chosen = { si, r } break end
+		end
+		if chosen then
+			local sd = SIDES[chosen[1]]
+			lab:ClearAllPoints()
+			lab:SetPoint(sd[1], it.rel, sd[2], sd[3], sd[4])
+			lab:Show()
+			it.pin.foaHiddenLabel = nil
+			taken[#taken + 1] = chosen[2]
+		else
+			-- 자리가 없으면 기본 자리로 돌려놓고 숨김 (마우스를 올리면 보임)
+			local sd = SIDES[it.side]
+			lab:ClearAllPoints()
+			lab:SetPoint(sd[1], it.rel, sd[2], sd[3], sd[4])
+			lab:Hide()
+			it.pin.foaHiddenLabel = true
+		end
+	end
 end
 
 -------------------------------------------------------------------------------

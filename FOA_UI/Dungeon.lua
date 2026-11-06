@@ -396,6 +396,7 @@ function M:SourceText(it)
 	if it.srcText then return it.srcText end
 	if it.craft then
 		local t = "제작 · " .. (M.CRAFT_PROF and M.CRAFT_PROF[it.craft] or "전문기술")
+		if it.spell and M.RecipeFor and M:RecipeFor(it.spell) then t = t .. " · 제조법 상인" end
 		local price = ns.AHPrice and ns.AHPrice(it.id)
 		local A = Ink.modules.AHPrice
 		if price and A and A.Money then t = t .. "  ·  경매장 " .. A.Money(price) end
@@ -917,6 +918,46 @@ M.ForMyClass = ForMyClass
 --  요구 레벨은 아이템 정보를 받아야 알 수 있어서, 숙련(노란색 시작)으로 대충 레벨 창을 먼저 좁힌다 (요구 레벨 ≈ 숙련 / 6)
 local CRAFT_PROF = { "대장기술", "가죽세공", "재봉술", "기계공학", "마법부여" }
 M.CRAFT_PROF = CRAFT_PROF
+-- 제작 주문 → 제조법 상인 (RecipeVendors.lua) : 상인 판매 제조법이면 어디서 · 얼마에 · 숙련 몇에
+local recipeBySpell
+function M:RecipeFor(spell)
+	if not recipeBySpell then
+		recipeBySpell = {}
+		for item, e in pairs(ns.RECIPE_VENDORS or {}) do recipeBySpell[e[2]] = { item = item, prof = e[1], req = e[3], list = e[4] } end
+	end
+	return recipeBySpell[spell]
+end
+
+-- BIS 툴팁에 붙이는 제작 정보
+function M:CraftTooltip(it, tt)
+	tt = tt or GameTooltip
+	local prof = CRAFT_PROF[it.craft] or "전문기술"
+	tt:AddLine(" ")
+	tt:AddLine("|cffFFF468FOA|r  제작 · " .. prof, 1, 1, 1)
+	local price = ns.AHPrice and ns.AHPrice(it.id)
+	local A = Ink.modules.AHPrice
+	if price and A and A.Money then tt:AddDoubleLine("경매장 최저가", A.Money(price), 0.7, 0.72, 0.75, 1, 1, 1) end
+	local r = it.spell and self:RecipeFor(it.spell)
+	local P = Ink.modules.Professions
+	if r then
+		local x = P and P.PickVendor and P.PickVendor(r)
+		local rname = C_Item.GetItemNameByID and C_Item.GetItemNameByID(r.item)
+		if not rname and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, r.item) end
+		tt:AddLine("제조법: " .. (rname or "상인 판매 제조법") .. (r.req and r.req > 0 and ("  ·  " .. prof .. " " .. r.req .. " 필요") or ""), 0.96, 0.95, 0.9, true)
+		if x and P.VendorText then
+			local who, where, cost = P.VendorText(x)
+			tt:AddDoubleLine(who or "상인", cost or "", 1, 0.82, 0.32, 1, 1, 1)
+			if where and where ~= "" then tt:AddLine(where, 0.7, 0.72, 0.75) end
+			tt:AddLine("클릭: 제조법 상인 위치를 지도에", 0.56, 0.58, 0.61)
+		elseif r.list and #r.list > 0 then
+			tt:AddLine("내 진영에서 파는 상인이 없어요 (상대 진영 · 중립 상인 확인)", 0.7, 0.72, 0.75, true)
+		end
+	else
+		tt:AddLine("제조법: 전문기술 상급자에게 배우거나 드랍 · 퀘스트로 얻어요 (상인 판매 아님)", 0.7, 0.72, 0.75, true)
+	end
+	tt:AddLine("직접 못 만들면 경매장에서 사거나 제작 의뢰", 0.56, 0.58, 0.61, true)
+end
+
 function M:AddCrafts(pool, lvl)
 	if Ink.db.bisCrafts == false or not ns.FOREVER_CRAFTS then return end
 	self.craftById = self.craftById or {}
@@ -2668,10 +2709,20 @@ function M:BuildBisPanel()
 			if self.link or self.itemID then
 				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 				if self.link then GameTooltip:SetHyperlink(self.link) else GameTooltip:SetItemByID(self.itemID) end
+				if self.it and self.it.craft then pcall(M.CraftTooltip, M, self.it) end
 				GameTooltip:Show()
 			end
 		end)
 		r:SetScript("OnLeave", GameTooltip_Hide)
+		-- 제작템: 클릭하면 제조법 상인 위치를 지도에
+		r:SetScript("OnMouseUp", function(self)
+			local it = self.it
+			if not (it and it.craft and it.spell) then return end
+			local rc = M:RecipeFor(it.spell)
+			local P = Ink.modules.Professions
+			local x = rc and P and P.PickVendor and P.PickVendor(rc)
+			if x and P.Waypoint then P.Waypoint(x) end
+		end)
 		p.ranks[i] = r
 	end
 	p.hint = Ink:Text(p, F.sans, 10, C.dim, "LEFT")
@@ -3045,7 +3096,7 @@ function M:PaintBis()
 		local r = list[i]
 		if r then
 			local it = r.it
-			row.itemID, row.link = it.id, it.link
+			row.itemID, row.link, row.it = it.id, it.link, it
 			row.icon:Set(it.icon, it.quality, SLOT_GLYPH[it.slot or -1])
 			local q = QCOL[it.quality or 1] or QCOL[1]
 			row.name:SetText(it.name or "불러오는 중…")
@@ -3068,7 +3119,7 @@ function M:PaintBis()
 	if #list == 0 then
 		p.ranks[1]:Show()
 		local row = p.ranks[1]
-		row.itemID, row.link = nil, nil
+		row.itemID, row.link, row.it = nil, nil, nil
 		row.badge:Hide(); row.rank:Hide(); row.state:SetText("")
 		row.icon:Set(nil, 0, "")
 		if self.levelMode then

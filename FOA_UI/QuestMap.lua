@@ -618,6 +618,8 @@ function M:Refresh()
 	end
 	for i = nt + 1, #(self.tpins or {}) do self.tpins[i]:Hide() end
 	self:PaintLegend(nOn, nSoon, nRep)
+	local Map = Ink.modules.Map
+	if Map and Map.QueueDeclutter then Map:QueueDeclutter() end
 end
 
 function M:TurnTip(p)
