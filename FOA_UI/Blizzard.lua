@@ -1290,14 +1290,19 @@ function M:SkinActionBars()
 		{ "MultiBarRightButton", 12 }, { "MultiBarLeftButton", 12 }, { "MultiBar5Button", 12 },
 		{ "MultiBar6Button", 12 }, { "MultiBar7Button", 12 },
 	}
-	for _, def in ipairs(bars) do
-		for i = 1, def[2] do SkinActionButton(_G[def[1] .. i]) end
+	-- FOA 바를 쓰면 블리자드 1~8번 바 버튼은 숨겨진 채 남는다. 거기에 스킨을 입히면 버튼이 오염돼서
+	-- 전투 중 블리자드가 그 버튼을 켜고 끌 때 "막힌 동작: ActionButton3:SetShown()" 이 났다 → 건드리지 않는다
+	local own = Ink.db.actionBars ~= false and LibStub and LibStub("LibActionButton-1.0", true)
+	if not own then
+		for _, def in ipairs(bars) do
+			for i = 1, def[2] do SkinActionButton(_G[def[1] .. i]) end
+		end
 	end
 	for i = 1, 10 do
 		SkinActionButton(_G["StanceButton" .. i], true)
 		SkinActionButton(_G["PetActionButton" .. i], true)
 	end
-	for _, holder in ipairs({ _G.MainActionBar, _G.MainMenuBar }) do
+	for _, holder in ipairs(own and {} or { _G.MainActionBar, _G.MainMenuBar }) do
 		if holder then
 			for _, k in ipairs({ "EndCaps", "BorderArt", "Background" }) do
 				if holder[k] and holder[k].SetAlpha then holder[k]:SetAlpha(0) end
@@ -1312,7 +1317,7 @@ function M:SkinActionBars()
 			end
 		end
 	end
-	for _, n in ipairs({ "MultiBarBottomLeft", "MultiBarBottomRight", "StanceBar" }) do HideDividers(_G[n]) end
+	if not own then for _, n in ipairs({ "MultiBarBottomLeft", "MultiBarBottomRight", "StanceBar" }) do HideDividers(_G[n]) end end
 end
 
 -------------------------------------------------------------------------------
