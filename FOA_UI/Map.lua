@@ -235,6 +235,29 @@ local PROF_ICON = { p171 = 136240, p164 = 136241, p202 = 136243, p333 = 136244, 
 	p165 = 136247, p186 = 136248, p197 = 136249, p393 = 134366, p185 = 133971, p129 = 135966 }
 local CLASS_TOKEN = { c1 = "WARRIOR", c2 = "PALADIN", c3 = "HUNTER", c4 = "ROGUE", c5 = "PRIEST", c7 = "SHAMAN", c8 = "MAGE", c9 = "WARLOCK", c11 = "DRUID" }
 local PROF_RING = { 0.79, 0.66, 1.00 }
+
+-- 배 · 비행선 타는 곳 (포에버 기준 · 진영 1호드 2얼라 0공통)
+--  노선: 포에버 공식 발표 · 공략 (스톰윈드 항구 ↔ 아우버다인 신규, 메네실 → 사우스쇼어 → 아우버다인 순환 신규)
+--  자리: 클래식 부두 자리 · 스톰윈드 항구는 포에버 지도 그림의 항구 자리
+local BOAT_RGB = Ink.hex("7FD8C8")
+local PORTS = {
+	{ map = 1453, x = 22.5, y = 34, fac = 2, title = "스톰윈드 항구", to = { "아우버다인 (어둠해안)" } },
+	{ map = 1437, x = 4.6, y = 57.2, fac = 2, title = "메네실 항구 · 북쪽 부두", to = { "사우스쇼어 (힐스브래드)", "아우버다인 (어둠해안)" }, note = "메네실 → 사우스쇼어 → 아우버다인 순환" },
+	{ map = 1437, x = 5.0, y = 63.4, fac = 2, title = "메네실 항구 · 남쪽 부두", to = { "테라모어 섬 (먼지진흙 습지대)" } },
+	{ map = 1439, x = 32.6, y = 42.6, fac = 2, title = "아우버다인 부두", to = { "루테란 마을 (텔드랏실)", "메네실 항구 (저습지)", "스톰윈드 항구" } },
+	{ map = 1438, x = 55.0, y = 93.0, fac = 2, title = "루테란 마을 부두", to = { "아우버다인 (어둠해안)" } },
+	{ map = 1424, x = 50.5, y = 62.5, fac = 2, title = "사우스쇼어 부두", to = { "아우버다인 (어둠해안)", "메네실 항구 (저습지)" }, note = "포에버 신규 노선" },
+	{ map = 1445, x = 71.5, y = 56.3, fac = 2, title = "테라모어 부두", to = { "메네실 항구 (저습지)" } },
+	{ map = 1444, x = 31.0, y = 39.8, fac = 2, title = "페더문 요새 부두", to = { "잊혀진 해안 (페랄라스)" } },
+	{ map = 1444, x = 43.3, y = 42.8, fac = 2, title = "잊혀진 해안 부두", to = { "페더문 요새" } },
+	{ map = 1434, x = 25.9, y = 73.1, fac = 0, title = "무법항 부두", to = { "톱니항 (불모의 땅)" } },
+	{ map = 1413, x = 63.7, y = 38.6, fac = 0, title = "톱니항 부두", to = { "무법항 (가시덤불 골짜기)" } },
+	{ map = 1446, x = 67.0, y = 22.9, fac = 0, title = "스팀휘들 항구", to = { "파우더퓨즈 항구 (리버글레이즈)" }, note = "포에버 신규 노선" },
+	{ map = 1411, x = 50.8, y = 13.6, fac = 1, zep = true, title = "오그리마 비행선 탑", to = { "언더시티 (티리스팔 숲)", "그롬골 주둔지 (가시덤불 골짜기)" } },
+	{ map = 1420, x = 60.8, y = 58.7, fac = 1, zep = true, title = "언더시티 비행선 탑", to = { "오그리마 (듀로타)", "그롬골 주둔지 (가시덤불 골짜기)" } },
+	{ map = 1434, x = 31.6, y = 29.1, fac = 1, zep = true, title = "그롬골 비행선 탑", to = { "오그리마 (듀로타)", "언더시티 (티리스팔 숲)" } },
+}
+M.PORTS = PORTS
 local FLIGHT_OFF = { 0.55, 0.57, 0.60 }
 
 function M:CityPin(i)
@@ -305,7 +328,7 @@ end
 -- kind: "svc" / "prof" / "cls" / "flight"
 local function StylePin(p, kind, key, off)
 	local a = p.art
-	local size = (kind == "svc") and 26 or 22
+	local size = (kind == "svc" or kind == "boat") and 26 or 22
 	p:SetSize(size, size); a:SetSize(size, size)
 	a.icon:RemoveMaskTexture(a.mask)
 	a.icon:SetTexCoord(0, 1, 0, 1)
@@ -327,6 +350,17 @@ local function StylePin(p, kind, key, off)
 			a.pill:SetWidth(a.pill.t:GetStringWidth() + 12)
 			a.pill:Show()
 		end
+	elseif kind == "boat" then
+		-- 배 · 비행선: 아이콘 + 행선지 글자
+		col = BOAT_RGB
+		a.icon:SetTexture(Ink.icon("NpcBoat"))
+		a.icon:SetSize(size * 0.6, size * 0.6)
+		a.icon:SetVertexColor(col[1], col[2], col[3])
+		a.pill.t:SetText(key or "")
+		a.pill.t:SetTextColor(col[1], col[2], col[3])
+		a.pill:SetWidth(a.pill.t:GetStringWidth() + 12)
+		a.pill:Show()
+		off = nil
 	elseif kind == "prof" then
 		col = PROF_RING
 		a.icon:SetTexture(PROF_ICON[key] or 134400)
@@ -345,7 +379,7 @@ local function StylePin(p, kind, key, off)
 		a.icon:SetVertexColor(1, 1, 1)
 	end
 	a.ring:SetVertexColor(col[1], col[2], col[3], off and 0.5 or 1)
-	a.glow:SetVertexColor(col[1], col[2], col[3], off and 0 or ((kind == "svc" or kind == "flight") and 0.26 or 0.14))
+	a.glow:SetVertexColor(col[1], col[2], col[3], off and 0 or ((kind == "svc" or kind == "flight" or kind == "boat") and 0.26 or 0.14))
 	p.tipR, p.tipG, p.tipB = col[1], col[2], col[3]
 end
 
@@ -532,6 +566,22 @@ function M:Refresh()
 						local off = not FlightKnown(id)
 						put(x, y, "flight", "flight", "비행 조련사", off and "아직 안 가 본 비행 지점 (비행 조련사 지도를 한 번 열면 갱신)" or "가 본 비행 지점", nil, off)
 					end
+				end
+			end
+		end
+	end
+	-- 3) 배 · 비행선 타는 곳 (지역 · 도시 지도에서만, 내 진영이 탈 수 있는 것만)
+	if Ink.db.mapBoats ~= false and mapID and cat.boat ~= false and not wide then
+		local fac = UnitFactionGroup("player")
+		local facN = fac == "Horde" and 1 or (fac == "Alliance" and 2 or 0)
+		for _, b in ipairs(PORTS) do
+			if b.fac == 0 or b.fac == facN then
+				local x, y = ToMap(b.map, b.x / 100, b.y / 100, mapID)
+				if x then
+					local short = (b.zep and "비행선 → " or "배 → ") .. b.to[1]:gsub(" %b()", "") .. (#b.to > 1 and (" 외 " .. (#b.to - 1)) or "")
+					local lines = {}
+					for _, d in ipairs(b.to) do lines[#lines + 1] = "→ " .. d end
+					put(x, y, "boat", short, b.title, table.concat(lines, "\n"), b.note)
 				end
 			end
 		end
@@ -1267,6 +1317,7 @@ end
 local CHIPS = {
 	{ "svc", "서비스", "NpcBank", "E3C07A" }, { "cls", "직업 상급자", "NpcTrainer", "F3F2EE" },
 	{ "prof", "전문기술", "Professions", "C9A8FF" }, { "flight", "비행", "NpcFlight", "86DDF2" },
+	{ "boat", "배", "NpcBoat", "7FD8C8" },
 }
 function M:BuildCityLegend()
 	local wm = WorldMapFrame
@@ -1430,7 +1481,21 @@ function M:MakeMovable()
 		wm:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pos[1] / sc, pos[2] / sc)
 	end
 	self.restorePos = restore
-	wm:HookScript("OnShow", function() C_Timer.After(0, restore) end)
+	-- 블리자드 창 관리자가 지도를 왼쪽 기본 자리에 붙이는 순간 바로 내 자리로 되돌린다
+	--  (예전엔 다음 프레임에 옮겨서 한 번 왼쪽에 보였다가 순간이동하는 것처럼 보였다)
+	local busy
+	local function snap()
+		if busy then return end
+		local pos = Ink.db.mapPos
+		if not pos or InCombatLockdown() or (wm.IsMaximized and wm:IsMaximized()) then return end
+		busy = true
+		local sc = pos.ui and (wm:GetScale() or 1) or 1
+		wm:ClearAllPoints()
+		wm:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pos[1] / sc, pos[2] / sc)
+		busy = false
+	end
+	hooksecurefunc(wm, "SetPoint", function() if not busy and wm:IsShown() then snap() end end)
+	wm:HookScript("OnShow", function() restore(); C_Timer.After(0, restore) end)
 	for _, fn in ipairs({ "Maximize", "Minimize" }) do
 		if wm[fn] then hooksecurefunc(wm, fn, function() C_Timer.After(0, function() restore(); M:LayoutUnder() end) end) end
 	end

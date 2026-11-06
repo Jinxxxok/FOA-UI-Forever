@@ -191,6 +191,8 @@ function M:BuildBar(d)
 		end
 		b:SetState(0, "action", (d.page - 1) * 12 + i)
 		b.foaCmd = d.bind .. i
+		-- 잠금: Shift(블리자드 "행동 집기" 키)를 누른 채 끌어야 빠진다
+		b:SetAttribute("buttonlock", Ink.db.barLock ~= false)
 		d.buttons[i] = b
 		Skin(b)
 	end
@@ -573,6 +575,19 @@ function M:Active()
 	return self.on and true or false
 end
 
+-- 행동단축바 잠금 켜고 끄기 (전투 밖에서 바로) · 블리자드 태세 · 소환수 바도 같은 설정으로
+function M:ApplyLock()
+	if InCombatLockdown() then self.lockPending = true return end
+	self.lockPending = nil
+	local on = Ink.db.barLock ~= false
+	for _, d in ipairs(self.list or {}) do
+		for _, b in ipairs(d.buttons or {}) do
+			if b.SetAttribute and b.config then b:SetAttribute("buttonlock", on) end
+		end
+	end
+	if C_CVar and C_CVar.GetCVar and C_CVar.GetCVar("lockActionBars") ~= nil then pcall(C_CVar.SetCVar, "lockActionBars", on and "1" or "0") end
+end
+
 function M:Init()
 	if Ink.db.actionBars == false or not LAB then return end
 	self.on = true
@@ -637,6 +652,7 @@ function M:Init()
 		end)
 	end
 
+	pcall(self.ApplyLock, self)
 	local ev = CreateFrame("Frame")
 	ev:RegisterEvent("UPDATE_BINDINGS")
 	ev:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -654,6 +670,7 @@ function M:Init()
 			if M.pendingBind then M:UpdateBindings() end
 			if M.pendingLayout then M.pendingLayout = nil; M:LayoutAll() end
 			if M.pendingHide then M.pendingHide = nil; M:HideAllBlizz() end
+			if M.lockPending then M:ApplyLock() end
 		else
 			M:QueueLayout()
 		end

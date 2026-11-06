@@ -189,10 +189,16 @@ local EFFECTS = {
 	{ "회피", "dodge", "dodge", true },
 	{ "무기 막기", "parry", "parry", true },
 }
+-- 내 능력치를 올리는 효과만 (예: "자신에게 걸리는 침묵 효과의 적중률이 4% 감소" 는 적중이 아니라 방어 효과)
+local function Positive(text, low)
+	if text:find("감소") or text:find("걸리는") or text:find("받는") or low:find("decreas") or low:find("reduc")
+		or low:find("against you") or low:find("you are hit") then return false end
+	return text:find("증가") or text:find("향상") or low:find("increas") or low:find("improv")
+end
 local function ParseEffect(text, out)
 	local low = text:lower()
 	for _, e in ipairs(EFFECTS) do
-		if text:find(e[1]) or low:find(e[2]) then
+		if (text:find(e[1]) or low:find(e[2])) and (not e[4] or Positive(text, low)) then
 			-- "0.3%" 같은 소수도 그대로 (예전엔 "3%"로 읽어서 10배가 됐다)
 			local n = tonumber(text:match("(%d+%.?%d*)%%")) or tonumber(text:match("(%d+%.?%d*)"))
 			if n and (not e[4] or text:find("%%")) then

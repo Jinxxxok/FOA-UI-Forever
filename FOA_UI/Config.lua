@@ -61,7 +61,12 @@ local function Check(parent, label, desc, key)
 	f:SetScript("OnClick", function()
 		Ink.db[key] = not Ink.db[key]
 		refresh()
-		M:NeedReload()
+		if key == "barLock" then
+			local A = Ink.modules.ActionBars
+			if A and A.ApplyLock then A:ApplyLock() end
+		else
+			M:NeedReload()
+		end
 	end)
 	refresh()
 	return f
@@ -1566,6 +1571,7 @@ function M:BuildPanel()
 		{ "NPC 역할 아이콘", "상인 · 수리 · 경매장 · 은행 · 여관 등 NPC 머리 위에 아이콘.", "npcIcons" },
 		{ "퀘스트 오브젝트 표시", "앞에 있는 줍기 · 부수기 퀘스트 물체 위에 노란 배지.", "questObjects" },
 		{ "새 주문 자동 배치", "새로 배운 주문을 행동단축바 빈 칸에 넣습니다.", "autoPush" },
+		{ "행동단축바 잠금", "실수로 기술이 빠지지 않게. Shift 를 누른 채 끌어야 빠져요. (바로 적용)", "barLock" },
 		{ "전투 중 시계 · 메뉴 숨기기", "전투가 시작되면 위 시계와 진영 문양을 숨깁니다.", "combatHide" },
 	})
 
