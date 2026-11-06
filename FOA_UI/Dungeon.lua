@@ -2167,6 +2167,8 @@ function M:PaintBoardMap(b, data, leftW, top, avail)
 			end
 		end
 	end
+	-- 게임에 던전 지도가 없는 곳: FOA 구조도
+	self:PaintSketch(mf, floor, w, h)
 	-- 층 단추
 	for _, t in ipairs(mf.tabs) do t:Hide() end
 	if #floors > 1 then
@@ -2265,6 +2267,117 @@ function M:PaintBoardMap(b, data, leftW, top, avail)
 		end
 	end
 	return oy, h
+end
+
+-- FOA 구조도 그리기 (DungeonSketch.lua): 어두운 바탕 + 성벽 선 + 통로 + 방 · 물 + 이름 + 입구
+function M:PaintSketch(mf, floor, w, h)
+	local sk = ns.DUNGEON_SKETCH and ns.DUNGEON_SKETCH[floor]
+	mf.sk = mf.sk or { tex = {}, lines = {}, text = {}, ntex = 0, nline = 0, ntext = 0 }
+	local P = mf.sk
+	for _, t in ipairs(P.tex) do t:Hide() end
+	for _, l in ipairs(P.lines) do l:Hide() end
+	for _, t in ipairs(P.text) do t:Hide() end
+	if P.bg then P.bg:SetShown(sk ~= nil) end
+	if P.door then P.door:SetShown(sk ~= nil) end
+	if not sk then return end
+	if not P.bg then
+		P.bg = mf:CreateTexture(nil, "BACKGROUND", nil, -7)
+		P.bg:SetAllPoints()
+		P.grid = {}
+	end
+	P.bg:SetColorTexture(0.055, 0.062, 0.078, 1)
+	P.bg:Show()
+	local nt, nl, nx = 0, 0, 0
+	local function Tex(layer, sub)
+		nt = nt + 1
+		local t = P.tex[nt]
+		if not t then t = mf:CreateTexture(nil, layer or "BORDER", nil, sub or 0); P.tex[nt] = t end
+		t:SetDrawLayer(layer or "BORDER", sub or 0)
+		t:ClearAllPoints()
+		t:SetVertexColor(1, 1, 1, 1)
+		t:Show()
+		return t
+	end
+	local function Line(x1, y1, x2, y2, th, r, g, b, a, sub)
+		if not mf.CreateLine then return end
+		nl = nl + 1
+		local l = P.lines[nl]
+		if not l then l = mf:CreateLine(nil, "BORDER", nil, 1); P.lines[nl] = l end
+		l:SetDrawLayer("BORDER", sub or 1)
+		l:SetThickness(th)
+		l:SetColorTexture(r, g, b, a)
+		l:SetStartPoint("TOPLEFT", mf, x1 * w, -y1 * h)
+		l:SetEndPoint("TOPLEFT", mf, x2 * w, -y2 * h)
+		l:Show()
+	end
+	local function Label(x, y, txt)
+		nx = nx + 1
+		local t = P.text[nx]
+		if not t then t = Ink:Text(mf, F.semi, 9, C.muted, "CENTER"); P.text[nx] = t end
+		t:ClearAllPoints()
+		t:SetPoint("CENTER", mf, "TOPLEFT", x * w, -y * h)
+		t:SetText(txt)
+		t:SetTextColor(0.62, 0.65, 0.70)
+		t:Show()
+	end
+	local k = w / 1002
+	-- 성벽
+	local o = sk.outline
+	if o then
+		for i = 1, #o - 3, 2 do Line(o[i], o[i + 1], o[i + 2], o[i + 3], math.max(2, 4 * k), 1, 1, 1, 0.14, 0) end
+	end
+	-- 통로 (두껍고 옅게 + 가운데 가는 선)
+	for _, pth in ipairs(sk.paths or {}) do
+		for i = 1, #pth - 3, 2 do
+			Line(pth[i], pth[i + 1], pth[i + 2], pth[i + 3], math.max(4, 14 * k), 0.78, 0.80, 0.86, 0.10, 1)
+			Line(pth[i], pth[i + 1], pth[i + 2], pth[i + 3], 1, 0.80, 0.83, 0.90, 0.22, 2)
+		end
+	end
+	-- 방 · 물 (네모: 옅은 면 + 가는 테두리 / 원: 원판 + 고리 / 물: 푸른 면)
+	for _, r in ipairs(sk.rooms or {}) do
+		local x, y, rw, rh, name, shape = r[1], r[2], r[3], r[4], r[5], r[6]
+		local fill = Tex("BORDER", 3)
+		fill:SetPoint("TOPLEFT", mf, "TOPLEFT", x * w, -y * h)
+		fill:SetSize(rw * w, rh * h)
+		if shape == "o" then
+			fill:SetTexture(Ink.tex.disc)
+			fill:SetVertexColor(0.80, 0.82, 0.88, 0.12)
+			local edge = Tex("BORDER", 4)
+			edge:SetTexture(Ink.tex.ring)
+			edge:SetPoint("TOPLEFT", mf, "TOPLEFT", x * w, -y * h)
+			edge:SetSize(rw * w, rh * h)
+			edge:SetVertexColor(0.80, 0.82, 0.88, 0.35)
+		elseif shape == "w" then
+			fill:SetColorTexture(0.30, 0.50, 0.72, 0.26)
+		else
+			fill:SetColorTexture(0.80, 0.82, 0.88, 0.09)
+			local x2, y2 = x + rw, y + rh
+			for _, e in ipairs({ { x, y, x2, y }, { x2, y, x2, y2 }, { x2, y2, x, y2 }, { x, y2, x, y } }) do
+				Line(e[1], e[2], e[3], e[4], 1, 0.80, 0.83, 0.90, 0.30, 4)
+			end
+		end
+		-- 이름: 네모 방은 안쪽 위, 원 · 물은 아래쪽
+		if name then
+			if shape == "o" or shape == "w" then Label(x + rw / 2, y + rh + 0.035, name) else Label(x + rw / 2, y + 0.035, name) end
+		end
+	end
+	-- 입구
+	if sk.entr then
+		if not P.door then
+			P.door = mf:CreateTexture(nil, "ARTWORK", nil, 1)
+			P.door:SetTexture(Ink.icon("Door"))
+		end
+		P.door:SetSize(16, 16)
+		P.door:ClearAllPoints()
+		P.door:SetPoint("CENTER", mf, "TOPLEFT", sk.entr[1] * w, -sk.entr[2] * h)
+		P.door:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.9)
+		P.door:Show()
+		Label(sk.entr[1], math.min(0.97, sk.entr[2] + 0.04), "입구")
+	elseif P.door then
+		P.door:Hide()
+	end
+	-- 구조도라는 표시
+	Label(0.88, 0.05, "FOA 구조도 · 대략")
 end
 
 function M:BuildBoardMap(b)

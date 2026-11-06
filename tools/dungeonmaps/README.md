@@ -8,3 +8,5 @@
 - step14: dmaps.json 으로 정리 → `gen_dmaps.py` 로 FOA_UI/DungeonMaps.lua
 
 - manual_pos.json: 게임 도감에 위치가 없는 던전(개편 전 모습)의 보스 자리를 지도 그림의 보스 표시와 포에버 공략 설명을 보고 직접 찍은 것 → DungeonMaps.lua pos 끝에 덧붙임
+
+- DungeonSketch.lua: 포에버 신규 던전. 달라란은 게임 파일의 달라란 · 마법의 뒤안길 지도 그림(interface/worldmap/dalaran) 그대로, 영주의 전당 · 로데론의 폐허 · 발굴 현장은 게임에 지도가 없어서 공략 설명을 보고 FOA가 그린 구조도(방 · 통로 · 물 · 보스 자리)
