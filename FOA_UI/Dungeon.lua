@@ -2865,14 +2865,25 @@ local function QuestRow(p, i)
 	r.lvl:SetWidth(26)
 	r.title = Ink:Text(r, F.semi, 12, C.text, "LEFT")
 	r.title:SetPoint("TOPLEFT", 40, -8)
-	r.title:SetPoint("RIGHT", -74, 0)
+	r.title:SetPoint("RIGHT", -96, 0)
 	r.title:SetWordWrap(false)
 	r.sub = Ink:Text(r, F.sans, 10, C.muted, "LEFT")
 	r.sub:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -4)
 	r.sub:SetPoint("RIGHT", -8, 0)
 	r.sub:SetWordWrap(false)
-	r.state = Ink:Text(r, F.semi, 10, C.green, "RIGHT")
-	r.state:SetPoint("TOPRIGHT", -8, -9)
+	-- 상태 칩: 진행 중 = 노란 바탕 · 보고 가능 = 초록 바탕 · 받을 수 있음 = 초록 테두리 · 완료 = 체크
+	r.chip = CreateFrame("Frame", nil, r)
+	r.chip:SetHeight(18)
+	r.chip:SetPoint("TOPRIGHT", -6, -7)
+	r.chip.bg = Ink:Round(r.chip, "BACKGROUND", true, false)
+	r.chip.bg:SetAllPoints()
+	r.chip.bd = Ink:Round(r.chip, "BORDER", true, true)
+	r.chip.bd:SetAllPoints()
+	r.chip.icon = r.chip:CreateTexture(nil, "ARTWORK")
+	r.chip.icon:SetSize(10, 10)
+	r.chip.icon:SetPoint("LEFT", 6, 0)
+	r.state = Ink:Text(r.chip, F.semi, 10, C.green, "RIGHT")
+	r.state:SetPoint("RIGHT", -7, 0)
 	r.div = r:CreateTexture(nil, "ARTWORK")
 	r.div:SetColorTexture(1, 1, 1, 0.05)
 	r.div:SetHeight(1)
@@ -2997,7 +3008,44 @@ function M:PaintQuests()
 	p.sum:SetText(string.format("|cff6FD39A가능 %d|r  ·  |cffFFF468진행 %d|r  ·  선행 필요 %d  ·  완료 %d", nOk, nLog, nPre, nDone))
 	local LC = Ink.modules.Quest and Ink.modules.Quest.LevelColor
 	local y = 0
+	-- 상태별 묶음 제목: 진행 중 · 받을 수 있음 · 아직 못 받음 · 완료
+	local GROUP = { log = "진행 중", ok = "받을 수 있음", soon = "아직 못 받음", pre = "아직 못 받음", done = "완료" }
+	local GCOL = { log = C.accent, ok = C.green, soon = C.muted, pre = C.muted, done = C.dim }
+	local gcount = {}
+	for _, e in ipairs(list) do gcount[GROUP[e.state]] = (gcount[GROUP[e.state]] or 0) + 1 end
+	p.heads = p.heads or {}
+	local nh, lastG = 0, nil
 	for i, e in ipairs(list) do
+		local gname = GROUP[e.state]
+		if gname ~= lastG then
+			lastG = gname
+			nh = nh + 1
+			local h = p.heads[nh]
+			if not h then
+				h = CreateFrame("Frame", nil, p.body)
+				h:SetSize(DQ_W - 16, 26)
+				h.dot = h:CreateTexture(nil, "ARTWORK")
+				h.dot:SetSize(6, 6)
+				h.dot:SetPoint("LEFT", 8, -2)
+				h.dot:SetTexture(Ink.tex.disc)
+				h.t = Ink:Text(h, F.semi, 11, C.text, "LEFT")
+				h.t:SetPoint("LEFT", h.dot, "RIGHT", 7, 0)
+				h.line = h:CreateTexture(nil, "ARTWORK")
+				h.line:SetHeight(1)
+				h.line:SetPoint("LEFT", h.t, "RIGHT", 8, 0)
+				h.line:SetPoint("RIGHT", -8, -2)
+				p.heads[nh] = h
+			end
+			local gc = GCOL[e.state]
+			h.dot:SetVertexColor(gc[1], gc[2], gc[3])
+			h.t:SetText(gname .. "  |cff8E939B" .. (gcount[gname] or 0) .. "|r")
+			h.t:SetTextColor(gc[1], gc[2], gc[3])
+			h.line:SetColorTexture(gc[1], gc[2], gc[3], 0.15)
+			h:ClearAllPoints()
+			h:SetPoint("TOPLEFT", p.body, "TOPLEFT", 0, -(y + (nh > 1 and 8 or 0)))
+			h:Show()
+			y = y + 26 + (nh > 1 and 8 or 0)
+		end
 		local r = QuestRow(p, i)
 		r.e = e
 		local q = e.q
@@ -3015,16 +3063,42 @@ function M:PaintQuests()
 		if #q[8] > 0 then sub = sub .. "  ·  선행 " .. #q[8] end
 		r.sub:SetText(sub)
 		local st = DQ_STATE[e.state]
-		local stText = st[1]
-		if e.state == "soon" then stText = q[2] .. "레벨부터" elseif e.state == "pre" then stText = "선행 " .. e.miss .. "개 남음" end
+		local stText, col, fill, edge, icon = st[1], st[2], 0, 0, nil
+		if e.state == "log" then
+			local ready = C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(e.id)
+			if ready then
+				stText, col, fill, icon = "보고 가능", C.green, 0.18, "Check"
+			else
+				local have, need = 0, 0
+				for _, ob in ipairs(C_QuestLog.GetQuestObjectives and C_QuestLog.GetQuestObjectives(e.id) or {}) do
+					have = have + (ob.numFulfilled or 0); need = need + (ob.numRequired or 0)
+				end
+				stText, fill = "진행 중" .. (need > 0 and ("  " .. have .. "/" .. need) or ""), 0.18
+			end
+		elseif e.state == "ok" then edge = 0.55
+		elseif e.state == "done" then stText, icon, fill = "완료", "Check", 0.08; col = C.green
+		elseif e.state == "soon" then stText = q[2] .. "레벨부터"
+		elseif e.state == "pre" then stText = "선행 " .. e.miss .. "개 남음" end
 		r.state:SetText(stText)
-		r.state:SetTextColor(st[2][1], st[2][2], st[2][3])
+		r.state:SetTextColor(col[1], col[2], col[3], e.state == "done" and 0.75 or 1)
+		r.chip.bg:SetVertexColor(col[1], col[2], col[3], fill)
+		r.chip.bd:SetVertexColor(col[1], col[2], col[3], edge)
+		if icon then
+			r.chip.icon:SetTexture(Ink.icon(icon))
+			r.chip.icon:SetVertexColor(col[1], col[2], col[3])
+			r.chip.icon:Show()
+		else
+			r.chip.icon:Hide()
+		end
+		r.chip:SetWidth(math.ceil(r.state:GetStringWidth()) + (icon and 28 or 14))
+		r:SetAlpha(e.state == "done" and 0.7 or 1)
 		r:ClearAllPoints()
 		r:SetPoint("TOPLEFT", p.body, "TOPLEFT", 0, -y)
 		r:Show()
 		y = y + DQ_ROW
 	end
 	for i = #list + 1, #p.rows do p.rows[i]:Hide() end
+	for i = nh + 1, #(p.heads or {}) do p.heads[i]:Hide() end
 	p.body:SetHeight(math.max(10, y))
 	p.empty:SetText(#list == 0 and "이 던전에 내가 받을 수 있는 퀘스트가 없어요" or "")
 end
