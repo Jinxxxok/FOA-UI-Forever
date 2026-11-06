@@ -1948,6 +1948,7 @@ function M:PaintSidebar()
 	end
 	self:PaintList(f, data, mode)
 	if self.boardOn then self:PaintBoard(data) end
+	pcall(self.PaintQuests, self)
 end
 
 function M:PaintRetailTop(f, data, jid)
@@ -2670,6 +2671,364 @@ function M:PaintBoard(data)
 	end
 end
 
+-------------------------------------------------------------------------------
+-- 던전 퀘스트 (DungeonQuests.lua · AllTheThings MIT): 던전 전리품 옆 칸
+--  · 고른 던전의 퀘스트를 상태순으로 (진행 중 · 받을 수 있음 · 레벨 부족 · 선행 필요 · 완료)
+--  · 마우스를 올리면 시작 NPC · 위치, 선행 퀘스트 순서, 보상, 경험치 · 돈(게임이 알려 주면)
+--  · 클릭하면 시작 위치를 지도에
+-------------------------------------------------------------------------------
+local DQ_INST = {
+	deadmines = 63, shadowfang = 64, ragefire = 226, blackfathom = 227, brd = 228, lbrs = 229, ubrs = 229,
+	dm_east = 230, dm_west = 230, dm_north = 230, gnomeregan = 231, maraudon = 232, downs = 233, kraul = 234,
+	strat_live = 236, strat_ud = 236, sunken = 237, stockade = 238, uldaman = 239, wailing = 240, zulfarrak = 241,
+	scholo = 246, sm_gy = 316, sm_lib = 316, sm_arm = 316, sm_cath = 316, onyxia = 760,
+	thanes = 3065, lordaeron = 2999, excavation = 2998, dalaran = 2959,
+}
+M.DQ_INST = DQ_INST
+local DQ_W = 300
+local DQ_ROW = 46
+
+local dqIndex, qdbIndex
+-- 퀘스트 → 선행 목록 (던전 퀘스트 자료 + 전체 퀘스트 시작 자료)
+local function PreOf(id)
+	if not dqIndex then
+		dqIndex = {}
+		for _, list in pairs(ns.DUNGEON_QUESTS or {}) do for _, q in ipairs(list) do dqIndex[q[1]] = q end end
+	end
+	local q = dqIndex[id]
+	if q then return q[8], q end
+	if not qdbIndex then
+		qdbIndex = {}
+		for _, r in ipairs(ns.QUEST_DB or {}) do qdbIndex[r[1]] = r end
+	end
+	local r = qdbIndex[id]
+	if r then return r[7], nil, r end
+	return {}
+end
+
+local function QTitle(id)
+	local t = C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(id)
+	if t and t ~= "" then return t end
+	if C_QuestLog.RequestLoadQuestByID then pcall(C_QuestLog.RequestLoadQuestByID, id) end
+end
+local function QDone(id) return C_QuestLog.IsQuestFlaggedCompleted and C_QuestLog.IsQuestFlaggedCompleted(id) end
+local function QInLog(id)
+	if C_QuestLog.IsOnQuest then return C_QuestLog.IsOnQuest(id) end
+	return C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(id) ~= nil
+end
+local function NpcOf(id)
+	local Q = Ink.modules.QuestMap
+	return id and id > 0 and Q and Q.GiverName and Q:GiverName(id) or nil
+end
+local function ZoneName(map)
+	local info = map and map > 0 and C_Map.GetMapInfo and C_Map.GetMapInfo(map)
+	return info and info.name
+end
+
+-- 선행 퀘스트를 처음부터 순서대로 (깊이 8까지, 갈래는 모두)
+local function Chain(id, out, seen, depth)
+	if depth > 8 then return end
+	for _, p in ipairs((PreOf(id))) do
+		if not seen[p] then
+			seen[p] = true
+			-- 이미 끝낸 선행의 앞 퀘스트들은 당연히 끝났으니 더 거슬러 올라가지 않는다
+			if not QDone(p) then Chain(p, out, seen, depth + 1) end
+			out[#out + 1] = p
+		end
+	end
+end
+
+-- 내가 받을 수 있는 퀘스트 목록 + 상태
+function M:DungeonQuestList(key)
+	local inst = DQ_INST[key or ""]
+	local list = inst and ns.DUNGEON_QUESTS and ns.DUNGEON_QUESTS[inst]
+	if not list then return {} end
+	local fac = UnitFactionGroup("player")
+	local facN = fac == "Horde" and 1 or (fac == "Alliance" and 2 or 0)
+	local _, _, classID = UnitClass("player")
+	local lvl = UnitLevel("player") or 1
+	local out = {}
+	for _, q in ipairs(list) do
+		local okCls = #q[10] == 0
+		if not okCls then for _, c in ipairs(q[10]) do if c == classID then okCls = true break end end end
+		if (q[3] == 0 or q[3] == facN) and okCls and q[12] ~= 1 then
+			local e = { q = q, id = q[1], lvl = q[2] }
+			local miss = 0
+			for _, p in ipairs(q[8]) do if not QDone(p) then miss = miss + 1 end end
+			if QDone(q[1]) then e.state, e.order = "done", 5
+			elseif QInLog(q[1]) then e.state, e.order = "log", 1
+			elseif miss > 0 then e.state, e.order, e.miss = "pre", 4, miss
+			elseif q[2] > lvl then e.state, e.order = "soon", 3
+			else e.state, e.order = "ok", 2 end
+			out[#out + 1] = e
+		end
+	end
+	table.sort(out, function(a, b)
+		if a.order ~= b.order then return a.order < b.order end
+		if a.lvl ~= b.lvl then return a.lvl < b.lvl end
+		return a.id < b.id
+	end)
+	return out
+end
+
+local DQ_STATE = {
+	log = { "진행 중", C.accent }, ok = { "받을 수 있음", C.green }, soon = { "", C.orange },
+	pre = { "", C.muted }, done = { "완료", C.dim },
+}
+
+function M:BuildQuestPanel()
+	local p = CreateFrame("Frame", "FOADungeonQuests", UIParent)
+	p:SetSize(DQ_W, 600)
+	p:SetFrameStrata("HIGH")
+	p:SetClampedToScreen(true)
+	p:EnableMouse(true)
+	p:Hide()
+	Panel(p, C.green)
+	p.tag = Ink:Text(p, F.latinB, 9, C.muted, "LEFT")
+	p.tag:SetPoint("TOPLEFT", 16, -14)
+	p.tag:SetText("DUNGEON QUESTS")
+	p.title = Ink:Text(p, F.bold, 15, C.text, "LEFT")
+	p.title:SetPoint("TOPLEFT", p.tag, "BOTTOMLEFT", 0, -4)
+	p.sum = Ink:Text(p, F.sans, 10, C.muted, "LEFT")
+	p.sum:SetPoint("TOPLEFT", p.title, "BOTTOMLEFT", 0, -5)
+	p.sum:SetWidth(DQ_W - 32)
+	p.close = CreateFrame("Button", nil, p)
+	p.close:SetSize(24, 24)
+	p.close:SetPoint("TOPRIGHT", -10, -10)
+	p.close.icon = p.close:CreateTexture(nil, "ARTWORK")
+	p.close.icon:SetTexture(Ink.icon("Cross"))
+	p.close.icon:SetSize(11, 11)
+	p.close.icon:SetPoint("CENTER")
+	p.close.icon:SetVertexColor(C.muted[1], C.muted[2], C.muted[3])
+	p.close:SetScript("OnClick", function() Ink.db.dQuestsHide = true; M:PaintQuests() end)
+	p.line = p:CreateTexture(nil, "ARTWORK")
+	p.line:SetColorTexture(1, 1, 1, 0.06)
+	p.line:SetHeight(1)
+	p.line:SetPoint("TOPLEFT", 12, -72)
+	p.line:SetPoint("TOPRIGHT", -12, -72)
+	local sf = CreateFrame("ScrollFrame", nil, p)
+	sf:SetPoint("TOPLEFT", 8, -78)
+	sf:SetPoint("BOTTOMRIGHT", -8, 10)
+	sf:EnableMouseWheel(true)
+	local body = CreateFrame("Frame", nil, sf)
+	body:SetSize(DQ_W - 16, 10)
+	sf:SetScrollChild(body)
+	sf:SetScript("OnMouseWheel", function(self, d)
+		local max = math.max(0, body:GetHeight() - self:GetHeight())
+		self:SetVerticalScroll(math.max(0, math.min(max, self:GetVerticalScroll() - d * DQ_ROW * 1.5)))
+	end)
+	p.sf, p.body, p.rows = sf, body, {}
+	p.empty = Ink:Text(p, F.sans, 11, C.muted, "CENTER")
+	p.empty:SetPoint("TOP", p.line, "BOTTOM", 0, -40)
+	p.empty:SetWidth(DQ_W - 40)
+	-- 접혀 있을 때 전리품 칸 옆에 붙는 작은 세로 탭
+	local tab = CreateFrame("Button", nil, UIParent)
+	tab:SetSize(26, 96)
+	tab:SetFrameStrata("HIGH")
+	tab.bg = Ink:Round(tab, "BACKGROUND", true, false)
+	tab.bg:SetAllPoints()
+	tab.bg:SetVertexColor(0.035, 0.04, 0.052, 0.96)
+	tab.bd = Ink:Round(tab, "BORDER", true, true)
+	tab.bd:SetAllPoints()
+	tab.bd:SetVertexColor(C.green[1], C.green[2], C.green[3], 0.5)
+	tab.t = Ink:Text(tab, F.semi, 11, C.green, "CENTER")
+	tab.t:SetPoint("CENTER")
+	tab:SetScript("OnClick", function() Ink.db.dQuestsHide = nil; M:PaintQuests() end)
+	tab:Hide()
+	p.tab = tab
+	self.questPanel = p
+	-- 퀘스트 이름이 늦게 도착하면 다시
+	local ev = CreateFrame("Frame")
+	pcall(ev.RegisterEvent, ev, "QUEST_DATA_LOAD_RESULT")
+	pcall(ev.RegisterEvent, ev, "QUEST_LOG_UPDATE")
+	pcall(ev.RegisterEvent, ev, "QUEST_TURNED_IN")
+	local pend
+	ev:SetScript("OnEvent", function()
+		if pend or not (p:IsShown() or tab:IsShown()) then return end
+		pend = true
+		C_Timer.After(0.4, function() pend = nil; M:PaintQuests() end)
+	end)
+	return p
+end
+
+local function QuestRow(p, i)
+	local r = p.rows[i]
+	if r then return r end
+	r = CreateFrame("Button", nil, p.body)
+	r:SetSize(DQ_W - 16, DQ_ROW)
+	r.hl = r:CreateTexture(nil, "BACKGROUND")
+	r.hl:SetAllPoints()
+	r.hl:SetColorTexture(1, 1, 1, 0.04)
+	r.hl:Hide()
+	r.lvl = Ink:Text(r, F.latinB, 13, C.text, "CENTER")
+	r.lvl:SetPoint("LEFT", 6, 0)
+	r.lvl:SetWidth(26)
+	r.title = Ink:Text(r, F.semi, 12, C.text, "LEFT")
+	r.title:SetPoint("TOPLEFT", 40, -8)
+	r.title:SetPoint("RIGHT", -74, 0)
+	r.title:SetWordWrap(false)
+	r.sub = Ink:Text(r, F.sans, 10, C.muted, "LEFT")
+	r.sub:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -4)
+	r.sub:SetPoint("RIGHT", -8, 0)
+	r.sub:SetWordWrap(false)
+	r.state = Ink:Text(r, F.semi, 10, C.green, "RIGHT")
+	r.state:SetPoint("TOPRIGHT", -8, -9)
+	r.div = r:CreateTexture(nil, "ARTWORK")
+	r.div:SetColorTexture(1, 1, 1, 0.05)
+	r.div:SetHeight(1)
+	r.div:SetPoint("BOTTOMLEFT", 6, 0)
+	r.div:SetPoint("BOTTOMRIGHT", -6, 0)
+	r:SetScript("OnEnter", function(self) self.hl:Show(); M:QuestTip(self) end)
+	r:SetScript("OnLeave", function(self) self.hl:Hide(); GameTooltip:Hide() end)
+	r:SetScript("OnClick", function(self)
+		local q = self.e and self.e.q
+		local Q = Ink.modules.QuestMap
+		if q and q[4] > 0 and Q and Q.Waypoint then Q:Waypoint({ mapID = q[4], wx = q[5] / 100, wy = q[6] / 100 }) end
+	end)
+	p.rows[i] = r
+	return r
+end
+
+function M:QuestTip(r)
+	local e = r.e
+	if not e then return end
+	local q = e.q
+	local tt = GameTooltip
+	tt:SetOwner(r, "ANCHOR_RIGHT")
+	tt:AddLine(QTitle(e.id) or ("퀘스트 #" .. e.id), 1, 1, 1)
+	local LC = Ink.modules.Quest and Ink.modules.Quest.LevelColor
+	local lc = (LC and q[2] > 0) and LC(q[2]) or C.soft
+	tt:AddDoubleLine(q[2] > 0 and (q[2] .. "레벨부터") or "레벨 제한 없음", q[3] == 1 and "호드" or (q[3] == 2 and "얼라이언스" or "공통"), lc[1], lc[2], lc[3], 0.7, 0.72, 0.75)
+	-- 시작
+	tt:AddLine(" ")
+	local giver, zone = NpcOf(q[7]), ZoneName(q[4])
+	if q[7] > 0 then
+		tt:AddLine("시작: " .. (giver or "퀘스트 주는 NPC"), 1, 0.82, 0.32)
+	elseif q[11] > 0 then
+		tt:AddLine("시작: 아이템 (" .. (NpcOf(q[11]) or "던전 몹") .. " 드랍)", 1, 0.82, 0.32)
+	end
+	if zone then tt:AddLine(zone .. string.format("  %.1f, %.1f", q[5], q[6]), 0.7, 0.72, 0.75) end
+	-- 경험치 · 돈 (게임이 알려 주는 경우만)
+	local okX, xp = pcall(GetQuestLogRewardXP, e.id)
+	local okM, money = pcall(GetQuestLogRewardMoney, e.id)
+	xp, money = okX and plain(xp), okM and plain(money)
+	if (type(xp) == "number" and xp > 0) or (type(money) == "number" and money > 0) then
+		tt:AddDoubleLine((type(xp) == "number" and xp > 0) and ("경험치 " .. BreakUpLargeNumbers(xp)) or " ",
+			(type(money) == "number" and money > 0 and GetCoinTextureString) and GetCoinTextureString(money) or "", 0.56, 0.83, 1, 1, 1, 1)
+	end
+	-- 선행 퀘스트
+	local chain = {}
+	Chain(e.id, chain, {}, 0)
+	if #chain > 0 then
+		tt:AddLine(" ")
+		tt:AddLine("선행 퀘스트 " .. #chain .. "개 (순서대로)", 0.96, 0.95, 0.9)
+		for i, pid in ipairs(chain) do
+			if i > 8 then tt:AddLine("… " .. (#chain - 8) .. "개 더", 0.56, 0.58, 0.61) break end
+			local _, dq, qr = PreOf(pid)
+			local done, inlog = QDone(pid), QInLog(pid)
+			local mark = done and "|cff6FD39A✓|r " or (inlog and "|cffFFF468▸|r " or "|cff8E939B·|r ")
+			local where = ""
+			if not done then
+				local npc = dq and NpcOf(dq[7]) or (qr and NpcOf(qr[14]))
+				local z = ZoneName(dq and dq[4] or (qr and qr[2] and qr[2][1]))
+				if npc or z then where = "  |cff8E939B" .. (npc or "") .. ((npc and z) and " · " or "") .. (z or "") .. "|r" end
+			end
+			tt:AddLine(mark .. (QTitle(pid) or ("#" .. pid)) .. where, done and 0.6 or 0.92, done and 0.62 or 0.92, done and 0.65 or 0.9)
+		end
+	end
+	-- 보상
+	if #q[9] > 0 then
+		tt:AddLine(" ")
+		tt:AddLine("보상", 0.96, 0.95, 0.9)
+		for i, iid in ipairs(q[9]) do
+			if i > 6 then break end
+			local name, _, quality = C_Item.GetItemInfo(iid)
+			if not name and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, iid) end
+			local cr, cg, cb = 0.8, 0.8, 0.8
+			if quality and C_Item.GetItemQualityColor then cr, cg, cb = C_Item.GetItemQualityColor(quality) end
+			local mine = ForMyClass({ id = iid })
+			tt:AddDoubleLine(name or "불러오는 중…", mine and "내 직업" or "", cr, cg, cb, 0.44, 0.83, 0.55)
+		end
+	end
+	tt:AddLine(" ")
+	tt:AddLine(q[4] > 0 and "클릭: 시작 위치를 지도에" or "시작 위치 정보가 없어요", 0.56, 0.58, 0.61)
+	tt:Show()
+end
+
+function M:PaintQuests()
+	local f = self.sidebar
+	local p = self.questPanel
+	local key = self.showing
+	local hasData = FOREVER and ns.DUNGEON_QUESTS and DQ_INST[key or ""]
+	if not (f and f:IsShown() and hasData) then
+		if p then p:Hide(); p.tab:Hide() end
+		return
+	end
+	p = p or self:BuildQuestPanel()
+	local list = self:DungeonQuestList(key)
+	-- 자리: 전리품 칸 바깥쪽 (던전 화면 안에서는 전리품 칸 왼쪽)
+	p:ClearAllPoints()
+	p.tab:ClearAllPoints()
+	if self.boardOn then
+		p:SetPoint("TOPRIGHT", f, "TOPLEFT", -8, 0)
+		p:SetPoint("BOTTOMRIGHT", f, "BOTTOMLEFT", -8, 0)
+		p.tab:SetPoint("TOPRIGHT", f, "TOPLEFT", 1, -150)
+	else
+		p:SetPoint("TOPLEFT", f, "TOPRIGHT", 8, 0)
+		p:SetPoint("BOTTOMLEFT", f, "BOTTOMRIGHT", 8, 0)
+		p.tab:SetPoint("TOPLEFT", f, "TOPRIGHT", -1, -150)
+	end
+	p:SetFrameLevel(f:GetFrameLevel() + 1)
+	p.tab:SetFrameLevel(f:GetFrameLevel() + 2)
+	if Ink.db.dQuestsHide then
+		p:Hide()
+		p.tab.t:SetText("퀘\n스\n트\n\n" .. #list)
+		p.tab:Show()
+		return
+	end
+	p.tab:Hide()
+	p:Show()
+	local nOk, nLog, nDone, nPre = 0, 0, 0, 0
+	for _, e in ipairs(list) do
+		if e.state == "ok" then nOk = nOk + 1 elseif e.state == "log" then nLog = nLog + 1
+		elseif e.state == "done" then nDone = nDone + 1 elseif e.state == "pre" then nPre = nPre + 1 end
+	end
+	p.title:SetText("퀘스트 " .. #list)
+	p.sum:SetText(string.format("|cff6FD39A가능 %d|r  ·  |cffFFF468진행 %d|r  ·  선행 필요 %d  ·  완료 %d", nOk, nLog, nPre, nDone))
+	local LC = Ink.modules.Quest and Ink.modules.Quest.LevelColor
+	local y = 0
+	for i, e in ipairs(list) do
+		local r = QuestRow(p, i)
+		r.e = e
+		local q = e.q
+		r.lvl:SetText(q[2] > 0 and q[2] or "–")
+		local lc = (LC and q[2] > 0) and LC(q[2]) or C.soft
+		r.lvl:SetTextColor(lc[1], lc[2], lc[3], e.state == "done" and 0.4 or 1)
+		r.title:SetText(QTitle(e.id) or "불러오는 중…")
+		local tc = e.state == "done" and C.dim or C.text
+		r.title:SetTextColor(tc[1], tc[2], tc[3])
+		local giver, zone = NpcOf(q[7]), ZoneName(q[4])
+		local sub
+		if q[7] > 0 then sub = (giver or "NPC") .. (zone and ("  ·  " .. zone) or "")
+		elseif q[11] > 0 then sub = "드랍으로 시작  ·  " .. (NpcOf(q[11]) or "던전 몹")
+		else sub = zone or "" end
+		if #q[8] > 0 then sub = sub .. "  ·  선행 " .. #q[8] end
+		r.sub:SetText(sub)
+		local st = DQ_STATE[e.state]
+		local stText = st[1]
+		if e.state == "soon" then stText = q[2] .. "레벨부터" elseif e.state == "pre" then stText = "선행 " .. e.miss .. "개 남음" end
+		r.state:SetText(stText)
+		r.state:SetTextColor(st[2][1], st[2][2], st[2][3])
+		r:ClearAllPoints()
+		r:SetPoint("TOPLEFT", p.body, "TOPLEFT", 0, -y)
+		r:Show()
+		y = y + DQ_ROW
+	end
+	for i = #list + 1, #p.rows do p.rows[i]:Hide() end
+	p.body:SetHeight(math.max(10, y))
+	p.empty:SetText(#list == 0 and "이 던전에 내가 받을 수 있는 퀘스트가 없어요" or "")
+end
+
 -- 지도 옆에 붙이기 / 떼기
 function M:ShowFor(jid, anchor)
 	if not jid or not Ink.db.dungeon then return self:HideSidebar() end
@@ -2693,6 +3052,7 @@ function M:ShowFor(jid, anchor)
 end
 
 function M:HideSidebar()
+	if self.questPanel then self.questPanel:Hide(); self.questPanel.tab:Hide() end
 	if self.sidebar then
 		self.sidebar:Hide()
 		if self.sidebar.menu then self.sidebar.menu:Hide() end
