@@ -176,6 +176,9 @@ local function Build(plate)
 	f.markR:SetPoint("LEFT", f.back, "RIGHT", 5, 0)
 
 	-- 이름 / 체력% / 징표 / 정예 표시
+	-- 레벨 (이름 왼쪽 · 레벨 차이 색: 회색 · 초록 · 노랑 · 주황 · 빨강)
+	f.lvl = Ink:Text(f, F.latinB or F.semi, 11, C.text, "LEFT")
+	f.lvl:SetPoint("BOTTOMLEFT", f.back, "TOPLEFT", 2, 3)
 	f.name = Ink:Text(f, F.semi, 11, C.text, "LEFT")
 	f.name:SetPoint("BOTTOMLEFT", f.back, "TOPLEFT", 2, 3)
 	f.name:SetWidth(W - 34)
@@ -662,9 +665,47 @@ function M:ApplyQuest(f)
 	end
 end
 
+-- 레벨 차이 색 (퀘스트 난이도 색과 같은 기준, FOA 색으로)
+local LVL_COL = {
+	skull = { 1.00, 0.36, 0.30 }, red = { 1.00, 0.42, 0.37 }, orange = { 1.00, 0.62, 0.30 },
+	yellow = { 1.00, 0.86, 0.36 }, green = { 0.44, 0.83, 0.55 }, gray = { 0.56, 0.58, 0.61 },
+}
+local function LevelLook(u)
+	local lv = plain(UnitLevel(u))
+	if type(lv) ~= "number" then return end
+	if lv <= 0 then return "??", LVL_COL.skull end
+	local me = UnitLevel("player") or 1
+	local d = lv - me
+	local key
+	if d >= 5 then key = "red"
+	elseif d >= 3 then key = "orange"
+	elseif d >= -2 then key = "yellow"
+	else
+		local green = (GetQuestGreenRange and GetQuestGreenRange()) or ((me <= 5) and 5 or (me <= 39 and (math.floor(me / 10) + 5) or (math.floor(me / 5) + 1)))
+		key = (-d <= green) and "green" or "gray"
+	end
+	local cls = plain(UnitClassification(u))
+	local plus = (cls == "elite" or cls == "rareelite" or cls == "worldboss") and "+" or ""
+	return lv .. plus, LVL_COL[key]
+end
+
 function M:UpdateInfo(f)
 	local u = f.unit
 	f.name:SetText((UnitName(u)))
+	if f.lvl then
+		local txt, col
+		if not f.friendly then txt, col = LevelLook(u) end
+		if txt then
+			f.lvl:SetText(txt)
+			f.lvl:SetTextColor(col[1], col[2], col[3])
+			f.lvl:Show()
+			f.name:ClearAllPoints()
+			f.name:SetPoint("BOTTOMLEFT", f.lvl, "BOTTOMRIGHT", 4, 0)
+			f.name:SetWidth(W - 40 - (f.lvl:GetStringWidth() or 14))
+		else
+			f.lvl:Hide()
+		end
+	end
 	local r, g, b = ReactionColor(u)
 	f.hp:SetStatusBarColor(r, g, b)
 	local cls = plain(UnitClassification(u))
@@ -829,6 +870,7 @@ function M:SetFriendly(f, friendly)
 	if friendly then f.auras:SetUnit("none") end
 	if friendly then
 		f.cast:Hide()
+		if f.lvl then f.lvl:Hide() end
 		f.name:ClearAllPoints()
 		f.name:SetPoint("CENTER", f, "CENTER", 0, 0)
 		f.name:SetJustifyH("CENTER")
@@ -870,9 +912,20 @@ function M:SetFriendly(f, friendly)
 		f.roleInfo = nil
 		f.role:Hide()
 		f.name:ClearAllPoints()
-		f.name:SetPoint("BOTTOMLEFT", f.back, "TOPLEFT", 2, 3)
 		f.name:SetJustifyH("LEFT")
-		f.name:SetWidth(W - 34)
+		local ltxt, lcol
+		if f.lvl and f.unit and not f.isPreview then ltxt, lcol = LevelLook(f.unit) end
+		if ltxt then
+			f.lvl:SetText(ltxt)
+			f.lvl:SetTextColor(lcol[1], lcol[2], lcol[3])
+			f.lvl:Show()
+			f.name:SetPoint("BOTTOMLEFT", f.lvl, "BOTTOMRIGHT", 4, 0)
+			f.name:SetWidth(W - 40 - (f.lvl:GetStringWidth() or 14))
+		else
+			if f.lvl then f.lvl:Hide() end
+			f.name:SetPoint("BOTTOMLEFT", f.back, "TOPLEFT", 2, 3)
+			f.name:SetWidth(W - 34)
+		end
 		f.name:SetAlpha(1)
 		f.nameAlpha = nil
 		f.sub:Hide()
@@ -1353,6 +1406,18 @@ function M:PaintFake(holder, isTarget)
 	end
 	self:SetFriendly(f, false)
 	f.name:SetText(d.name)
+	-- 예시 레벨: 몹마다 다른 난이도 색으로
+	if f.lvl then
+		local my = UnitLevel("player") or 15
+		local off = ({ 0, 3, -4, 5, -12, 1, 2 })[(#(d.name or "") % 7) + 1]
+		local key = off >= 5 and "red" or (off >= 3 and "orange" or (off >= -2 and "yellow" or (off >= -8 and "green" or "gray")))
+		local c = LVL_COL[key]
+		f.lvl:SetText(tostring(math.max(1, my + off)))
+		f.lvl:SetTextColor(c[1], c[2], c[3])
+		f.lvl:Show()
+		f.name:ClearAllPoints()
+		f.name:SetPoint("BOTTOMLEFT", f.lvl, "BOTTOMRIGHT", 4, 0)
+	end
 	local col = d.neutral and C.orange or C.red
 	f.hp:SetStatusBarColor(col[1], col[2], col[3])
 	if not holder.hpSet then
