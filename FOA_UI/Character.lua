@@ -378,6 +378,166 @@ function M:UpdateTitle()
 	s.accent:SetVertexColor(r, g, b, 1)
 end
 
+-------------------------------------------------------------------------------
+-- 포에버(Camelot) 캐릭터 창: 왼쪽 장비 판 · 오른쪽 능력치 판 · 오른쪽 세로 아이콘 줄
+--  블리자드 배경 그림(갈색 돌 · 금색 띠)을 지우고 FOA 판 하나로, 능력치는 제목 + 옅은 줄
+-------------------------------------------------------------------------------
+local function StripDeep(frame, depth)
+	if not frame or (depth or 0) > 4 then return end
+	Strip(frame)
+	for _, c in ipairs({ frame:GetChildren() }) do
+		if not (c.IsObjectType and (c:IsObjectType("Button") or c:IsObjectType("ScrollFrame") or c:IsObjectType("ModelScene"))) then
+			StripDeep(c, (depth or 0) + 1)
+		end
+	end
+end
+
+local function SkinStatElem(fr)
+	if not fr then return end
+	if fr.Background then fr.Background:SetAlpha(0) end
+	if fr.Stripe then fr.Stripe:SetAlpha(0) end
+	local st = S[fr]
+	if fr.Title then
+		FontOf(fr.Title, F.semi, 12, C.text)
+		if not st then
+			st = {}
+			S[fr] = st
+			st.line = fr:CreateTexture(nil, "ARTWORK")
+			st.line:SetColorTexture(1, 1, 1, 0.07)
+			st.line:SetHeight(1)
+			st.line:SetPoint("BOTTOMLEFT", 6, 2)
+			st.line:SetPoint("BOTTOMRIGHT", -6, 2)
+			st.acc = fr:CreateTexture(nil, "OVERLAY")
+			st.acc:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+			st.acc:SetSize(16, 2)
+			st.acc:SetPoint("BOTTOMLEFT", st.line, "TOPLEFT", 0, 0)
+		end
+		fr.Title:ClearAllPoints()
+		fr.Title:SetPoint("BOTTOMLEFT", 6, 7)
+		fr.Title:SetJustifyH("LEFT")
+		return
+	end
+	if fr.Label then
+		local _, size = fr.Label:GetFont()
+		fr.Label:SetFont(F.sans, 11, "")
+		fr.Label:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
+		fr.Label:SetShadowColor(0, 0, 0, 0.8)
+	end
+	if fr.Value then
+		fr.Value:SetFont(F.semi, 11, "")
+		fr.Value:SetShadowColor(0, 0, 0, 0.8)
+	end
+	if not st and (fr.Label or fr.Value) then
+		st = {}
+		S[fr] = st
+		st.hl = fr:CreateTexture(nil, "BACKGROUND")
+		st.hl:SetTexture(Ink.tex.white)
+		st.hl:SetPoint("TOPLEFT", 4, 0)
+		st.hl:SetPoint("BOTTOMRIGHT", -4, 0)
+		st.hl:SetVertexColor(1, 1, 1, 0.025)
+	end
+end
+
+local function SkinModeTab(tab)
+	if not tab or S[tab] then return end
+	local st = {}
+	S[tab] = st
+	local icon = tab.Icon
+	for _, r in ipairs({ tab:GetRegions() }) do
+		if r ~= icon and r.IsObjectType and r:IsObjectType("Texture") then r:SetAlpha(0) end
+	end
+	for _, k in ipairs({ "GetNormalTexture", "GetPushedTexture", "GetHighlightTexture", "GetCheckedTexture" }) do
+		local t = tab[k] and tab[k](tab)
+		if t then t:SetAlpha(0) end
+	end
+	st.bg = Ink:Round(tab, "BACKGROUND", true, false, -8)
+	st.bg:SetPoint("TOPLEFT", 2, -2)
+	st.bg:SetPoint("BOTTOMRIGHT", -2, 2)
+	st.bd = Ink:Round(tab, "BORDER", true, true, -8)
+	st.bd:SetAllPoints(st.bg)
+	st.bar = tab:CreateTexture(nil, "OVERLAY")
+	st.bar:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+	st.bar:SetWidth(2)
+	st.bar:SetPoint("TOPLEFT", 0, -8)
+	st.bar:SetPoint("BOTTOMLEFT", 0, 8)
+	if icon then
+		icon:ClearAllPoints()
+		icon:SetPoint("TOPLEFT", 7, -7)
+		icon:SetPoint("BOTTOMRIGHT", -7, 7)
+		icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		if tab.CreateMaskTexture and icon.AddMaskTexture then
+			local mask = tab:CreateMaskTexture()
+			mask:SetTexture(Ink.tex.mask, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+			mask:SetAllPoints(icon)
+			icon:AddMaskTexture(mask)
+		end
+	end
+	local function paint(hover)
+		local on = tab.GetChecked and tab:GetChecked()
+		st.bg:SetVertexColor(on and 0.09 or (hover and 0.075 or 0.045), on and 0.095 or (hover and 0.08 or 0.05), on and 0.115 or (hover and 0.095 or 0.065), 0.95)
+		st.bd:SetVertexColor(1, 1, 1, on and 0.22 or 0.07)
+		st.bar:SetShown(on and true or false)
+		if icon then icon:SetDesaturated(not on and not hover); icon:SetAlpha((on or hover) and 1 or 0.7) end
+	end
+	st.paint = paint
+	if tab.SetChecked then hooksecurefunc(tab, "SetChecked", function() paint() end) end
+	tab:HookScript("OnEnter", function() paint(true) end)
+	tab:HookScript("OnLeave", function() paint() end)
+	paint()
+end
+
+function M:SkinForever(f, s)
+	if not f.LeftPaneHost then return end
+	StripDeep(f.LeftPaneHost)
+	StripDeep(f.RightPaneHost)
+	-- 능력치 칸 (스크롤 목록)
+	local box = _G.CharacterStatsPaneScrollBox
+	if box then
+		Hide(box.Border)
+		Hide(box.ClassBackground)
+		local sb = box.ScrollBox
+		local function each()
+			if sb and sb.ForEachFrame then pcall(sb.ForEachFrame, sb, SkinStatElem) end
+		end
+		if sb and sb.Update then hooksecurefunc(sb, "Update", each) end
+		box:HookScript("OnShow", function() C_Timer.After(0, each) end)
+		each()
+		if box.ScrollBar then box.ScrollBar:SetAlpha(0.55) end
+	end
+	-- 능력치 판 바탕: 아주 옅은 판 하나
+	if f.RightPaneHost and not s.rightPane then
+		s.rightPane = Ink:Round(f.RightPaneHost, "BACKGROUND", false, false, -6)
+		s.rightPane:SetPoint("TOPLEFT", 6, -6)
+		s.rightPane:SetPoint("BOTTOMRIGHT", -6, 8)
+		s.rightPane:SetVertexColor(1, 1, 1, 0.025)
+		s.rightLine = f.RightPaneHost:CreateTexture(nil, "ARTWORK")
+		s.rightLine:SetColorTexture(1, 1, 1, 0.06)
+		s.rightLine:SetWidth(1)
+		s.rightLine:SetPoint("TOPLEFT", 0, -10)
+		s.rightLine:SetPoint("BOTTOMLEFT", 0, 10)
+	end
+	-- 장비 판 위쪽 돌 띠 · 테두리 지우기
+	local pd = _G.PaperDollFrame
+	if pd then
+		for _, c in ipairs({ pd:GetChildren() }) do
+			if c.Border then Hide(c.Border) end
+			if c.TopBackgroundStrip then Hide(c.TopBackgroundStrip); Hide(c.TopBackgroundStripBottomEdge) end
+		end
+		for _, k in ipairs({ "TopBackgroundStrip", "TopBackgroundStripBottomEdge" }) do Hide(pd[k]) end
+	end
+	-- 레벨 · 직업 줄
+	if CharacterLevelText then FontOf(CharacterLevelText, F.sans, 11, C.muted) end
+	-- 접기 단추
+	local tb = f.RightPaneToggleButton
+	if tb then
+		for _, k in ipairs({ "GetNormalTexture", "GetPushedTexture" }) do local t = tb[k](tb); if t then t:SetAlpha(0.6) end end
+	end
+	-- 오른쪽 세로 아이콘 줄
+	if f.ModeTabs and f.ModeTabs.Tabs then
+		for _, tab in ipairs(f.ModeTabs.Tabs) do pcall(SkinModeTab, tab) end
+	end
+end
+
 function M:Skin()
 	local f = CharacterFrame
 	if not f or S[f] then return end
@@ -480,6 +640,7 @@ function M:Skin()
 		end
 	end
 
+	pcall(self.SkinForever, self, f, s)
 	for _, info in ipairs(SLOTS) do SkinSlot(info) end
 	SkinStats()
 	SkinTabs()

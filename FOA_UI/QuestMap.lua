@@ -391,7 +391,7 @@ function M:BuildLegend()
 	b:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
 		GameTooltip:AddLine("받을 수 있는 퀘스트", 1, 0.82, 0.32)
-		GameTooltip:AddLine("금색 = 지금 받을 수 있음 · 파랑 = 반복 · 회색 = 1~2레벨 뒤", 0.75, 0.77, 0.8, true)
+		Ink.TipLine(GameTooltip, "금색 = 지금 받을 수 있음 · 파랑 = 반복 · 회색 = 1~2레벨 뒤", 0.75, 0.77, 0.8)
 		GameTooltip:AddLine("누르면 지도에서 숨기기 / 보이기", 0.56, 0.58, 0.61)
 		GameTooltip:Show()
 	end)
@@ -628,7 +628,7 @@ function M:TurnTip(p)
 	for _, id in ipairs(p.ids or {}) do
 		GameTooltip:AddLine("|T" .. Ink.icon("Check") .. ":12:12:0:0:64:64:0:64:0:64:111:211:154|t " .. (QuestName(id) or ("퀘스트 #" .. id)), 0.96, 0.95, 0.9)
 	end
-	if not p.poi then GameTooltip:AddLine("퀘스트를 받은 곳 · 보통 같은 NPC에게 보고해요", 0.56, 0.58, 0.61, true) end
+	if not p.poi then GameTooltip:AddLine("받은 곳 기준 (보통 같은 NPC에게 보고)", 0.56, 0.58, 0.61) end
 	GameTooltip:AddLine(" ")
 	GameTooltip:AddLine("클릭: 길 안내 표시", 0.56, 0.58, 0.61)
 	GameTooltip:Show()

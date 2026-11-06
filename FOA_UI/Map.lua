@@ -201,7 +201,7 @@ function M:NewPin()
 	p:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 		GameTooltip:AddLine(self.tipTitle or "", 1, 1, 1)
-		if self.tipSub then GameTooltip:AddLine(self.tipSub, 0.75, 0.77, 0.8, true) end
+		if self.tipSub then Ink.TipLine(GameTooltip, self.tipSub, 0.75, 0.77, 0.8) end
 		GameTooltip:Show()
 	end)
 	p:SetScript("OnLeave", GameTooltip_Hide)
@@ -304,8 +304,8 @@ function M:CityPin(i)
 		self.grow:Play()
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT", 4, 0)
 		GameTooltip:AddLine(self.tipTitle or "", self.tipR or 1, self.tipG or 1, self.tipB or 1)
-		if self.tipSub then GameTooltip:AddLine(self.tipSub, 0.85, 0.86, 0.88, true) end
-		if self.tipNote then GameTooltip:AddLine(self.tipNote, 0.56, 0.58, 0.61, true) end
+		if self.tipSub then Ink.TipLine(GameTooltip, self.tipSub, 0.85, 0.86, 0.88) end
+		if self.tipNote then Ink.TipLine(GameTooltip, self.tipNote, 0.56, 0.58, 0.61) end
 		GameTooltip:AddLine("우클릭: 길 안내", 0.56, 0.58, 0.61)
 		GameTooltip:Show()
 	end)
@@ -814,7 +814,7 @@ function M:BookPin(i)
 			GameTooltip:AddLine(b[4], done and BOOK_DONE[1] or BOOK[1], done and BOOK_DONE[2] or BOOK[2], done and BOOK_DONE[3] or BOOK[3])
 			if b[5] then GameTooltip:AddLine(b[5], 0.85, 0.86, 0.88) end
 			GameTooltip:AddLine(string.format("%.1f, %.1f", b[2], b[3]), 0.56, 0.58, 0.61)
-			if b[9] then GameTooltip:AddLine(b[9], 1, 0.72, 0.35, true) end
+			if b[9] then Ink.TipLine(GameTooltip, b[9], 1, 0.72, 0.35) end
 			if b[8] == 1 then GameTooltip:AddLine("언더시티 사서(오웬 사드)에게만 반납", 0.75, 0.77, 0.8)
 			elseif b[8] == 2 then GameTooltip:AddLine("스톰윈드 사서(가리온 웬델)에게만 반납", 0.75, 0.77, 0.8) end
 			GameTooltip:AddLine(" ")

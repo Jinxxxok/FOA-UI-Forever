@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.47.0"
+Ink.version = "0.48.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -360,7 +360,72 @@ function Ink:Text(parent, font, size, color, justify, layer)
 	fs:SetWordWrap(false)
 	fs:SetShadowColor(0, 0, 0, self.shadowA or 0.75)
 	fs:SetShadowOffset(1, -1)
+	-- 줄바꿈 글자는 낱말 단위로 미리 끊는다 (게임은 한글을 글자 중간에서 끊어서 "상\n인"처럼 보이기 때문)
+	local set = fs.SetText
+	fs.SetText = function(f, t, ...)
+		if type(t) == "string" and #t > 10 then t = Ink:WrapFor(f, t) end
+		return set(f, t, ...)
+	end
 	return fs
+end
+
+-- 글자 폭을 재서 낱말(띄어쓰기) 단위로 줄을 나눈다. 한 낱말이 칸보다 길 때만 게임이 알아서 끊게 둔다
+local wrapProbe
+function Ink:WrapFor(fs, text)
+	if not (fs.CanWordWrap and fs:CanWordWrap()) then return text end
+	if issecretvalue and issecretvalue(text) then return text end
+	if not text:find(" ", 1, true) then return text end
+	local W = fs:GetWidth()
+	if not W or W <= 20 then return text end
+	if not wrapProbe then
+		local holder = CreateFrame("Frame")
+		holder:Hide()
+		wrapProbe = holder:CreateFontString(nil, "OVERLAY")
+	end
+	local font, size, flags = fs:GetFont()
+	if not font then return text end
+	wrapProbe:SetFont(font, size, flags or "")
+	local function width(s) wrapProbe:SetText(s); return wrapProbe:GetStringWidth() or 0 end
+	if width((text:gsub("\n", " "))) <= W then return text end
+	local out = {}
+	for para in (text .. "\n"):gmatch("(.-)\n") do
+		local line
+		for word in para:gmatch("%S+") do
+			if not line then line = word
+			else
+				local cand = line .. " " .. word
+				if width(cand) <= W - 1 then line = cand else out[#out + 1] = line; line = word end
+			end
+		end
+		out[#out + 1] = line or ""
+	end
+	return table.concat(out, "\n")
+end
+
+-- 툴팁 줄: 너무 길면 낱말 단위로 미리 나눠서 (한글 기준 약 n글자) 깔끔하게
+local function DispLen(s)
+	s = s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "  ")
+	local n = 0
+	for ch in s:gmatch("[%z\1-\127\194-\244][\128-\191]*") do n = n + ((#ch > 1) and 1 or 0.55) end
+	return n
+end
+function Ink.TipWrap(text, n)
+	if type(text) ~= "string" then return text end
+	n = n or 30
+	local out = {}
+	for para in (text .. "\n"):gmatch("(.-)\n") do
+		local line
+		for word in para:gmatch("%S+") do
+			if not line then line = word
+			elseif DispLen(line .. " " .. word) <= n then line = line .. " " .. word
+			else out[#out + 1] = line; line = word end
+		end
+		out[#out + 1] = line or ""
+	end
+	return table.concat(out, "\n")
+end
+function Ink.TipLine(tt, text, r, g, b)
+	tt:AddLine(Ink.TipWrap(text), r, g, b)
 end
 
 function Ink:Bar(parent, w, h, color, trackColor)

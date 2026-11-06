@@ -239,7 +239,7 @@ local function Row(body)
 		if not self.tip then return end
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 		for i, l in ipairs(self.tip) do
-			if i == 1 then GameTooltip:AddLine(l, 1, 1, 1) else GameTooltip:AddLine(l, 0.75, 0.77, 0.8, true) end
+			if i == 1 then Ink.TipLine(GameTooltip, l, 1, 1, 1) else GameTooltip:AddLine(l, 0.75, 0.77, 0.8) end
 		end
 		GameTooltip:Show()
 	end)

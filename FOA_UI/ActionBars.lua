@@ -485,7 +485,7 @@ function M:KeybindOverlay(b)
 		GameTooltip:AddLine("단축키 설정", C.accent[1], C.accent[2], C.accent[3])
 		local keys = { GetBindingKey(b.foaCmd) }
 		GameTooltip:AddLine(#keys > 0 and ("지금: " .. table.concat(keys, ", ")) or "지금: 없음", 1, 1, 1)
-		GameTooltip:AddLine("키를 누르면 연결 · ESC 또는 오른쪽 클릭으로 지우기", 0.7, 0.7, 0.7, true)
+		Ink.TipLine(GameTooltip, "키를 누르면 연결 · ESC 또는 오른쪽 클릭으로 지우기", 0.7, 0.7, 0.7)
 		GameTooltip:Show()
 	end)
 	o:SetScript("OnLeave", function(self)

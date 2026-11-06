@@ -943,19 +943,20 @@ function M:CraftTooltip(it, tt)
 		local x = P and P.PickVendor and P.PickVendor(r)
 		local rname = C_Item.GetItemNameByID and C_Item.GetItemNameByID(r.item)
 		if not rname and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, r.item) end
-		tt:AddLine("제조법: " .. (rname or "상인 판매 제조법") .. (r.req and r.req > 0 and ("  ·  " .. prof .. " " .. r.req .. " 필요") or ""), 0.96, 0.95, 0.9, true)
+		Ink.TipLine(tt, "제조법: " .. (rname or "상인 판매 제조법") .. (r.req and r.req > 0 and ("  ·  " .. prof .. " " .. r.req .. " 필요") or ""), 0.96, 0.95, 0.9)
 		if x and P.VendorText then
 			local who, where, cost = P.VendorText(x)
 			tt:AddDoubleLine(who or "상인", cost or "", 1, 0.82, 0.32, 1, 1, 1)
 			if where and where ~= "" then tt:AddLine(where, 0.7, 0.72, 0.75) end
 			tt:AddLine("클릭: 제조법 상인 위치를 지도에", 0.56, 0.58, 0.61)
 		elseif r.list and #r.list > 0 then
-			tt:AddLine("내 진영에서 파는 상인이 없어요 (상대 진영 · 중립 상인 확인)", 0.7, 0.72, 0.75, true)
+			tt:AddLine("내 진영에서 파는 상인이 없어요", 0.7, 0.72, 0.75)
 		end
 	else
-		tt:AddLine("제조법: 전문기술 상급자에게 배우거나 드랍 · 퀘스트로 얻어요 (상인 판매 아님)", 0.7, 0.72, 0.75, true)
+		tt:AddLine("제조법은 상인이 팔지 않아요", 0.96, 0.95, 0.9)
+		tt:AddLine("상급자 · 드랍 · 퀘스트로 배워요", 0.7, 0.72, 0.75)
 	end
-	tt:AddLine("직접 못 만들면 경매장에서 사거나 제작 의뢰", 0.56, 0.58, 0.61, true)
+	tt:AddLine("직접 못 만들면 경매장 · 제작 의뢰", 0.56, 0.58, 0.61)
 end
 
 function M:AddCrafts(pool, lvl)
@@ -1279,7 +1280,7 @@ function M:BuildForeverTop(f)
 				GameTooltip:AddLine("주력 방어구 재질 · 쓸 수 있는 무기만", 0.7, 0.72, 0.75)
 			elseif self.mode == "rec" then
 				GameTooltip:AddLine("추천 (BIS · 대체)", 1, 1, 1)
-				GameTooltip:AddLine(M:SourceLabel(), 0.7, 0.72, 0.75, true)
+				Ink.TipLine(GameTooltip, M:SourceLabel(), 0.7, 0.72, 0.75)
 			else
 				GameTooltip:AddLine("전리품 전부", 1, 1, 1)
 			end
@@ -2636,12 +2637,15 @@ function M:BuildBisPanel()
 	p.spec:SetPoint("LEFT", p.title, "RIGHT", 10, -1)
 	p.pills = SpecPills(p, 24)
 	p.pills:SetPoint("TOPRIGHT", -16, -12)
-	p.example = Ink:Text(p, F.sans, 10, C.dim, "RIGHT")
-	p.example:SetPoint("TOPRIGHT", p.pills, "BOTTOMRIGHT", 0, -10)
-	-- 왼쪽 "n / 16 칸 …" · 가운데 장비/준비물 탭과 겹치지 않게 오른쪽 좁은 칸에서 줄바꿈
-	p.example:SetWidth(BP_W - 330)
-	p.example:SetWordWrap(true)
-	p.example:SetSpacing(2)
+	-- 자료 설명: 큰 숫자 아래 한 줄 (탭 · 숫자와 겹치지 않게 따로 줄을 둔다)
+	p.example = Ink:Text(p, F.sans, 10, C.dim, "LEFT")
+	p.example:SetPoint("TOPLEFT", 16, -82)
+	p.example:SetWidth(BP_W - 32)
+	p.head = p:CreateTexture(nil, "ARTWORK")
+	p.head:SetColorTexture(1, 1, 1, 0.06)
+	p.head:SetHeight(1)
+	p.head:SetPoint("TOPLEFT", 12, -100)
+	p.head:SetPoint("TOPRIGHT", -12, -100)
 	p.sumN = Ink:Text(p, F.num, 26, C.text, "LEFT")
 	p.sumN:SetPoint("TOPLEFT", p.title, "BOTTOMLEFT", 0, -10)
 	p.sumL = Ink:Text(p, F.sans, 10, C.muted, "LEFT")
@@ -2652,7 +2656,7 @@ function M:BuildBisPanel()
 	for i, s in ipairs(INV) do
 		local b = CreateFrame("Button", nil, p)
 		b:SetSize(150, 25)
-		b:SetPoint("TOPLEFT", 12, -78 - (i - 1) * 26)
+		b:SetPoint("TOPLEFT", 12, -108 - (i - 1) * 26)
 		b.hl = Ink:Round(b, "BACKGROUND", true, false)
 		b.hl:SetAllPoints()
 		b.hl:SetVertexColor(1, 1, 1, 0)
@@ -2674,10 +2678,10 @@ function M:BuildBisPanel()
 	p.sep = p:CreateTexture(nil, "ARTWORK")
 	p.sep:SetColorTexture(1, 1, 1, 0.06)
 	p.sep:SetWidth(1)
-	p.sep:SetPoint("TOPLEFT", 172, -76)
+	p.sep:SetPoint("TOPLEFT", 172, -106)
 	p.sep:SetPoint("BOTTOMLEFT", 172, 14)
 	p.selName = Ink:Text(p, F.bold, 14, C.text, "LEFT")
-	p.selName:SetPoint("TOPLEFT", 186, -84)
+	p.selName:SetPoint("TOPLEFT", 186, -114)
 	p.cur = Ink:Text(p, F.sans, 10, C.muted, "LEFT")
 	p.cur:SetPoint("TOPLEFT", p.selName, "BOTTOMLEFT", 0, -4)
 	p.cur:SetWidth(BP_W - 204)
@@ -2685,7 +2689,7 @@ function M:BuildBisPanel()
 	for i = 1, 5 do
 		local r = CreateFrame("Button", nil, p)
 		r:SetSize(BP_W - 200, 54)
-		r:SetPoint("TOPLEFT", 184, -126 - (i - 1) * 60)
+		r:SetPoint("TOPLEFT", 184, -156 - (i - 1) * 60)
 		r.bg = Ink:Round(r, "BACKGROUND", true, false)
 		r.bg:SetAllPoints()
 		r.bd = Ink:Round(r, "BORDER", true, true)
@@ -2735,7 +2739,7 @@ function M:BuildBisPanel()
 	for i, m in ipairs({ { "gear", "장비" }, { "prep", "준비물" } }) do
 		local b = CreateFrame("Button", nil, p)
 		b:SetSize(58, 24)
-		b:SetPoint("TOPLEFT", 186 + (i - 1) * 62, -48)
+		b:SetPoint("TOPRIGHT", p, "TOPRIGHT", -16 - (2 - i) * 60, -48)
 		b.label = Ink:Text(b, F.semi, 12, C.muted, "CENTER")
 		b.label:SetPoint("CENTER", 0, 1)
 		b.label:SetText(m[2])
@@ -2794,7 +2798,7 @@ local PREP_CONS = { { "flask", "영약" }, { "potion", "물약" }, { "food", "�
 
 function M:BuildPrep(p)
 	local f = CreateFrame("Frame", nil, p)
-	f:SetPoint("TOPLEFT", 12, -82)
+	f:SetPoint("TOPLEFT", 12, -108)
 	f:SetPoint("BOTTOMRIGHT", -12, 12)
 	f:Hide()
 	local function Header(text, y, x)
@@ -3033,7 +3037,7 @@ function M:PaintBis()
 		p.spec:SetText((UnitClass("player") or "") .. " · " .. (specName or ""))
 		p.spec:SetTextColor(cr, cg, cb)
 		p.pills:Refresh()
-		p.example:SetText(self:SourceLabel())
+		p.example:SetText((self:SourceLabel():gsub("\n", "  ·  ")))
 		self:PaintPrep()
 		return
 	end
@@ -3042,7 +3046,7 @@ function M:PaintBis()
 	p.spec:SetText((UnitClass("player") or "") .. " · " .. (specName or ""))
 	p.spec:SetTextColor(cr, cg, cb)
 	p.pills:Refresh()
-	p.example:SetText(self:SourceLabel())
+	p.example:SetText((self:SourceLabel():gsub("\n", "  ·  ")))
 	-- 부위별 목록 (순위 순)
 	local bySlot = {}
 	if self.levelMode and self.levelRanks then
@@ -3054,6 +3058,8 @@ function M:PaintBis()
 		end
 	end
 	p.sumL:SetText(self.levelMode and "칸 레벨 최고템 착용" or "칸 BIS 착용")
+	p.hint:SetText(self.levelMode and "마우스를 올리면 툴팁 · 획득처\n제작템은 클릭하면 제조법 상인 위치를 지도에 찍어요"
+		or "마우스를 올리면 툴팁 · 획득처\n대체템은 BIS 장비의 능력치 비중으로 FOA가 고른 거예요")
 	for _, list in pairs(bySlot) do table.sort(list, function(a, b) return a.rank < b.rank end) end
 	local wornBis = 0
 	self.bisSel = self.bisSel or 1
@@ -3145,48 +3151,110 @@ function M:AttachBisTab()
 		local tab = _G["CharacterFrameTab" .. i]
 		if tab and tab:IsShown() then last = tab end
 	end
+	-- 포에버 캐릭터 창: 오른쪽 세로 아이콘 줄(캐릭터 · 평판 · 기술 …) 맨 아래에 같은 크기의 BIS 칸
+	local modeTabs = cf.ModeTabs and cf.ModeTabs.Tabs
 	local t = CreateFrame("Button", "FOABisTab", cf)
-	-- 포에버 캐릭터 창은 아래 탭 줄 대신 오른쪽 세로 아이콘 → 창 위쪽 제목 줄(닫기 왼쪽)에 BIS 버튼
 	local side = not last
-	if side then
+	local vertical = side and modeTabs and #modeTabs > 0
+	t.bg = Ink:Round(t, "BACKGROUND", true, false, -8)
+	t.bd = Ink:Round(t, "BORDER", true, true, -8)
+	if vertical then
+		local function lastTab()
+			local lt, lb
+			for _, tab in ipairs(modeTabs) do
+				if tab:IsShown() then
+					local b = tab:GetBottom()
+					if not lb or (b and b < lb) then lt, lb = tab, b end
+				end
+			end
+			return lt or modeTabs[#modeTabs]
+		end
+		local ref = lastTab()
+		local w, h = ref:GetSize()
+		w, h = (w and w > 10) and w or 44, (h and h > 10) and h or 44
+		t:SetSize(w, h)
+		t:SetPoint("TOP", ref, "BOTTOM", 0, -8)
+		t:SetFrameLevel(ref:GetFrameLevel() + 2)
+		t.relayout = function()
+			local r = lastTab()
+			if r and r ~= t then t:ClearAllPoints(); t:SetPoint("TOP", r, "BOTTOM", 0, -8) end
+		end
+		t.bg:SetPoint("TOPLEFT", 2, -2)
+		t.bg:SetPoint("BOTTOMRIGHT", -2, 2)
+		t.bd:SetPoint("TOPLEFT", 2, -2)
+		t.bd:SetPoint("BOTTOMRIGHT", -2, 2)
+		t.label = Ink:Text(t, F.bold, 13, C.accent, "CENTER")
+		t.label:SetPoint("CENTER", 0, 4)
+		t.label:SetText("BIS")
+		t.sub = Ink:Text(t, F.sans, 8, C.muted, "CENTER")
+		t.sub:SetPoint("TOP", t.label, "BOTTOM", 0, -2)
+		t.sub:SetText("최고템")
+		t.line = t:CreateTexture(nil, "OVERLAY")
+		t.line:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+		t.line:SetSize(2, h - 16)
+		t.line:SetPoint("LEFT", 0, 0)
+	elseif side then
 		t:SetSize(46, 22)
 		t:SetPoint("TOPRIGHT", cf, "TOPRIGHT", -30, -3)
 		t:SetFrameLevel(cf:GetFrameLevel() + 20)
+		t.bg:SetPoint("TOPLEFT", 3, -2); t.bg:SetPoint("BOTTOMRIGHT", -3, 3)
+		t.bd:SetAllPoints(t.bg)
 	else
 		t:SetSize(70, 32)
 		t:SetPoint("LEFT", last, "RIGHT", 2, 0)
+		t.bg:SetPoint("TOPLEFT", 3, -2); t.bg:SetPoint("BOTTOMRIGHT", -3, 3)
+		t.bd:SetAllPoints(t.bg)
 	end
-	t.bg = Ink:Round(t, "BACKGROUND", true, false, -8)
-	t.bg:SetPoint("TOPLEFT", 3, -2)
-	t.bg:SetPoint("BOTTOMRIGHT", -3, 3)
-	t.label = Ink:Text(t, F.semi, 12, C.muted, "CENTER")
-	t.label:SetPoint("CENTER")
-	t.label:SetText("BIS")
-	t.line = t:CreateTexture(nil, "OVERLAY")
-	t.line:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
-	t.line:SetSize(18, 2)
-	t.line:SetPoint("BOTTOM", 0, side and 2 or 5)
-	local function paint()
+	if not t.label then
+		t.label = Ink:Text(t, F.semi, 12, C.muted, "CENTER")
+		t.label:SetPoint("CENTER")
+		t.label:SetText("BIS")
+		t.line = t:CreateTexture(nil, "OVERLAY")
+		t.line:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+		t.line:SetSize(18, 2)
+		t.line:SetPoint("BOTTOM", 0, side and 2 or 5)
+	end
+	local a = C.accent
+	local function paint(hover)
 		local on = M.bisPanel and M.bisPanel:IsShown()
-		t.label:SetTextColor(on and C.accent[1] or C.muted[1], on and C.accent[2] or C.muted[2], on and C.accent[3] or C.muted[3])
+		if vertical then
+			-- 늘 노란 BIS 글자로 눈에 띄게, 열려 있으면 칸 전체가 은은하게 노랗게
+			t.bg:SetVertexColor(on and 0.12 or (hover and 0.09 or 0.05), on and 0.115 or (hover and 0.09 or 0.055), on and 0.06 or (hover and 0.1 or 0.07), 0.95)
+			t.bd:SetVertexColor(a[1], a[2], a[3], on and 0.75 or (hover and 0.5 or 0.28))
+			t.label:SetTextColor(a[1], a[2], a[3])
+			t.sub:SetTextColor(on and a[1] or C.muted[1], on and a[2] or C.muted[2], on and a[3] or C.muted[3])
+		else
+			t.label:SetTextColor(on and a[1] or C.muted[1], on and a[2] or C.muted[2], on and a[3] or C.muted[3])
+			t.bg:SetVertexColor(on and 0.06 or 0.035, on and 0.065 or 0.04, on and 0.08 or 0.052, 0.94)
+			t.bd:SetVertexColor(1, 1, 1, on and 0.14 or 0.06)
+		end
 		t.line:SetShown(on and true or false)
-		t.bg:SetVertexColor(on and 0.06 or 0.035, on and 0.065 or 0.04, on and 0.08 or 0.052, 0.94)
 	end
 	t:SetScript("OnClick", function()
 		if not M.bisPanel then M:BuildBisPanel() end
 		local p = M.bisPanel
 		if p:IsShown() then p:Hide() else
 			p:ClearAllPoints()
-			-- 오른쪽 세로 아이콘 줄이 있으면 그 너머에
-			p:SetPoint("TOPLEFT", cf, "TOPRIGHT", side and 64 or 10, 0)
-			p:SetHeight(math.max(570, cf:GetHeight()))
+			-- 캐릭터 창 오른쪽 세로 아이콘 줄 바로 너머에, 캐릭터 창과 같은 높이로 붙여서
+			local edge = vertical and t or cf
+			p:SetPoint("TOP", cf, "TOP", 0, 0)
+			p:SetPoint("LEFT", edge, "RIGHT", vertical and 6 or (side and 64 or 10), 0)
+			p:SetHeight(math.max(590, cf:GetHeight()))
 			p:Show()
 		end
 		paint()
 	end)
-	t:SetScript("OnEnter", function() t.label:SetTextColor(C.text[1], C.text[2], C.text[3]) end)
-	t:SetScript("OnLeave", paint)
+	t:SetScript("OnEnter", function(self)
+		paint(true)
+		if not vertical then t.label:SetTextColor(C.text[1], C.text[2], C.text[3]) end
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:AddLine("BIS · 부위별 최고템", 1, 1, 1)
+		GameTooltip:AddLine("만렙 전에는 지금 레벨에 맞는 최고템", 0.7, 0.72, 0.75)
+		GameTooltip:Show()
+	end)
+	t:SetScript("OnLeave", function() paint(); GameTooltip:Hide() end)
 	cf:HookScript("OnHide", function() if M.bisPanel then M.bisPanel:Hide() end paint() end)
+	cf:HookScript("OnShow", function() if t.relayout then pcall(t.relayout) end paint() end)
 	paint()
 	self.bisTab = t
 end
