@@ -6,7 +6,9 @@ local M = Ink:Module("Quest")
 local F, C = Ink.font, Ink.c
 local safe, plain = Ink.safe, Ink.plain
 
-local W, MAX_QUESTS, MAX_OBJ = 240, 6, 3
+local W, MAX_OBJ = 240, 3
+-- 한 번에 보이는 퀘스트 수 (설정 → 지도 · 퀘스트 → 한 번에 보이는 수, 3~10)
+local function MaxQuests() return math.max(3, math.min(10, tonumber(Ink.db and Ink.db.questMax) or 6)) end
 
 local function CleanObjective(text)
 	if not text then return "" end
@@ -399,6 +401,7 @@ function M:Update()
 	y = y - (self.classH or 0)
 	local shown = 0
 	local total = #quests
+	local MAX_QUESTS = MaxQuests()
 	local offset = math.max(0, math.min(self.offset or 0, total - MAX_QUESTS))
 	if combat then offset = self.shownOffset or offset end
 	self.offset, self.shownOffset = offset, offset

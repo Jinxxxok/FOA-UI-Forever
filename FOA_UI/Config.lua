@@ -164,9 +164,7 @@ function M:ShowGrid(on)
 	if on then self:DrawGrid() end
 end
 
--- 놓을 때 맞춤:
---  1) 다른 요소 · 화면 가장자리에 가까우면 딱 붙인다 (행동단축바끼리는 버튼 간격만큼 띄워서 한 덩어리처럼)
---  2) 붙일 곳이 없는 방향은 8칸 격자에 맞춘다
+-- 요소 상자 (루트 좌표: 왼쪽 위 x, y / 너비, 높이). 끄는 동안 자석 정렬 · 거리 표시에 쓴다
 local MAGNET = 12
 local function Box(key)
 	local m = Ink.movers[key]
@@ -179,6 +177,7 @@ local function Box(key)
 	if not (w and h) or w < 1 or h < 1 then return end
 	return x, y, w, h
 end
+M.MoverBox = Box
 
 local function IsBar(key)
 	return key:match("^bar%d$") or key == "stance" or key == "pet"
@@ -190,54 +189,11 @@ local function BarGap(key)
 	return 0
 end
 
-local function Snap(key)
-	if Ink.db.editSnap == false then return end
-	local m = Ink.movers[key]
-	local x, y, w, h = Box(key)
-	if not (m and x) then return end
-	local rw, rh = Ink.root:GetWidth(), Ink.root:GetHeight()
-	local bestX, bestY, dx, dy = nil, nil, MAGNET + 1, MAGNET + 1
-	local function tryX(v) local d = math.abs(v - x) if d < dx then dx, bestX = d, v end end
-	local function tryY(v) local d = math.abs(v - y) if d < dy then dy, bestY = d, v end end
-	-- 화면 가장자리
-	tryX(0); tryX(rw - w); tryY(0); tryY(rh - h)
-	for _, other in ipairs(Ink.moverOrder) do
-		if other ~= key then
-			local ox, oy, ow, oh = Box(other)
-			if ox then
-				local pad = (IsBar(key) and IsBar(other)) and math.max(BarGap(key), BarGap(other)) or 0
-				-- 세로로 겹치는 범위에 있을 때만 옆에 붙이고, 가로로 겹칠 때만 위아래로 붙인다
-				local nearV = y < oy + oh + MAGNET and y + h > oy - MAGNET
-				local nearH = x < ox + ow + MAGNET and x + w > ox - MAGNET
-				if nearV then
-					tryX(ox + ow + pad)          -- 오른쪽에 붙이기
-					tryX(ox - w - pad)           -- 왼쪽에 붙이기
-				end
-				if nearH then
-					tryY(oy + oh + pad)          -- 아래에 붙이기
-					tryY(oy - h - pad)           -- 위에 붙이기
-					tryX(ox)                     -- 왼쪽 끝 맞추기
-					tryX(ox + ow - w)            -- 오른쪽 끝 맞추기
-					tryX(ox + (ow - w) / 2)      -- 가운데 맞추기
-				end
-				if nearV then
-					tryY(oy)                     -- 위쪽 끝 맞추기
-					tryY(oy + oh - h)            -- 아래쪽 끝 맞추기
-				end
-			end
-		end
-	end
-	if not bestX then bestX = math.floor(x / SNAP + 0.5) * SNAP end
-	if not bestY then bestY = math.floor(y / SNAP + 0.5) * SNAP end
-	local s = m.frame:GetScale() or 1
-	m.frame:ClearAllPoints()
-	m.frame:SetPoint("TOPLEFT", Ink.root, "TOPLEFT", bestX / s, -bestY / s)
-end
-
 -- 크기 조절 (미터기 · 채팅): 아래쪽 띠 = 높이, 오른쪽 아래 모서리 = 폭과 높이
 --  끄는 동안 왼쪽 위 모서리는 그대로 두고 오른쪽 · 아래로 늘어난다
 local function StartResize(m, o, both)
 	if InCombatLockdown() or not m.resize then return end
+	M:PushUndo(m.key)
 	M:Select(m.key)
 	local f = m.frame
 	local x, y = Ink:FrameBox(m.key)
@@ -256,7 +212,7 @@ local function StartResize(m, o, both)
 		local h = h0 + (cy - ny) / es
 		w = math.max(m.minW or 100, math.min(m.maxW or 2000, w))
 		h = math.max(m.minH or 40, math.min(m.maxH or 2000, h))
-		if Ink.db.editSnap ~= false then
+		if Ink.db.editGrid ~= false then
 			w = math.floor(w / 4 + 0.5) * 4
 			h = math.floor(h / 4 + 0.5) * 4
 		end
@@ -330,6 +286,395 @@ local function ResetSize(m)
 	end
 end
 
+
+-------------------------------------------------------------------------------
+-- 끄는 동안: 자석 정렬(노란 안내선) · 원래 자리 유령(점선) · 이웃까지 거리(빨간 숫자) · 되돌리기
+--  · 다른 요소의 가장자리 · 가운데, 화면 가장자리 · 가운데에 8칸 안으로 다가가면 착 붙는다
+--  · Alt 를 누른 채 끌면 아무 데도 붙지 않고 자유롭게
+--  · 격자를 켜 두면 붙지 않은 방향은 놓을 때 8칸 격자에 맞춘다
+-------------------------------------------------------------------------------
+local WHITE8 = "Interface\\Buttons\\WHITE8X8"
+local LIVE_MAG = 8
+local function MagnetOn() return Ink.db.editMagnet ~= false end
+local function GridOn() return Ink.db.editGrid ~= false end
+local function DistOn() return Ink.db.editDist ~= false end
+
+local function Tw(id, ch, dur, ease, step, done, delay)
+	local S = Ink.modules.Sheet
+	if S and S.Tween then return S.Tween(id, ch, dur, ease and S.E[ease] or nil, step, done, delay) end
+	step(1)
+	if done then done() end
+end
+
+-- 붙을 후보: v = 붙을 때 왼쪽(위쪽) 좌표, at = 안내선 위치, lo ~ hi = 안내선이 그어질 범위
+local function Candidates(key, x, y, w, h, rw, rh)
+	local cx, cy = {}, {}
+	local function X(v, at, lo, hi) cx[#cx + 1] = { v = v, at = at, lo = lo, hi = hi } end
+	local function Y(v, at, lo, hi) cy[#cy + 1] = { v = v, at = at, lo = lo, hi = hi } end
+	X(0, 0, 0, rh); X(rw - w, rw, 0, rh); X(rw / 2 - w / 2, rw / 2, 0, rh)
+	Y(0, 0, 0, rw); Y(rh - h, rh, 0, rw); Y(rh / 2 - h / 2, rh / 2, 0, rw)
+	for _, other in ipairs(Ink.moverOrder) do
+		if other ~= key then
+			local ox, oy, ow, oh = Box(other)
+			if ox then
+				local pad = (IsBar(key) and IsBar(other)) and math.max(BarGap(key), BarGap(other)) or 0
+				local nearV = y < oy + oh + 48 and y + h > oy - 48
+				local nearH = x < ox + ow + 48 and x + w > ox - 48
+				local vlo, vhi = math.min(y, oy), math.max(y + h, oy + oh)
+				local hlo, hhi = math.min(x, ox), math.max(x + w, ox + ow)
+				-- 가장자리 · 가운데 줄 맞추기 (멀리 있어도)
+				X(ox, ox, vlo, vhi); X(ox + ow - w, ox + ow, vlo, vhi); X(ox + (ow - w) / 2, ox + ow / 2, vlo, vhi)
+				Y(oy, oy, hlo, hhi); Y(oy + oh - h, oy + oh, hlo, hhi); Y(oy + (oh - h) / 2, oy + oh / 2, hlo, hhi)
+				-- 옆 · 위아래에 붙이기 (행동단축바끼리는 버튼 간격만큼 띄워서 한 덩어리처럼)
+				if nearV then
+					X(ox + ow + pad, ox + ow + pad / 2, vlo, vhi)
+					X(ox - w - pad, ox - pad / 2, vlo, vhi)
+				end
+				if nearH then
+					Y(oy + oh + pad, oy + oh + pad / 2, hlo, hhi)
+					Y(oy - h - pad, oy - pad / 2, hlo, hhi)
+				end
+			end
+		end
+	end
+	return cx, cy
+end
+
+local function Best(list, cur, th)
+	local best, bd
+	for _, c in ipairs(list) do
+		local d = math.abs(c.v - cur)
+		if d <= th and (not bd or d < bd - 0.01) then best, bd = c, d end
+	end
+	return best
+end
+
+local function Span(list, best)
+	local lo, hi = best.lo, best.hi
+	for _, c in ipairs(list) do
+		if math.abs(c.v - best.v) < 0.5 and math.abs(c.at - best.at) < 0.5 then
+			lo, hi = math.min(lo, c.lo), math.max(hi, c.hi)
+		end
+	end
+	return lo, hi
+end
+
+function M:PlaceAt(m, x, y)
+	local s = m.frame:GetScale() or 1
+	m.frame:ClearAllPoints()
+	m.frame:SetPoint("TOPLEFT", Ink.root, "TOPLEFT", x / s, -y / s)
+end
+
+-- 안내선 · 거리 그리는 층 (그때그때 필요한 만큼 선 · 숫자를 꺼내 쓴다)
+function M:FxBegin()
+	local g = self.fx
+	if not g then
+		g = CreateFrame("Frame", nil, Ink.root)
+		g:SetAllPoints(Ink.root)
+		g:SetFrameStrata("FULLSCREEN")
+		g.lines, g.labels = {}, {}
+		self.fx = g
+	end
+	g.n, g.m = 0, 0
+	g:Show()
+end
+
+function M:FxLine(x, y, w, h, c, a)
+	local g = self.fx
+	g.n = g.n + 1
+	local t = g.lines[g.n]
+	if not t then
+		t = g:CreateTexture(nil, "OVERLAY")
+		t:SetTexture(WHITE8)
+		g.lines[g.n] = t
+	end
+	local one = Ink:Px(1)
+	t:ClearAllPoints()
+	t:SetPoint("TOPLEFT", g, "TOPLEFT", x, -y)
+	t:SetSize(math.max(w, one), math.max(h, one))
+	t:SetVertexColor(c[1], c[2], c[3], a or 1)
+	t:Show()
+end
+
+function M:FxLabel(cx, cy, text)
+	local g = self.fx
+	g.m = g.m + 1
+	local l = g.labels[g.m]
+	if not l then
+		l = CreateFrame("Frame", nil, g)
+		l:SetHeight(17)
+		l.bg = Ink:Round(l, "BACKGROUND", true, false)
+		l.bg:SetAllPoints()
+		l.text = Ink:Text(l, F.latinB, 10, { 0.067, 0.075, 0.094 }, "CENTER")
+		l.text:SetPoint("CENTER", 0, 0)
+		g.labels[g.m] = l
+	end
+	l.text:SetText(text)
+	l:SetWidth(math.ceil(l.text:GetStringWidth() or 10) + 12)
+	l.bg:SetVertexColor(C.red[1], C.red[2], C.red[3], 1)
+	l:ClearAllPoints()
+	l:SetPoint("CENTER", g, "TOPLEFT", cx, -cy)
+	l:Show()
+end
+
+function M:FxEnd()
+	local g = self.fx
+	if not g then return end
+	for i = g.n + 1, #g.lines do g.lines[i]:Hide() end
+	for i = g.m + 1, #g.labels do g.labels[i]:Hide() end
+end
+
+function M:FxClear()
+	if not self.fx then return end
+	self:FxBegin()
+	self:FxEnd()
+end
+
+-- 이웃까지 거리: 왼쪽 · 오른쪽 · 위 · 아래에서 가장 가까운 요소 하나씩
+function M:DrawGaps(key, x, y, w, h)
+	local L, R, U, D
+	for _, other in ipairs(Ink.moverOrder) do
+		if other ~= key then
+			local ox, oy, ow, oh = Box(other)
+			if ox then
+				local vOver = oy < y + h and oy + oh > y
+				local hOver = ox < x + w and ox + ow > x
+				if vOver and ox + ow <= x + 0.5 and (not L or ox + ow > L[1] + L[3]) then L = { ox, oy, ow, oh } end
+				if vOver and ox >= x + w - 0.5 and (not R or ox < R[1]) then R = { ox, oy, ow, oh } end
+				if hOver and oy + oh <= y + 0.5 and (not U or oy + oh > U[2] + U[4]) then U = { ox, oy, ow, oh } end
+				if hOver and oy >= y + h - 0.5 and (not D or oy < D[2]) then D = { ox, oy, ow, oh } end
+			end
+		end
+	end
+	local red = C.red
+	local function midY(o) local a, b = math.max(y, o[2]), math.min(y + h, o[2] + o[4]); return (a + b) / 2 end
+	local function midX(o) local a, b = math.max(x, o[1]), math.min(x + w, o[1] + o[3]); return (a + b) / 2 end
+	if L then
+		local g, my = x - (L[1] + L[3]), midY(L)
+		if g >= 1 and g < 900 then
+			self:FxLine(L[1] + L[3], my, g, 1, red)
+			self:FxLine(L[1] + L[3], my - 4, 1, 9, red); self:FxLine(x - 1, my - 4, 1, 9, red)
+			self:FxLabel(L[1] + L[3] + g / 2, my - 12, tostring(math.floor(g + 0.5)))
+		end
+	end
+	if R then
+		local g, my = R[1] - (x + w), midY(R)
+		if g >= 1 and g < 900 then
+			self:FxLine(x + w, my, g, 1, red)
+			self:FxLine(x + w, my - 4, 1, 9, red); self:FxLine(R[1] - 1, my - 4, 1, 9, red)
+			self:FxLabel(x + w + g / 2, my - 12, tostring(math.floor(g + 0.5)))
+		end
+	end
+	if U then
+		local g, mx = y - (U[2] + U[4]), midX(U)
+		if g >= 1 and g < 900 then
+			self:FxLine(mx, U[2] + U[4], 1, g, red)
+			self:FxLine(mx - 4, U[2] + U[4], 9, 1, red); self:FxLine(mx - 4, y - 1, 9, 1, red)
+			self:FxLabel(mx + 18, U[2] + U[4] + g / 2, tostring(math.floor(g + 0.5)))
+		end
+	end
+	if D then
+		local g, mx = D[2] - (y + h), midX(D)
+		if g >= 1 and g < 900 then
+			self:FxLine(mx, y + h, 1, g, red)
+			self:FxLine(mx - 4, y + h, 9, 1, red); self:FxLine(mx - 4, D[2] - 1, 9, 1, red)
+			self:FxLabel(mx + 18, y + h + g / 2, tostring(math.floor(g + 0.5)))
+		end
+	end
+end
+
+-- 고른 요소의 거리 표시 (끌지 않을 때도)
+function M:ShowSelGaps()
+	if not (self.editing and self.sel and DistOn()) or self.dragging then
+		if not self.dragging then self:FxClear() end
+		return
+	end
+	local x, y, w, h = Box(self.sel)
+	self:FxBegin()
+	if x then self:DrawGaps(self.sel, x, y, w, h) end
+	self:FxEnd()
+end
+
+-- 원래 자리 유령 (점선)
+function M:ShowGhost(x, y, w, h)
+	local gh = self.ghost
+	if not gh then
+		gh = CreateFrame("Frame", nil, Ink.root)
+		gh:SetFrameStrata("DIALOG")
+		gh:SetFrameLevel(12)
+		gh.fill = gh:CreateTexture(nil, "BACKGROUND")
+		gh.fill:SetTexture(WHITE8)
+		gh.fill:SetAllPoints()
+		gh.fill:SetVertexColor(1, 1, 1, 0.035)
+		gh.d = {}
+		gh.label = Ink:Text(gh, F.sans, 10, C.dim, "LEFT")
+		gh.label:SetPoint("TOPLEFT", 5, -4)
+		gh.label:SetText("원래 자리")
+		self.ghost = gh
+	end
+	gh:ClearAllPoints()
+	gh:SetPoint("TOPLEFT", Ink.root, "TOPLEFT", x, -y)
+	gh:SetSize(w, h)
+	gh.label:SetShown(w > 70 and h > 22)
+	local n = 0
+	local function dash(px, py, dw, dh)
+		n = n + 1
+		local t = gh.d[n]
+		if not t then
+			t = gh:CreateTexture(nil, "BORDER")
+			t:SetTexture(WHITE8)
+			gh.d[n] = t
+		end
+		t:ClearAllPoints()
+		t:SetPoint("TOPLEFT", gh, "TOPLEFT", px, -py)
+		t:SetSize(dw, dh)
+		t:SetVertexColor(0.95, 0.95, 0.93, 0.4)
+		t:Show()
+	end
+	local DL, GP, T = 6, 4, 1.5
+	if w > 900 or h > 900 then DL, GP = 10, 6 end
+	for px = 0, w - 1, DL + GP do
+		local dw = math.min(DL, w - px)
+		dash(px, 0, dw, T); dash(px, h - T, dw, T)
+	end
+	for py = 0, h - 1, DL + GP do
+		local dh = math.min(DL, h - py)
+		dash(0, py, T, dh); dash(w - T, py, T, dh)
+	end
+	for i = n + 1, #gh.d do gh.d[i]:Hide() end
+	gh:SetAlpha(0)
+	gh:Show()
+	Tw(gh, "a", 0.18, "out", function(p) gh:SetAlpha(p) end)
+end
+
+function M:HideGhost()
+	local gh = self.ghost
+	if not gh or not gh:IsShown() then return end
+	Tw(gh, "a", 0.2, "out", function(p) gh:SetAlpha(1 - p) end, function() gh:Hide() end)
+end
+
+-- 되돌리기 (Ctrl+Z · 도구막대 버튼): 위치 · 크기 · 배율
+M.undo = {}
+function M:PushUndo(key, coalesce)
+	local m = Ink.movers[key]
+	if not m then return end
+	local last = self.undo[#self.undo]
+	local now = GetTime()
+	if coalesce and last and last.key == key and now - (last.t or 0) < 1.2 then
+		last.t = now
+		return
+	end
+	local p = Ink.pos and Ink.pos[key]
+	local sz = Ink.cdb and Ink.cdb.sizes and Ink.cdb.sizes[key]
+	local fw, fh = m.frame:GetSize()
+	table.insert(self.undo, { key = key, t = now, p = p and CopyTable(p) or false,
+		size = sz and CopyTable(sz) or false, fw = m.resize and fw, fh = m.resize and fh })
+	if #self.undo > 40 then table.remove(self.undo, 1) end
+	if self.bar then self:SyncButtons() end
+end
+
+function M:Undo()
+	if InCombatLockdown() then return end
+	local u = table.remove(self.undo)
+	if not u then return end
+	local m = Ink.movers[u.key]
+	if not m then return self:Undo() end
+	if Ink.pos then Ink.pos[u.key] = u.p and CopyTable(u.p) or nil end
+	if m.resize and u.fw then
+		m.resize(u.fw, u.fh)
+		if u.size then Ink:SaveSize(u.key, u.size[1], u.size[2]) else Ink:SaveSize(u.key, nil) end
+	end
+	Ink:ApplyPos(u.key)
+	if u.p then Ink:SavePos(u.key) end
+	Ink:Relayout()
+	self:Select(u.key)
+	self:SyncAll()
+	self:SyncButtons()
+end
+
+function M:DragStart(m, o)
+	if InCombatLockdown() then return end
+	self:Select(m.key)
+	local x, y, w, h = Box(m.key)
+	if not x then return end
+	self:PushUndo(m.key)
+	local es = Ink.root:GetEffectiveScale()
+	local cx, cy = GetCursorPosition()
+	o.drag = { x0 = x, y0 = y, w = w, h = h, cx = cx / es, cy = cy / es }
+	o.dragging = true
+	self.dragging = true
+	self:ShowGhost(x, y, w, h)
+	o:SetScript("OnUpdate", function() M:DragUpdate(m, o) end)
+end
+
+function M:DragUpdate(m, o)
+	local d = o.drag
+	if not d or InCombatLockdown() then return end
+	local es = Ink.root:GetEffectiveScale()
+	local cx, cy = GetCursorPosition()
+	cx, cy = cx / es, cy / es
+	local rw, rh = Ink.root:GetWidth(), Ink.root:GetHeight()
+	local dx, dy = cx - d.cx, -(cy - d.cy)
+	-- Shift: 많이 움직인 한 방향으로만
+	if IsShiftKeyDown() then
+		if math.abs(dx) >= math.abs(dy) then dy = 0 else dx = 0 end
+	end
+	local nx = math.max(0, math.min(rw - d.w, d.x0 + dx))
+	local ny = math.max(0, math.min(rh - d.h, d.y0 + dy))
+	local gx, gy, lx, ly
+	if MagnetOn() and not IsAltKeyDown() then
+		lx, ly = Candidates(m.key, nx, ny, d.w, d.h, rw, rh)
+		gx = Best(lx, nx, LIVE_MAG)
+		gy = Best(ly, ny, LIVE_MAG)
+		if gx then nx = gx.v end
+		if gy then ny = gy.v end
+	end
+	d.sx, d.sy = gx and true or nil, gy and true or nil
+	self:PlaceAt(m, nx, ny)
+	self:FxBegin()
+	local a = C.accent
+	if gx then
+		local lo, hi = Span(lx, gx)
+		lo, hi = math.min(lo, ny), math.max(hi, ny + d.h)
+		self:FxLine(gx.at, lo - 10, 1, hi - lo + 20, a)
+	end
+	if gy then
+		local lo, hi = Span(ly, gy)
+		lo, hi = math.min(lo, nx), math.max(hi, nx + d.w)
+		self:FxLine(lo - 10, gy.at, hi - lo + 20, 1, a)
+	end
+	if DistOn() then self:DrawGaps(m.key, nx, ny, d.w, d.h) end
+	self:FxEnd()
+	self:UpdateFields()
+end
+
+function M:DragStop(m, o)
+	local d = o.drag
+	o.drag = nil
+	o.dragging = nil
+	self.dragging = nil
+	o:SetScript("OnUpdate", nil)
+	self:HideGhost()
+	self:FxClear()
+	if not d or InCombatLockdown() then return end
+	local x, y = Box(m.key)
+	if x and GridOn() and not IsAltKeyDown() then
+		-- 붙지 않았고 실제로 움직인 방향만 8칸 격자에 (안 움직인 방향은 그대로)
+		local nx = (d.sx or math.abs(x - d.x0) < 0.5) and x or math.floor(x / SNAP + 0.5) * SNAP
+		local ny = (d.sy or math.abs(y - d.y0) < 0.5) and y or math.floor(y / SNAP + 0.5) * SNAP
+		self:PlaceAt(m, nx, ny)
+	end
+	Ink:SavePos(m.key)
+	Ink:Relayout()
+	self:SyncAll()
+	-- 놓은 자리에서 테두리가 한 번 반짝
+	local ov = self.overlays[m.key]
+	if ov then
+		Tw(ov, "drop", 0.35, "out", function(p) ov.bg:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.22 + 0.25 * (1 - p)) end,
+			function() M:PaintOverlay(m.key) end)
+	end
+end
+
 local function BuildOverlay(m)
 	local o = CreateFrame("Frame", nil, Ink.root)
 	o:SetFrameStrata("DIALOG")
@@ -352,31 +697,13 @@ local function BuildOverlay(m)
 	o:SetScript("OnMouseDown", function(_, btn)
 		if btn == "LeftButton" then M:Select(m.key) end
 	end)
-	o:SetScript("OnDragStart", function(self)
-		if InCombatLockdown() then return end
-		M:Select(m.key)
-		self.dragging = true
-		self:StartMoving()
-		self:SetScript("OnUpdate", function()
-			if InCombatLockdown() then return end
-			m.frame:ClearAllPoints()
-			m.frame:SetPoint("TOPLEFT", self, "TOPLEFT")
-			M:UpdateFields()
-		end)
-	end)
-	o:SetScript("OnDragStop", function(self)
-		self:StopMovingOrSizing()
-		self:SetScript("OnUpdate", nil)
-		self.dragging = nil
-		if InCombatLockdown() then return end
-		Snap(m.key)
-		Ink:SavePos(m.key)
-		Ink:Relayout()
-		M:SyncAll()
-	end)
+	o:SetScript("OnDragStart", function(self) M:DragStart(m, self) end)
+	o:SetScript("OnDragStop", function(self) M:DragStop(m, self) end)
+	o:SetScript("OnHide", function(self) if self.drag then M:DragStop(m, self) end end)
 	-- 우클릭: 이 요소만 기본 위치로
 	o:SetScript("OnMouseUp", function(_, btn)
 		if btn == "RightButton" and not InCombatLockdown() then
+			M:PushUndo(m.key)
 			ResetSize(m)
 			Ink:ResetPos(m.key)
 			Ink:Relayout()
@@ -388,6 +715,7 @@ local function BuildOverlay(m)
 	o:SetScript("OnMouseWheel", function(_, d)
 		if InCombatLockdown() or not Ink:CanScale(m.key) then return end
 		M:Select(m.key)
+		M:PushUndo(m.key, true)
 		M:Nudge(nil, nil, d > 0 and 0.05 or -0.05)
 	end)
 	if m.resize then AddResizeGrips(m, o) end
@@ -427,7 +755,8 @@ function M:SyncAll()
 	for _, key in ipairs(Ink.moverOrder) do self:SyncOverlay(Ink.movers[key]) end
 	self:UpdateFields()
 	if self.grid and self.grid:IsShown() then self:DrawGrid() end
-	if self.bar then self.bar.aspect.text:SetText(AspectLabel()) end
+	if self.bar then self:SyncButtons() end
+	self:ShowSelGaps()
 end
 
 function M:Select(key)
@@ -436,6 +765,7 @@ function M:Select(key)
 	if old then self:PaintOverlay(old) end
 	if key then self:PaintOverlay(key) end
 	self:UpdateFields()
+	self:ShowSelGaps()
 end
 
 -- 선택한 요소의 좌표 / 크기를 위쪽 막대에 표시
@@ -444,14 +774,35 @@ function M:UpdateFields()
 	if not bar then return end
 	local key = self.sel
 	local m = key and Ink.movers[key]
+	local insp = bar.insp
+	local hint = self.hint
 	if not m then
-		bar.selName:SetText("요소를 클릭해서 고르세요")
-		bar.selName:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
-		for _, w in ipairs({ bar.xBox, bar.yBox }) do w:SetText(""); w:Disable() end
-		bar.scaleTxt:SetText("—")
+		if insp:IsShown() and not insp.hiding then
+			insp.hiding = true
+			Tw(insp, "in", 0.18, "out", function(p) insp:SetAlpha(1 - p) end, function()
+				insp:Hide(); insp.hiding = nil
+				if not M.sel and hint then
+					hint:Show()
+					Tw(hint, "a", 0.25, "out", function(p) hint:SetAlpha(p) end)
+				end
+			end)
+		end
 		self:SyncOpts()
 		return
 	end
+	if hint and hint:IsShown() then Tw(hint, "a", 0.01, "out", function() hint:Hide() end) end
+	-- 고른 요소 칸이 도구막대 위로 톡 올라온다
+	if not insp:IsShown() or insp.hiding then
+		insp.hiding = nil
+		insp:Show()
+		insp:SetAlpha(0)
+		Tw(insp, "in", 0.32, "back", function(p)
+			insp:SetAlpha(math.min(1, p * 1.5))
+			insp:ClearAllPoints()
+			insp:SetPoint("BOTTOM", bar, "TOP", 0, 10 - 10 * (1 - p))
+		end)
+	end
+	insp.mark:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
 	bar.selName:SetText(m.label)
 	bar.selName:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
 	local x, y = Ink:FrameBox(key)
@@ -476,11 +827,10 @@ function M:SyncOpts()
 	local row = bar.optRow
 	if not opts then
 		row:Hide()
-		bar:SetHeight(92)
+		self:SizeInspector(false)
 		return
 	end
 	row:Show()
-	bar:SetHeight(134)
 	if row.forKey ~= m.key then
 		for _, w in ipairs(row.widgets or {}) do w:Hide() end
 		row.widgets = {}
@@ -522,6 +872,9 @@ function M:SyncOpts()
 		end
 		row.forKey = m.key
 	end
+	local total = 0
+	for i, w in ipairs(row.widgets) do total = total + w:GetWidth() + (i > 1 and 14 or 0) end
+	self:SizeInspector(true, total)
 	for _, w in ipairs(row.widgets) do
 		local o = w.opt
 		if o.kind == "toggle" then
@@ -537,6 +890,7 @@ function M:Nudge(dx, dy, ds, ax, ay)
 	local key = self.sel
 	local m = key and Ink.movers[key]
 	if not m or InCombatLockdown() then return end
+	self:PushUndo(key, true)
 	if ds then
 		local p = Ink:GetPos(key)
 		Ink:SetMoverScale(key, ((p and p.s) or 1) + ds)
@@ -558,6 +912,8 @@ function M:SetEdit(on)
 		print("|cffFFF468FOA|r 전투 중에는 편집 모드를 쓸 수 없어요.")
 		return
 	end
+	local S = Ink.modules.Sheet
+	if on and S and S.IsOpen and S:IsOpen() then S:Close() end
 	self.editing = on
 	for _, key in ipairs(Ink.moverOrder) do
 		local m = Ink.movers[key]
@@ -575,7 +931,11 @@ function M:SetEdit(on)
 	end
 	if not on then
 		self.sel = nil
+		self.dragging = nil
 		if self.presetPop then self.presetPop:Hide() end
+		self:FxClear()
+		if self.ghost then self.ghost:Hide() end
+		wipe(self.undo)
 		pcall(Ink.PushShared, Ink)   -- 모든 캐릭터 같은 배치: 공용 배치로 저장
 	end
 	self:ShowBar(on)
@@ -584,6 +944,9 @@ function M:SetEdit(on)
 	if not on and self.testFromEdit then self:SetTest(false) end
 	self:SyncButtons()
 	if on then self:SyncAll() end
+	-- 설정 시트에서 들어왔으면 완료할 때 시트를 다시 올린다
+	local S = Ink.modules.Sheet
+	if not on and S and S.EditDone then S:EditDone() end
 end
 
 -------------------------------------------------------------------------------
@@ -846,148 +1209,419 @@ local function NumBox(parent, w)
 	return b
 end
 
-function M:ShowBar(on)
-	if not self.bar then
-		local bar = CreateFrame("Frame", nil, Ink.root)
-		bar:SetFrameStrata("FULLSCREEN_DIALOG")
-		bar:SetSize(980, 92)
-		bar:SetPoint("TOP", Ink.root, "TOP", 0, -240)
-		bar:EnableMouse(true)
-		bar:SetMovable(true)
-		bar:RegisterForDrag("LeftButton")
-		bar:SetScript("OnDragStart", bar.StartMoving)
-		bar:SetScript("OnDragStop", bar.StopMovingOrSizing)
-		bar.bg = Ink:Round(bar, "BACKGROUND", false, false)
-		bar.bg:SetAllPoints()
-		bar.bg:SetVertexColor(0.05, 0.06, 0.08, 0.95)
-		bar.bd = Ink:Round(bar, "BORDER", false, true)
-		bar.bd:SetAllPoints()
-		bar.bd:SetVertexColor(1, 1, 1, 0.12)
-		bar.accent = bar:CreateTexture(nil, "ARTWORK")
-		bar.accent:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.95)
-		bar.accent:SetSize(24, 2)
-		bar.accent:SetPoint("TOPLEFT", 16, -1)
-		bar.title = Ink:Text(bar, F.bold, 13, C.text, "LEFT")
-		bar.title:SetPoint("TOPLEFT", 16, -12)
-		bar.title:SetText("FOA 편집 모드")
-		bar.hint = Ink:Text(bar, F.sans, 10, C.muted, "LEFT")
-		bar.hint:SetPoint("LEFT", bar.title, "RIGHT", 10, -1)
-		bar.hint:SetText("드래그 · 휠 크기 · 우클릭 기본 · 방향키 1칸")
+-------------------------------------------------------------------------------
+-- 편집 도구 (04 Dock): 아래 떠 있는 도구막대 + 고른 요소 칸(도구막대 바로 위) + 위 안내
+--  도구막대: 자석 · 격자 · 거리 · 되돌리기 | 예시 솔로 · 파티 · 레이드 | 예시 표시 · 비율 · 배치 공유 · 기본 배치 · 완료
+-------------------------------------------------------------------------------
+local DARK = { 0.059, 0.067, 0.082 }
+local INKC = { 0.067, 0.075, 0.094 }
 
-		-- 1줄: 도구 (오른쪽부터)
-		bar.done = Button(bar, "완료", 64, function() M:SetEdit(false) end, true)
-		bar.done:SetPoint("TOPRIGHT", -12, -8)
-		bar.reset = Button(bar, "전체 초기화", 92, function() M:ResetAll() end)
-		bar.reset:SetPoint("RIGHT", bar.done, "LEFT", -6, 0)
-		bar.test = Button(bar, "예시 표시", 80, function() M:SetTest(not M.testing) end)
-		bar.test:SetPoint("RIGHT", bar.reset, "LEFT", -6, 0)
-		bar.group = Button(bar, "파티 예시", 80, function() M:ToggleGroup() end)
-		bar.group:SetPoint("RIGHT", bar.test, "LEFT", -6, 0)
-		bar.snap = Button(bar, "격자 맞춤", 80, function()
-			Ink.db.editSnap = (Ink.db.editSnap == false) and true or false
-			M:SyncButtons()
-		end)
-		bar.snap:SetPoint("RIGHT", bar.group, "LEFT", -6, 0)
-		bar.gridBtn = Button(bar, "격자", 56, function()
-			Ink.db.editGrid = (Ink.db.editGrid == false) and true or false
-			M:ShowGrid(Ink.db.editGrid ~= false)
-			M:SyncButtons()
-		end)
-		bar.gridBtn:SetPoint("RIGHT", bar.snap, "LEFT", -6, 0)
-		bar.share = Button(bar, "배치 공유", 80, function() M:TogglePresets() end)
-		bar.share:SetPoint("RIGHT", bar.gridBtn, "LEFT", -6, 0)
-
-		-- 2줄: 선택한 요소
-		bar.line = bar:CreateTexture(nil, "ARTWORK")
-		bar.line:SetColorTexture(1, 1, 1, 0.06)
-		bar.line:SetHeight(1)
-		bar.line:SetPoint("TOPLEFT", 12, -46)
-		bar.line:SetPoint("TOPRIGHT", -12, -46)
-		bar.selName = Ink:Text(bar, F.semi, 12, C.accent, "LEFT")
-		bar.selName:SetPoint("TOPLEFT", 16, -60)
-		bar.selName:SetWidth(170)
-		bar.selName:SetWordWrap(false)
-
-		local function label(text, anchor, x)
-			local t = Ink:Text(bar, F.latin, 11, C.muted, "LEFT")
-			t:SetPoint("LEFT", anchor, "RIGHT", x or 14, 0)
-			t:SetText(text)
-			return t
+local function ToolBtn(parent, icon, tip, onClick)
+	local b = CreateFrame("Button", nil, parent)
+	b:SetSize(48, 46)
+	b.bg = Ink:Round(b, "BACKGROUND", false, false)
+	b.bg:SetAllPoints()
+	b.icon = b:CreateTexture(nil, "ARTWORK")
+	b.icon:SetTexture(Ink.icon(icon))
+	b.icon:SetSize(19, 19)
+	b.icon:SetPoint("CENTER")
+	function b:SetActive(on)
+		self.active = on
+		local a = C.accent
+		if on then
+			self.bg:SetVertexColor(a[1], a[2], a[3], self.hot and 0.2 or 0.13)
+			self.icon:SetVertexColor(a[1], a[2], a[3])
+		else
+			self.bg:SetVertexColor(1, 1, 1, self.hot and 0.07 or 0)
+			local c = self.hot and C.text or C.soft
+			self.icon:SetVertexColor(c[1], c[2], c[3])
 		end
-		local xl = label("X", bar.selName, 6)
-		bar.xBox = NumBox(bar, 64)
-		bar.xBox:SetPoint("LEFT", xl, "RIGHT", 6, 0)
-		local yl = label("Y", bar.xBox, 12)
-		bar.yBox = NumBox(bar, 64)
-		bar.yBox:SetPoint("LEFT", yl, "RIGHT", 6, 0)
-		local function apply()
-			local x, y = tonumber(bar.xBox:GetText()), tonumber(bar.yBox:GetText())
-			bar.xBox:ClearFocus(); bar.yBox:ClearFocus()
-			if x and y then M:Nudge(nil, nil, nil, x, y) end
-		end
-		bar.xBox:SetScript("OnEnterPressed", apply)
-		bar.yBox:SetScript("OnEnterPressed", apply)
-		bar.xBox:SetScript("OnTabPressed", function() bar.yBox:SetFocus() end)
-		bar.yBox:SetScript("OnTabPressed", function() bar.xBox:SetFocus() end)
-
-		local sl = label("크기", bar.yBox, 20)
-		bar.minus = Button(bar, "−", 28, function() M:Nudge(nil, nil, -0.05) end)
-		bar.minus:SetHeight(24)
-		bar.minus:SetPoint("LEFT", sl, "RIGHT", 8, 0)
-		bar.scaleTxt = Ink:Text(bar, F.latinB, 12, C.text, "CENTER")
-		bar.scaleTxt:SetWidth(48)
-		bar.scaleTxt:SetPoint("LEFT", bar.minus, "RIGHT", 2, 0)
-		bar.plus = Button(bar, "+", 28, function() M:Nudge(nil, nil, 0.05) end)
-		bar.plus:SetHeight(24)
-		bar.plus:SetPoint("LEFT", bar.scaleTxt, "RIGHT", 2, 0)
-		bar.one = Button(bar, "100%", 52, function()
-			local p = M.sel and Ink:GetPos(M.sel)
-			if p then M:Nudge(nil, nil, 1 - (p.s or 1)) end
-		end)
-		bar.one:SetHeight(24)
-		bar.one:SetPoint("LEFT", bar.plus, "RIGHT", 6, 0)
-
-		-- 화면 비율 (자동 → 16:10 → 16:9 → 21:9 → 32:9)
-		bar.aspect = Button(bar, "비율", 170, function()
-			local cur = Ink.cdb.aspect or "auto"
-			local i = 1
-			for n, v in ipairs(ASPECT_CYCLE) do if v == cur then i = n end end
-			Ink:SetAspect(ASPECT_CYCLE[i % #ASPECT_CYCLE + 1])
-			M:SyncAll()
-		end)
-		bar.aspect:SetHeight(24)
-		bar.aspect:SetPoint("RIGHT", -12, 0)
-		bar.aspect:SetPoint("TOP", bar.line, "BOTTOM", 0, -9)
-
-		-- 3줄: 선택한 요소만의 조절 칸 (있을 때만)
-		bar.optRow = CreateFrame("Frame", nil, bar)
-		bar.optRow:SetPoint("TOPLEFT", 16, -96)
-		bar.optRow:SetPoint("TOPRIGHT", -12, -96)
-		bar.optRow:SetHeight(28)
-		bar.optRow.line = bar.optRow:CreateTexture(nil, "ARTWORK")
-		bar.optRow.line:SetColorTexture(1, 1, 1, 0.06)
-		bar.optRow.line:SetHeight(1)
-		bar.optRow.line:SetPoint("BOTTOMLEFT", bar.optRow, "TOPLEFT", -4, 4)
-		bar.optRow.line:SetPoint("BOTTOMRIGHT", bar.optRow, "TOPRIGHT", 0, 4)
-		bar.optRow:Hide()
-
-		-- 화살표 키로 미세 이동 (입력 칸에 글자를 넣는 중엔 그대로 둔다)
-		bar:EnableKeyboard(true)
-		bar:SetPropagateKeyboardInput(true)
-		bar:SetScript("OnKeyDown", function(self, key)
-			local step = IsShiftKeyDown() and 10 or 1
-			local d = ({ LEFT = { -step, 0 }, RIGHT = { step, 0 }, UP = { 0, -step }, DOWN = { 0, step } })[key]
-			if d and M.sel and not InCombatLockdown() then
-				self:SetPropagateKeyboardInput(false)
-				M:Nudge(d[1], d[2])
-			else
-				self:SetPropagateKeyboardInput(true)
-			end
-		end)
-		self.bar = bar
 	end
-	self.bar:SetShown(on)
-	if on then self:UpdateFields() end
+	b:SetScript("OnEnter", function(self)
+		self.hot = true
+		self:SetActive(self.active)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:SetText(tip[1], 1, 1, 1)
+		if tip[2] then Ink.TipLine(GameTooltip, tip[2], 0.56, 0.58, 0.61) end
+		GameTooltip:Show()
+	end)
+	b:SetScript("OnLeave", function(self)
+		self.hot = nil
+		self:SetActive(self.active)
+		GameTooltip_Hide()
+	end)
+	b:SetScript("OnClick", onClick)
+	b:SetActive(false)
+	return b
+end
+
+local function FlatBtn(parent, text, style, onClick)
+	local b = CreateFrame("Button", nil, parent)
+	b:SetHeight(46)
+	b.bg = Ink:Round(b, "BACKGROUND", false, false)
+	b.bg:SetAllPoints()
+	b.text = Ink:Text(b, style == "primary" and F.bold or F.semi, 13, C.soft, "CENTER")
+	b.text:SetPoint("CENTER")
+	b.style = style
+	function b:SetLabel(t)
+		self.text:SetText(t)
+		self:SetWidth(math.max(self.minW or 0, math.ceil(self.text:GetStringWidth() or 40) + 30))
+	end
+	function b:SetActive(on)
+		self.active = on
+		local a = C.accent
+		if self.style == "primary" then
+			self.bg:SetVertexColor(a[1], a[2], a[3], self.hot and 1 or 0.92)
+			self.text:SetTextColor(INKC[1], INKC[2], INKC[3])
+		elseif on then
+			self.bg:SetVertexColor(a[1], a[2], a[3], self.hot and 0.2 or 0.13)
+			self.text:SetTextColor(a[1], a[2], a[3])
+		else
+			self.bg:SetVertexColor(1, 1, 1, self.hot and 0.07 or 0)
+			local c = self.hot and C.text or C.soft
+			self.text:SetTextColor(c[1], c[2], c[3])
+		end
+	end
+	b:SetScript("OnEnter", function(self) self.hot = true; self:SetActive(self.active) end)
+	b:SetScript("OnLeave", function(self) self.hot = nil; self:SetActive(self.active) end)
+	b:SetScript("OnClick", onClick)
+	b:SetLabel(text)
+	b:SetActive(false)
+	return b
+end
+
+local function Panel(f, alpha)
+	f.bg = Ink:Round(f, "BACKGROUND", false, false)
+	f.bg:SetAllPoints()
+	f.bg:SetVertexColor(DARK[1], DARK[2], DARK[3], alpha or 0.96)
+	f.bd = Ink:Round(f, "BORDER", false, true)
+	f.bd:SetAllPoints()
+	f.bd:SetVertexColor(1, 1, 1, 0.1)
+end
+
+local function Sep(parent)
+	local t = parent:CreateTexture(nil, "ARTWORK")
+	t:SetTexture("Interface\\Buttons\\WHITE8X8")
+	t:SetVertexColor(1, 1, 1, 0.1)
+	t:SetSize(1, 28)
+	return t
+end
+
+local PREVIEW = { { "solo", "솔로" }, { "party", "파티" }, { "raid", "레이드" } }
+
+function M:BuildBar()
+	local bar = CreateFrame("Frame", "FOAEditToolbar", Ink.root)
+	bar:SetFrameStrata("FULLSCREEN_DIALOG")
+	bar:SetHeight(64)
+	bar:SetPoint("BOTTOM", Ink.root, "BOTTOM", 0, 34)
+	bar:EnableMouse(true)
+	bar:SetMovable(true)
+	bar:SetClampedToScreen(true)
+	bar:RegisterForDrag("LeftButton")
+	bar:SetScript("OnDragStart", bar.StartMoving)
+	bar:SetScript("OnDragStop", function(self)
+		self:StopMovingOrSizing()
+		-- 옮긴 자리 기억 (가운데 기준 x, 바닥에서 y)
+		local l, b, w = self:GetLeft(), self:GetBottom(), self:GetWidth()
+		local rl, rb, rw = Ink.root:GetLeft(), Ink.root:GetBottom(), Ink.root:GetWidth()
+		if l and b and rl and rb then
+			local k = self:GetEffectiveScale() / Ink.root:GetEffectiveScale()
+			Ink.db.editBarPos = { math.floor((l * k - rl) + w * k / 2 - rw / 2 + 0.5), math.floor(b * k - rb + 0.5) }
+		end
+	end)
+	Panel(bar, 0.96)
+	bar.shadow = bar:CreateTexture(nil, "BACKGROUND", nil, -7)
+	bar.shadow:SetTexture(Ink.tex.glow)
+	bar.shadow:SetPoint("TOPLEFT", -40, 24)
+	bar.shadow:SetPoint("BOTTOMRIGHT", 40, -40)
+	bar.shadow:SetVertexColor(0, 0, 0, 0.6)
+
+	bar.magnet = ToolBtn(bar, "Magnet", { "자석", "다른 요소 · 화면 가운데에 가까우면 노란 선과 함께 착 붙어요. Alt 를 누른 채 끌면 자유롭게." }, function()
+		Ink.db.editMagnet = (Ink.db.editMagnet == false) and true or false
+		M:SyncButtons()
+	end)
+	bar.gridBtn = ToolBtn(bar, "Grid", { "격자", "격자를 보여 주고, 놓을 때 8칸에 맞춰요." }, function()
+		Ink.db.editGrid = (Ink.db.editGrid == false) and true or false
+		M:ShowGrid(Ink.db.editGrid ~= false)
+		M:SyncButtons()
+	end)
+	bar.dist = ToolBtn(bar, "Ruler", { "거리 표시", "고른 요소에서 이웃까지 거리를 빨간 숫자로." }, function()
+		Ink.db.editDist = (Ink.db.editDist == false) and true or false
+		M:SyncButtons()
+		M:ShowSelGaps()
+	end)
+	bar.undoBtn = ToolBtn(bar, "Undo", { "되돌리기", "Ctrl+Z" }, function() M:Undo() end)
+	bar.sep1 = Sep(bar)
+
+	-- 예시: 솔로 · 파티 · 레이드 (노란 받침이 미끄러짐)
+	local pv = CreateFrame("Frame", nil, bar)
+	pv:SetSize(3 + #PREVIEW * 66 + 3, 40)
+	pv.bg = Ink:Round(pv, "BACKGROUND", false, false)
+	pv.bg:SetAllPoints()
+	pv.bg:SetVertexColor(1, 1, 1, 0.05)
+	pv.pill = CreateFrame("Frame", nil, pv)
+	pv.pill:SetSize(66, 34)
+	pv.pill.bg = Ink:Round(pv.pill, "BACKGROUND", false, false)
+	pv.pill.bg:SetAllPoints()
+	pv.btns = {}
+	for i, d in ipairs(PREVIEW) do
+		local b = CreateFrame("Button", nil, pv)
+		b:SetSize(66, 34)
+		b:SetPoint("LEFT", 3 + (i - 1) * 66, 0)
+		b:SetFrameLevel(pv.pill:GetFrameLevel() + 2)
+		b.text = Ink:Text(b, F.semi, 13, C.soft, "CENTER")
+		b.text:SetPoint("CENTER")
+		b.text:SetText(d[2])
+		b:SetScript("OnClick", function()
+			M.testGroup = d[1]
+			if not M.testing then M:SetTest(true) end
+			local g = Ink.modules.Group
+			if g and g.SetTest then pcall(g.SetTest, g, true) end
+			M:SyncButtons()
+		end)
+		b:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			GameTooltip:SetText(d[1] == "solo" and "예시: 혼자" or (d[2] .. " 예시 프레임 보기"), 1, 1, 1)
+			GameTooltip:Show()
+		end)
+		b:SetScript("OnLeave", GameTooltip_Hide)
+		pv.btns[i] = b
+	end
+	bar.preview = pv
+	bar.sep2 = Sep(bar)
+
+	bar.test = ToolBtn(bar, "Eye", { "예시 표시", "파티 · 대상 · 시전바 같은 예시 프레임을 띄워요." }, function() M:SetTest(not M.testing) end)
+	bar.aspect = FlatBtn(bar, "비율", nil, function()
+		local cur = Ink.cdb.aspect or "auto"
+		local i = 1
+		for n, v in ipairs(ASPECT_CYCLE) do if v == cur then i = n end end
+		Ink:SetAspect(ASPECT_CYCLE[i % #ASPECT_CYCLE + 1])
+		M:SyncAll()
+	end)
+	bar.share = FlatBtn(bar, "배치 공유", nil, function() M:TogglePresets() end)
+	bar.reset = FlatBtn(bar, "기본 배치", nil, function(self)
+		if self.armed then
+			self.armed = nil
+			self:SetLabel("기본 배치")
+			M:ResetAll()
+		else
+			self.armed = true
+			self:SetLabel("한 번 더 누르면 초기화")
+			M:LayoutBar()
+			C_Timer.After(3, function()
+				if self.armed then self.armed = nil; self:SetLabel("기본 배치"); M:LayoutBar() end
+			end)
+		end
+	end)
+	bar.done = FlatBtn(bar, "완료", "primary", function() M:SetEdit(false) end)
+	bar.done.minW = 88
+	bar.done:SetLabel("완료")
+
+	-- 고른 요소 칸 (도구막대 바로 위)
+	local insp = CreateFrame("Frame", nil, bar)
+	insp:SetHeight(58)
+	insp:SetPoint("BOTTOM", bar, "TOP", 0, 10)
+	insp:EnableMouse(true)
+	Panel(insp, 0.96)
+	insp.mark = insp:CreateTexture(nil, "ARTWORK")
+	insp.mark:SetTexture("Interface\\Buttons\\WHITE8X8")
+	insp.mark:SetSize(7, 7)
+	insp.mark:SetPoint("TOPLEFT", 18, -26)
+	if insp.mark.SetRotation then insp.mark:SetRotation(math.rad(45)) end
+	bar.insp = insp
+	bar.selName = Ink:Text(insp, F.semi, 14, C.accent, "LEFT")
+	bar.selName:SetPoint("LEFT", insp.mark, "RIGHT", 10, 0)
+	bar.selName:SetWidth(170)
+	bar.selName:SetWordWrap(false)
+	local function label(text, anchor, x)
+		local t = Ink:Text(insp, F.latin, 11, C.muted, "LEFT")
+		t:SetPoint("LEFT", anchor, "RIGHT", x or 14, 0)
+		t:SetText(text)
+		return t
+	end
+	local xl = label("X", bar.selName, 6)
+	bar.xBox = NumBox(insp, 64)
+	bar.xBox:SetHeight(28)
+	bar.xBox:SetPoint("LEFT", xl, "RIGHT", 7, 0)
+	local yl = label("Y", bar.xBox, 12)
+	bar.yBox = NumBox(insp, 64)
+	bar.yBox:SetHeight(28)
+	bar.yBox:SetPoint("LEFT", yl, "RIGHT", 7, 0)
+	local function apply()
+		local x, y = tonumber(bar.xBox:GetText()), tonumber(bar.yBox:GetText())
+		bar.xBox:ClearFocus(); bar.yBox:ClearFocus()
+		if x and y then M:Nudge(nil, nil, nil, x, y) end
+	end
+	bar.xBox:SetScript("OnEnterPressed", apply)
+	bar.yBox:SetScript("OnEnterPressed", apply)
+	bar.xBox:SetScript("OnTabPressed", function() bar.yBox:SetFocus() end)
+	bar.yBox:SetScript("OnTabPressed", function() bar.xBox:SetFocus() end)
+	local sl = label("크기", bar.yBox, 20)
+	bar.minus = Button(insp, "−", 30, function() M:Nudge(nil, nil, -0.05) end)
+	bar.minus:SetHeight(28)
+	bar.minus:SetPoint("LEFT", sl, "RIGHT", 8, 0)
+	bar.scaleTxt = Ink:Text(insp, F.latinB, 13, C.text, "CENTER")
+	bar.scaleTxt:SetWidth(50)
+	bar.scaleTxt:SetPoint("LEFT", bar.minus, "RIGHT", 2, 0)
+	bar.plus = Button(insp, "+", 30, function() M:Nudge(nil, nil, 0.05) end)
+	bar.plus:SetHeight(28)
+	bar.plus:SetPoint("LEFT", bar.scaleTxt, "RIGHT", 2, 0)
+	bar.one = Button(insp, "100%", 54, function()
+		local p = M.sel and Ink:GetPos(M.sel)
+		if p then M:Nudge(nil, nil, 1 - (p.s or 1)) end
+	end)
+	bar.one:SetHeight(28)
+	bar.one:SetPoint("LEFT", bar.plus, "RIGHT", 6, 0)
+	insp.hint = Ink:Text(insp, F.sans, 11, C.dim, "RIGHT")
+	insp.hint:SetPoint("RIGHT", insp, "TOPRIGHT", -18, -29)
+	insp.hint:SetText("휠 크기 · 우클릭 기본 위치")
+	-- 고른 요소만의 조절 칸 (행동단축바 등)
+	bar.optRow = CreateFrame("Frame", nil, insp)
+	bar.optRow:SetPoint("TOPLEFT", 18, -58)
+	bar.optRow:SetPoint("TOPRIGHT", -18, -58)
+	bar.optRow:SetHeight(30)
+	bar.optRow.line = bar.optRow:CreateTexture(nil, "ARTWORK")
+	bar.optRow.line:SetColorTexture(1, 1, 1, 0.06)
+	bar.optRow.line:SetHeight(1)
+	bar.optRow.line:SetPoint("BOTTOMLEFT", bar.optRow, "TOPLEFT", -4, 2)
+	bar.optRow.line:SetPoint("BOTTOMRIGHT", bar.optRow, "TOPRIGHT", 4, 2)
+	bar.optRow:Hide()
+	insp:Hide()
+
+	-- 화살표 키 미세 이동 · Ctrl+Z 되돌리기 · ESC 완료 (입력 칸에 글자를 넣는 중엔 그대로)
+	bar:EnableKeyboard(true)
+	bar:SetPropagateKeyboardInput(true)
+	bar:SetScript("OnKeyDown", function(self, key)
+		if InCombatLockdown() then return end
+		local step = IsShiftKeyDown() and 10 or 1
+		local d = ({ LEFT = { -step, 0 }, RIGHT = { step, 0 }, UP = { 0, -step }, DOWN = { 0, step } })[key]
+		if d and M.sel then
+			self:SetPropagateKeyboardInput(false)
+			M:Nudge(d[1], d[2])
+		elseif key == "Z" and IsControlKeyDown() then
+			self:SetPropagateKeyboardInput(false)
+			M:Undo()
+		elseif key == "ESCAPE" then
+			self:SetPropagateKeyboardInput(false)
+			if M.presetPop and M.presetPop:IsShown() then M.presetPop:Hide() else M:SetEdit(false) end
+		else
+			self:SetPropagateKeyboardInput(true)
+		end
+	end)
+
+	-- 위 안내
+	-- 안내: 아무것도 안 골랐을 때 도구막대 바로 위 (고르면 그 자리에 고른 요소 칸이 올라온다)
+	local hint = CreateFrame("Frame", nil, bar)
+	hint:SetHeight(38)
+	hint:SetPoint("BOTTOM", bar, "TOP", 0, 10)
+	Panel(hint, 0.9)
+	hint.dot = hint:CreateTexture(nil, "ARTWORK")
+	hint.dot:SetTexture(Ink.tex.disc)
+	hint.dot:SetSize(7, 7)
+	hint.dot:SetPoint("LEFT", 16, 0)
+	hint.dot:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
+	hint.text = Ink:Text(hint, F.sans, 13, C.soft, "LEFT")
+	hint.text:SetPoint("LEFT", hint.dot, "RIGHT", 10, 0)
+	local sep = "  |cff5E636B·|r  "
+	hint.text:SetText("|cffF3F2EE편집 모드|r" .. sep .. "끌어서 옮기기" .. sep .. "고른 뒤 방향키 1칸 · Shift 10칸" .. sep .. "Shift 끌기 한 방향 · Alt 자유" .. sep .. "Ctrl+Z 되돌리기" .. sep .. "ESC 완료")
+	hint:SetWidth(math.ceil(hint.text:GetStringWidth() or 600) + 46)
+	hint:Hide()
+	self.hint = hint
+	self.bar = bar
+	self:LayoutBar()
+end
+
+-- 도구막대 버튼 배치 (글자 폭이 바뀌면 다시)
+function M:LayoutBar()
+	local bar = self.bar
+	if not bar then return end
+	local x = 9
+	local function put(w, gap)
+		w:ClearAllPoints()
+		w:SetPoint("LEFT", bar, "LEFT", x, 0)
+		x = x + w:GetWidth() + (gap or 4)
+	end
+	put(bar.magnet); put(bar.gridBtn); put(bar.dist); put(bar.undoBtn, 12)
+	put(bar.sep1, 12)
+	put(bar.preview, 12)
+	put(bar.sep2, 12)
+	put(bar.test, 4); put(bar.aspect, 2); put(bar.share, 2); put(bar.reset, 8); put(bar.done, 0)
+	bar:SetWidth(x + 9)
+end
+
+function M:PaintPreview(animate)
+	local bar = self.bar
+	if not bar then return end
+	local pv = bar.preview
+	local cur = self.testing and (self.testGroup or "party") or "solo"
+	local idx = 1
+	for i, d in ipairs(PREVIEW) do if d[1] == cur then idx = i end end
+	local a = C.accent
+	pv.pill.bg:SetVertexColor(a[1], a[2], a[3], 1)
+	for i, b in ipairs(pv.btns) do
+		local c = (i == idx) and INKC or C.soft
+		b.text:SetTextColor(c[1], c[2], c[3])
+		b.text:SetFont(i == idx and F.bold or F.semi, Ink:BoostSize(13), "")
+	end
+	local tx = 3 + (idx - 1) * 66
+	local fx = pv.pillX or tx
+	local function place(v)
+		pv.pillX = v
+		pv.pill:ClearAllPoints()
+		pv.pill:SetPoint("LEFT", pv, "LEFT", v, 0)
+	end
+	if fx ~= tx then
+		Tw(pv, "pill", 0.5, "back", function(p) place(fx + (tx - fx) * p) end)
+	else
+		place(tx)
+	end
+end
+
+-- 고른 요소 칸 크기 (조절 칸이 있으면 한 줄 더)
+function M:SizeInspector(withOpts, optW)
+	local insp = self.bar and self.bar.insp
+	if not insp then return end
+	insp:SetHeight(withOpts and 100 or 58)
+	insp:SetWidth(math.max(800, (optW or 0) + 36))
+end
+
+-- 도구막대 자리: 옮겨 둔 자리가 있으면 거기, 없으면 화면 아래 가운데에 있는 요소(행동단축바 등) 바로 위
+function M:BarSpot()
+	local saved = Ink.db.editBarPos
+	if type(saved) == "table" and saved[1] then return saved[1], saved[2] end
+	local rw, rh = Ink.root:GetWidth() or 1920, Ink.root:GetHeight() or 1080
+	local bw = self.bar:GetWidth() or 900
+	local l, r = rw / 2 - bw / 2 - 20, rw / 2 + bw / 2 + 20
+	local floor = 34
+	for _, key in ipairs(Ink.moverOrder) do
+		local x, y, w, h = Box(key)
+		if x and x < r and x + w > l and y + h > rh - 300 then
+			floor = math.max(floor, rh - y + 18)
+		end
+	end
+	return 0, math.min(floor, rh * 0.42)
+end
+
+function M:ShowBar(on)
+	if not self.bar then self:BuildBar() end
+	local bar, hint = self.bar, self.hint
+	if on then
+		self:LayoutBar()
+		local bx, by = self:BarSpot()
+		bar:Show()
+		bar:SetAlpha(0)
+		Tw(bar, "in", 0.45, "back", function(p)
+			bar:SetAlpha(math.min(1, p * 1.6))
+			bar:ClearAllPoints()
+			bar:SetPoint("BOTTOM", Ink.root, "BOTTOM", bx, by - 26 * (1 - p))
+		end)
+		hint:SetAlpha(0)
+		hint:Show()
+		Tw(hint, "a", 0.4, "out", function(p) hint:SetAlpha(p) end, nil, 0.15)
+		self:UpdateFields()
+	else
+		bar:Hide()
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -1109,8 +1743,9 @@ local MAX_PRESETS = 8
 function M:BuildPresets()
 	local p = CreateFrame("Frame", nil, self.bar)
 	p:SetSize(360, 150)
-	p:SetPoint("TOPRIGHT", self.bar.share, "BOTTOMRIGHT", 0, -6)
+	p:SetPoint("BOTTOMRIGHT", self.bar.share, "TOPRIGHT", 0, 14)
 	p:SetFrameStrata("FULLSCREEN_DIALOG")
+	p:SetFrameLevel(self.bar:GetFrameLevel() + 40)
 	p:EnableMouse(true)
 	p.bg = Ink:Round(p, "BACKGROUND", false, false)
 	p.bg:SetAllPoints()
@@ -1239,13 +1874,19 @@ function M:ToggleGroup()
 end
 
 function M:SyncButtons()
-	if self.bar then
-		self.bar.test:SetActive(self.testing)
-		self.bar.group.text:SetText(self.testGroup == "raid" and "레이드 예시" or "파티 예시")
-		self.bar.snap:SetActive(Ink.db.editSnap ~= false)
-		self.bar.gridBtn:SetActive(Ink.db.editGrid ~= false)
-		if self.bar.share then self.bar.share:SetActive(Ink.db.layoutShared and true or false) end
-		self.bar.aspect.text:SetText(AspectLabel())
+	local bar = self.bar
+	if bar then
+		bar.magnet:SetActive(Ink.db.editMagnet ~= false)
+		bar.gridBtn:SetActive(Ink.db.editGrid ~= false)
+		bar.dist:SetActive(Ink.db.editDist ~= false)
+		bar.undoBtn:SetActive(false)
+		bar.undoBtn:SetAlpha(#self.undo > 0 and 1 or 0.4)
+		bar.test:SetActive(self.testing and true or false)
+		bar.share:SetActive(Ink.db.layoutShared and true or false)
+		if not bar.reset.armed then bar.reset:SetLabel("기본 배치") end
+		bar.aspect:SetLabel(AspectLabel())
+		self:PaintPreview()
+		self:LayoutBar()
 	end
 	if self.panel then
 		self.panel.edit:SetActive(self.editing)
@@ -1397,6 +2038,12 @@ function M:BuildPanel()
 	local ver = Ink:Text(p, F.latin, 11, C.muted, "LEFT")
 	ver:SetPoint("LEFT", ui, "RIGHT", 10, -1)
 	ver:SetText("v" .. Ink.version .. "  ·  First of All")
+	p.sheet = Button(p, "새 설정 창 열기", 150, function()
+		if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+		local S = Ink.modules.Sheet
+		if S and S.Open then S:Open() end
+	end, true)
+	p.sheet:SetPoint("TOPRIGHT", p, "TOPRIGHT", -18, -12)
 	local h1 = Ink:Text(p, F.semi, 11, C.muted, "LEFT")
 	h1:SetPoint("TOPLEFT", brand, "BOTTOMLEFT", 2, -20)
 	h1:SetText("배치")
@@ -1634,7 +2281,7 @@ function M:BuildPanel()
 	cmds:SetSpacing(4)
 	cmds:SetWordWrap(true)
 	cmds:SetWidth(300)
-	cmds:SetText("/foa 설정 창  ·  /foa edit 편집 모드\n/foa test 테스트  ·  /foa kb 단축키 설정\n/foa reset 위치 초기화  ·  /foa log 오류 기록\n/foa layout 배치 다시 적용")
+	cmds:SetText("/foa 설정 창  ·  /foa edit 편집 모드\n/foa test 테스트  ·  /foa kb 단축키 설정\n/foa reset 위치 초기화  ·  /foa log 오류 기록\n/foa layout 배치 다시 적용  ·  /foa old 이 창")
 
 	p:SetScript("OnShow", function() M:SyncButtons() end)
 
@@ -1650,7 +2297,14 @@ function M:BuildPanel()
 	self.panelOuter = outer
 end
 
-function M:OpenPanel()
+-- 설정 열기 = 새 설정 시트 (예전 블리자드 설정 칸은 /foa old)
+function M:OpenPanel(cat)
+	local S = Ink.modules.Sheet
+	if S and S.Open then return S:Open(cat) end
+	self:OpenLegacy()
+end
+
+function M:OpenLegacy()
 	if self.category and Settings and Settings.OpenToCategory then
 		Settings.OpenToCategory(self.category:GetID())
 	elseif InterfaceOptionsFrame_OpenToCategory then
@@ -1740,6 +2394,9 @@ function M:CombatStart()
 		for _, o in pairs(self.overlays) do o:Hide() end
 		if self.bar then self.bar:Hide() end
 		if self.grid then self.grid:Hide() end
+		if self.ghost then self.ghost:Hide() end
+		self.dragging = nil
+		self:FxClear()
 		self.pausedEdit = true
 		self.editing = false
 	end
@@ -1854,7 +2511,12 @@ SlashCmdList.INKUI = function(msg)
 		print("|cffFFF468FOA|r 배치를 다시 적용했어요.")
 	elseif msg == "what" or msg == "뭐야" or msg == "찾기" then
 		M:WhatIsUnderMouse()
+	elseif msg == "old" or msg == "예전" then
+		M:OpenLegacy()
 	else
-		M:OpenPanel()
+		local S = Ink.modules.Sheet
+		local cat
+		for _, c in ipairs(S and S.CATS or {}) do if c.id == msg then cat = msg end end
+		if S and S.Toggle then S:Toggle(cat) else M:OpenPanel() end
 	end
 end

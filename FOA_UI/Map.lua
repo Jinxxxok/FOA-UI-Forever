@@ -1501,13 +1501,15 @@ function M:MakeMovable()
 	end
 end
 
--- 창 지도 크기: 설정에서 켜면 1.3배 (기본은 원래 크기 · 최대화했을 때는 그대로)
+-- 창 지도 크기: 설정에서 켜면 1.3배 (설정 시트에서 100~150%) · 기본은 원래 크기 · 최대화했을 때는 그대로
 M.MAP_SCALE = 1.3
 function M:ApplyScale()
 	local wm = WorldMapFrame
 	if not wm or InCombatLockdown() then return end
 	local want = 1
-	if Ink.db.mapScaleUp and not (wm.IsMaximized and wm:IsMaximized()) then want = M.MAP_SCALE end
+	if Ink.db.mapScaleUp and not (wm.IsMaximized and wm:IsMaximized()) then
+		want = math.max(1, math.min(1.5, (tonumber(Ink.db.mapScalePct) or M.MAP_SCALE * 100) / 100))
+	end
 	if math.abs((wm:GetScale() or 1) - want) > 0.001 then wm:SetScale(want) end
 end
 

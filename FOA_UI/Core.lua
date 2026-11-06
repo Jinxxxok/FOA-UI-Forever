@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.55.2"
+Ink.version = "0.56.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1131,6 +1131,7 @@ local defaults = {
 	barLock = true,
 	mapScaleUp = false,
 }
+Ink.defaults = defaults
 
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_LOGIN")
