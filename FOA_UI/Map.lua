@@ -1050,25 +1050,20 @@ function M:LayoutUnder()
 		box:ClearAllPoints()
 		if big then
 			box:SetPoint("BOTTOMLEFT", wm.ScrollContainer, "BOTTOMLEFT", 10, 10)
-			-- 책 상자가 범례 위로 올라오지 않게: 범례가 있으면 그 위로
-			if bar and bar:IsShown() then
-				box:ClearAllPoints()
-				box:SetPoint("BOTTOMLEFT", wm.ScrollContainer, "BOTTOMLEFT", 10, 44)
-			end
 		else
 			box:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", 0, -6)
 		end
 	end
-	-- 창 지도: 책 상자는 지도 바로 아래 왼쪽(원래 자리), 범례는 가운데, 퀘스트는 오른쪽.
-	--  지도 폭이 모자라면 범례를 책 상자 오른쪽으로, 그래도 안 되면 범례를 위 줄에 두고 책 상자를 한 줄 아래로
+	-- 창 지도: 지도 아래 한 줄 = 책 상자(왼쪽) · 범례(책 상자 바로 오른쪽, 책이 없으면 가운데) · 퀘스트(오른쪽 끝).
+	--  지도 폭이 모자랄 때만 범례를 위 줄에 두고 책 상자를 한 줄 아래로
 	if not big and bar and bar:IsShown() then
 		local W = wm:GetWidth() or 0
 		local bw = bar:GetWidth() or 0
-		local left = (box and box:IsShown()) and ((box:GetWidth() or 290) + 8) or 0
+		local left = (box and box:IsShown()) and ((box:GetWidth() or 212) + 6) or 0
 		local right = W - ((leg and leg:IsShown()) and ((leg:GetWidth() or 0) + 8) or 0)
 		local cx = (W - bw) / 2
 		bar:ClearAllPoints()
-		if cx >= left and cx + bw <= right then
+		if left == 0 and cx + bw <= right then
 			bar:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", cx, -6)
 		elseif left + bw <= right then
 			bar:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", left, -6)
@@ -1086,7 +1081,7 @@ function M:BuildBooks()
 	local wm = WorldMapFrame
 	-- 지도를 가리지 않게 지도 창 바로 아래에 붙인다
 	local box = CreateFrame("Frame", nil, wm)
-	box:SetWidth(290)
+	box:SetWidth(212)
 	box:SetPoint("TOPLEFT", wm, "BOTTOMLEFT", 0, -6)
 	box:SetFrameStrata("HIGH")
 	box.bg = Ink:Round(box, "BACKGROUND", false, false)
@@ -1109,13 +1104,13 @@ function M:BuildBooks()
 	box.title:SetText("도서관 책")
 	box.count = Ink:Text(box, F.latinB, 12, BOOK, "RIGHT")
 	box.count:SetPoint("TOPRIGHT", -14, -12)
-	box.bar = Ink:Bar(box, 262, 3, BOOK, C.track)
+	box.bar = Ink:Bar(box, 184, 3, BOOK, C.track)
 	box.bar:SetPoint("TOPLEFT", 14, -34)
 	box.next = Ink:Text(box, F.sans, 10, C.muted, "LEFT")
 	box.next:SetPoint("TOPLEFT", box.bar, "BOTTOMLEFT", 0, -6)
 	box.text = Ink:Text(box, F.sans, 11, C.soft, "LEFT")
 	box.text:SetPoint("TOPLEFT", 14, -62)
-	box.text:SetWidth(262)
+	box.text:SetWidth(184)
 	box.text:SetWordWrap(true)
 	box.text:SetSpacing(2)
 	box:Hide()
@@ -1147,13 +1142,13 @@ function M:BuildCityLegend()
 		b.icon = b:CreateTexture(nil, "ARTWORK")
 		b.icon:SetTexture(Ink.icon(c[3]))
 		b.icon:SetSize(12, 12)
-		b.icon:SetPoint("LEFT", 9, 0)
+		b.icon:SetPoint("LEFT", 8, 0)
 		b.t = Ink:Text(b, F.semi, 11, C.text, "LEFT")
-		b.t:SetPoint("LEFT", b.icon, "RIGHT", 5, 0)
+		b.t:SetPoint("LEFT", b.icon, "RIGHT", 4, 0)
 		b.t:SetText(c[2])
-		b:SetWidth(b.t:GetStringWidth() + 34)
+		b:SetWidth(b.t:GetStringWidth() + 26)
 		b.key, b.rgb = c[1], Ink.hex(c[4])
-		b:SetPoint("LEFT", prev or bar, prev and "RIGHT" or "LEFT", prev and 6 or 0, 0)
+		b:SetPoint("LEFT", prev or bar, prev and "RIGHT" or "LEFT", prev and 4 or 0, 0)
 		b:SetScript("OnClick", function(self)
 			Ink.db.mapCat = Ink.db.mapCat or {}
 			Ink.db.mapCat[self.key] = (Ink.db.mapCat[self.key] == false) and true or false
@@ -1163,8 +1158,8 @@ function M:BuildCityLegend()
 		prev = b
 	end
 	local w = 0
-	for _, b in ipairs(bar.chips) do w = w + b:GetWidth() + 6 end
-	bar:SetWidth(w - 6)
+	for _, b in ipairs(bar.chips) do w = w + b:GetWidth() + 4 end
+	bar:SetWidth(w - 4)
 	bar:Hide()
 	self.cityBar = bar
 end
@@ -1297,13 +1292,13 @@ function M:MakeMovable()
 	end
 end
 
--- 창 지도 크기: 기본 지도가 너무 작아서 1.3배 (큰 지도로 최대화했을 때는 그대로)
+-- 창 지도 크기: 설정에서 켜면 1.3배 (기본은 원래 크기 · 최대화했을 때는 그대로)
 M.MAP_SCALE = 1.3
 function M:ApplyScale()
 	local wm = WorldMapFrame
 	if not wm or InCombatLockdown() then return end
 	local want = 1
-	if Ink.db.mapBig ~= false and not (wm.IsMaximized and wm:IsMaximized()) then want = M.MAP_SCALE end
+	if Ink.db.mapScaleUp and not (wm.IsMaximized and wm:IsMaximized()) then want = M.MAP_SCALE end
 	if math.abs((wm:GetScale() or 1) - want) > 0.001 then wm:SetScale(want) end
 end
 
