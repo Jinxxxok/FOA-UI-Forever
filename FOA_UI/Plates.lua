@@ -464,9 +464,12 @@ local function QuestInfo(unit)
 	local okN, name = pcall(UnitName, unit)
 	name = okN and plain(name)
 	if type(name) == "string" and #name >= 4 and QuestObjectives then
+		-- 이름 전체, 아니면 마지막 낱말(몹 종류: "새끼 뿔엄니멧돼지" → "뿔엄니멧돼지")로 찾는다
+		local last = name:match("(%S+)$")
+		if last and #last < 6 then last = nil end
 		for _, o in ipairs(QuestObjectives()) do
 			local t = plain(o.text)
-			if type(t) == "string" and t:find(name, 1, true) then
+			if type(t) == "string" and (t:find(name, 1, true) or (last and last ~= name and t:find(last, 1, true))) then
 				local have, need = o.numFulfilled, o.numRequired
 				return { kind = (o.type == "monster") and "kill" or "loot", text = (need and need > 0 and have) and (have .. "/" .. need) or "" }
 			end
@@ -480,6 +483,7 @@ end
 --  내 앞의 가장 가까운 상호작용 물체 하나에 이름표가 생긴다. 그 물체가 퀘스트 대상이면
 --  노란 배지 + 진행 수치를 띄운다. (한 번에 하나, 내가 바라보는 쪽의 가까운 물체)
 -------------------------------------------------------------------------------
+local objCacheStamp = 0
 local objCache -- 아직 안 끝난 퀘스트 목표 목록 (퀘스트 로그가 바뀌면 다시 만든다)
 
 QuestObjectives = function()
@@ -535,6 +539,51 @@ local function ObjectQuestInfo(unit)
 		local ok, rel = pcall(C_QuestLog.UnitIsRelatedToActiveQuest, unit)
 		if ok and plain(rel) == true then return { kind = "loot", text = "" } end
 	end
+	-- 4) 물체 툴팁에 진행 중인 퀘스트 이름이 적혀 있으면 (클래식은 수치 없이 퀘스트 이름만 나올 때가 있다)
+	if C_TooltipInfo and C_TooltipInfo.GetUnit then
+		local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
+		if ok and data and data.lines then
+			local titles = M:ActiveQuestTitles()
+			for i = 2, #data.lines do
+				local t = plain(data.lines[i] and data.lines[i].leftText)
+				if type(t) == "string" then
+					t = t:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("^%s+", ""):gsub("%s+$", "")
+					if titles[t] then return { kind = "loot", text = titles[t] } end
+				end
+			end
+		end
+	end
+	-- 5) 물체 이름과 퀘스트 목표 글자가 낱말을 함께 쓰면 (예: 물체 "안센 농장 우물" · 목표 "안센 농장 물 표본")
+	if type(name) == "string" and name ~= "" then
+		local GENERIC = { ["상자"] = true, ["더미"] = true, ["꾸러미"] = true, ["보따리"] = true, ["궤짝"] = true, ["통"] = true, ["주머니"] = true }
+		local words = {}
+		for w in name:gmatch("%S+") do if #w >= 4 and not GENERIC[w] then words[#words + 1] = w end end
+		for _, o in ipairs(QuestObjectives()) do
+			local hit = 0
+			for _, w in ipairs(words) do if o.text:find(w, 1, true) then hit = hit + 1 end end
+			if hit >= math.min(2, #words) and hit > 0 then
+				local need, have = tonumber(o.numRequired), tonumber(o.numFulfilled)
+				return { kind = "loot", text = (need and need > 1 and have) and (have .. "/" .. need) or "" }
+			end
+		end
+	end
+end
+
+-- 진행 중(아직 안 끝난) 퀘스트 이름 → 진행 수치 글자
+function M:ActiveQuestTitles()
+	if self.titleCache and self.titleCacheAt == objCacheStamp then return self.titleCache end
+	local t = {}
+	if C_QuestLog and C_QuestLog.GetNumQuestLogEntries then
+		for i = 1, C_QuestLog.GetNumQuestLogEntries() do
+			local info = C_QuestLog.GetInfo(i)
+			if info and not info.isHeader and info.questID and info.title then
+				local done = C_QuestLog.IsComplete and C_QuestLog.IsComplete(info.questID)
+				if not done then t[info.title] = "" end
+			end
+		end
+	end
+	self.titleCache, self.titleCacheAt = t, objCacheStamp
+	return t
 end
 
 -- 물체 이름표: 퀘스트 물체만 보인다 (배지 + 이름 + 진행 수치), 나머지 물체는 숨김
@@ -1103,6 +1152,7 @@ function M:Init()
 				C_Timer.After(0.3, function()
 					M.questPending = nil
 					objCache = nil
+					objCacheStamp = objCacheStamp + 1
 					for _, pf in pairs(plates) do
 						if pf.object and pf.unit then
 							pcall(M.DrawObject, M, pf, pf.unit)
