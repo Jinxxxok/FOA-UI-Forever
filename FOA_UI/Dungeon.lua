@@ -2012,8 +2012,21 @@ end
 function M:BuildBoard()
 	local wm = WorldMapFrame
 	local b = CreateFrame("Frame", "FOADungeonBoard", wm)
-	b:SetPoint("CENTER", wm, "CENTER")
+	b:SetPoint("CENTER", UIParent, "CENTER")
 	b:SetSize(wm:GetWidth(), wm:GetHeight())
+	-- 화면 밖으로 안 나가게 · 빈 곳을 끌어서 옮기기 (자리 기억)
+	b:SetClampedToScreen(true)
+	b:SetMovable(true)
+	b:RegisterForDrag("LeftButton")
+	b:SetScript("OnDragStart", function(self) if not InCombatLockdown() then self:StartMoving() end end)
+	b:SetScript("OnDragStop", function(self)
+		self:StopMovingOrSizing()
+		local cx, cy = self:GetCenter()
+		local ux, uy = UIParent:GetCenter()
+		local k = self:GetEffectiveScale() / UIParent:GetEffectiveScale()
+		if cx and ux then Ink.db.boardPos = { cx * k - ux, cy * k - uy } end
+		M:SizeBoard()
+	end)
 	b:SetFrameStrata("DIALOG")
 	b:SetFrameLevel(20)
 	b:EnableMouse(true)
@@ -2504,9 +2517,11 @@ function M:SizeBoard()
 	local maxW, maxH = UIParent:GetWidth() * 0.94 / k, UIParent:GetHeight() * 0.9 / k
 	local w = math.min(maxW, math.max(wm:GetWidth() or 0, 1240))
 	local h = math.min(maxH, math.max(wm:GetHeight() or 0, 860))
-	b:ClearAllPoints()
-	b:SetPoint("CENTER", wm, "CENTER")
 	b:SetSize(w, h)
+	-- 자리: 옮겨 둔 곳 (없으면 화면 가운데) · UIParent 기준이라 세계 지도가 어디 있든 화면 안에
+	local pos = Ink.db.boardPos
+	b:ClearAllPoints()
+	b:SetPoint("CENTER", UIParent, "CENTER", (pos and pos[1] or 0) / k, (pos and pos[2] or 0) / k)
 end
 
 function M:HideBoard()
