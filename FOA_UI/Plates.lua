@@ -459,7 +459,8 @@ local function ScanQuestLines(unit)
 	for i = 2, #data.lines do
 		local line = data.lines[i]
 		local t = line and plain(line.leftText)
-		if type(t) == "string" and (line.type == LINE_OBJ or (line.type == nil and t:find("^%s*%-"))) and not plain(line.completed) then
+		local lt = line and plain(line.type)
+		if type(t) == "string" and (lt == LINE_OBJ or (lt == nil and t:find("^%s*%-"))) and not plain(line.completed) then
 			t = t:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
 			local cur, max = t:match("(%d+)%s*/%s*(%d+)")
 			local pct = t:match("(%d+)%%")

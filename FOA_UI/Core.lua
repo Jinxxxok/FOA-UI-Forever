@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.53.4"
+Ink.version = "0.53.5"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1034,6 +1034,31 @@ function Ink:LogError(msg)
 	Ink.db.errors = Ink.db.errors or {}
 	table.insert(Ink.db.errors, date("%m-%d %H:%M:%S") .. " " .. tostring(msg))
 	while #Ink.db.errors > 30 do table.remove(Ink.db.errors, 1) end
+end
+
+-- FOA 코드에서 난 Lua 오류를 저장 파일에도 남긴다 (게임 오류 표시가 꺼져 있어도 원인을 찾을 수 있게)
+--  같은 오류는 횟수만 늘린다 · 원래 오류 처리기는 그대로 부른다
+do
+	local orig = geterrorhandler and geterrorhandler()
+	local seen = {}
+	if orig and seterrorhandler then
+		seterrorhandler(function(msg, ...)
+			local ok = pcall(function()
+				local m = tostring(msg)
+				if m:find("FOA_UI", 1, true) and Ink.db then
+					local key = m:sub(1, 160)
+					seen[key] = (seen[key] or 0) + 1
+					local n = seen[key]
+					if n == 1 or n == 10 or n == 100 then
+						local st = debugstack and debugstack(3, 4, 0) or ""
+						st = st:gsub("Interface/AddOns/", ""):gsub("\n", " ← ")
+						Ink:LogError("LUA x" .. n .. " " .. m .. " || " .. st:sub(1, 300))
+					end
+				end
+			end)
+			return orig(msg, ...)
+		end)
+	end
 end
 
 local function callAll(method, ...)
