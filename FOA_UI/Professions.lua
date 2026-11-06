@@ -27,7 +27,26 @@ end
 -------------------------------------------------------------------------------
 -- 지금 열린 전문기술: 이름 · 숙련 · 아는 제조법
 -------------------------------------------------------------------------------
-local function ProfInfo()
+-- 숙련을 기술 목록(캐릭터 창 기술 탭)에서 이름으로 찾기: 포에버 전문기술 창은 GetTradeSkillLine 숙련이 0으로 올 때가 있다
+local function SkillByName(name)
+	if not name then return end
+	if GetNumSkillLines and GetSkillLineInfo then
+		for i = 1, GetNumSkillLines() do
+			local n, header, _, rank, _, _, max = GetSkillLineInfo(i)
+			if n and not header and (n == name or name:find(n, 1, true) or n:find(name, 1, true)) and (max or 0) > 0 then return rank, max end
+		end
+	end
+	if GetProfessions and GetProfessionInfo then
+		for _, idx in ipairs({ GetProfessions() }) do
+			if idx then
+				local n, _, rank, max = GetProfessionInfo(idx)
+				if n and (n == name or name:find(n, 1, true) or n:find(name, 1, true)) and (max or 0) > 0 then return rank, max end
+			end
+		end
+	end
+end
+
+local function ProfInfoRaw()
 	if C_TradeSkillUI and C_TradeSkillUI.GetBaseProfessionInfo and _G.ProfessionsFrame and _G.ProfessionsFrame:IsShown() then
 		local ok, info = pcall(C_TradeSkillUI.GetChildProfessionInfo)
 		if not (ok and info and info.professionName) then ok, info = pcall(C_TradeSkillUI.GetBaseProfessionInfo) end
@@ -44,6 +63,14 @@ local function ProfInfo()
 		local name, rank, max = GetTradeSkillLine()
 		if name and name ~= "UNKNOWN" then return name, rank or 0, max or 0, "classic" end
 	end
+end
+local function ProfInfo()
+	local name, rank, max, kind = ProfInfoRaw()
+	if name and ((rank or 0) == 0 or (max or 0) == 0) then
+		local r2, m2 = SkillByName(name)
+		if r2 then rank, max = r2, m2 end
+	end
+	return name, rank, max, kind
 end
 
 -- 아는 제조법 { name, icon, diff(0~3), avail, reagents = { {name, need, have, itemID} } }
