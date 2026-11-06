@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.49.0"
+Ink.version = "0.49.1"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -363,7 +363,11 @@ function Ink:Text(parent, font, size, color, justify, layer)
 	-- 줄바꿈 글자는 낱말 단위로 미리 끊는다 (게임은 한글을 글자 중간에서 끊어서 "상\n인"처럼 보이기 때문)
 	local set = fs.SetText
 	fs.SetText = function(f, t, ...)
-		if type(t) == "string" and not (issecretvalue and issecretvalue(t)) and #t > 10 then t = Ink:WrapFor(f, t) end
+		-- 비공개 값(이름 · 체력 등)은 절대 건드리지 않고, 줄바꿈 칸일 때만 · 실패하면 원래 글자 그대로
+		if type(t) == "string" and f:CanWordWrap() and not (issecretvalue and issecretvalue(t)) then
+			local ok, w = pcall(Ink.WrapFor, Ink, f, t)
+			if ok and type(w) == "string" then t = w end
+		end
 		return set(f, t, ...)
 	end
 	return fs
@@ -372,7 +376,7 @@ end
 -- 글자 폭을 재서 낱말(띄어쓰기) 단위로 줄을 나눈다. 한 낱말이 칸보다 길 때만 게임이 알아서 끊게 둔다
 local wrapProbe
 function Ink:WrapFor(fs, text)
-	if not (fs.CanWordWrap and fs:CanWordWrap()) then return text end
+	if not (fs.CanWordWrap and fs:CanWordWrap()) or #text <= 10 then return text end
 	if not text:find(" ", 1, true) then return text end
 	local W = fs:GetWidth()
 	if not W or W <= 20 then return text end
