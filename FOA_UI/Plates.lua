@@ -432,6 +432,25 @@ local function IsKill(t)
 	return false
 end
 
+local QuestObjectives
+-- 목표 글자 비교용: 색 코드 · 숫자 · 기호 · 빈칸을 뺀다 ("- 허벅지 고기: 0/4" → "허벅지고기")
+local function Norm(t)
+	return (t:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("[%d%s%p]", ""))
+end
+-- 툴팁 목표 줄이 지금 퀘스트 로그의 안 끝난 목표인지 (이미 끝냈거나 넘긴 퀘스트가 툴팁에 남아 있을 때 거른다)
+local function InLog(t)
+	if not (QuestObjectives and C_QuestLog and C_QuestLog.GetQuestObjectives and C_QuestLog.GetNumQuestLogEntries) then return true end
+	local list = QuestObjectives()
+	local n = Norm(t)
+	if n == "" then return false end
+	for _, o in ipairs(list) do
+		local on = o.norm
+		if not on then on = Norm(o.text); o.norm = on end
+		if on ~= "" and (on == n or on:find(n, 1, true) or n:find(on, 1, true)) then return true end
+	end
+	return false
+end
+
 -- 툴팁의 퀘스트 목표 줄에서 아직 안 끝난 진행 수치를 찾는다
 local function ScanQuestLines(unit)
 	if not (C_TooltipInfo and C_TooltipInfo.GetUnit) then return end
@@ -445,7 +464,7 @@ local function ScanQuestLines(unit)
 			local cur, max = t:match("(%d+)%s*/%s*(%d+)")
 			local pct = t:match("(%d+)%%")
 			local done = (cur and tonumber(cur) >= tonumber(max)) or (pct and tonumber(pct) >= 100)
-			if (cur or pct) and not done then
+			if (cur or pct) and not done and InLog(t) then
 				return {
 					kind = (pct or IsKill(t)) and "kill" or "loot",
 					text = cur and (cur .. "/" .. max) or (pct .. "%"),
@@ -455,7 +474,6 @@ local function ScanQuestLines(unit)
 	end
 end
 
-local QuestObjectives
 local function QuestInfo(unit)
 	if Ink.db.questPlates == false then return end
 	-- 1) 툴팁의 퀘스트 목표 줄 (가장 정확)
@@ -468,8 +486,12 @@ local function QuestInfo(unit)
 	name = okN and plain(name)
 	if type(name) == "string" and #name >= 4 and QuestObjectives then
 		-- 이름 전체, 아니면 마지막 낱말(몹 종류: "새끼 뿔엄니멧돼지" → "뿔엄니멧돼지")로 찾는다
+		-- 직업 · 역할 낱말(광부 · 일꾼 · 경비병 …)은 다른 무리 몹과 겹쳐서 쓰지 않는다
+		local JOB = { ["광부"] = true, ["일꾼"] = true, ["노동자"] = true, ["경비병"] = true, ["정찰병"] = true, ["전사"] = true,
+			["주술사"] = true, ["마법사"] = true, ["사냥꾼"] = true, ["약탈자"] = true, ["도둑"] = true, ["산적"] = true, ["강도"] = true,
+			["노상강도"] = true, ["경비대"] = true, ["수호병"] = true, ["파수병"] = true, ["병사"] = true, ["대장"] = true, ["두목"] = true }
 		local last = name:match("(%S+)$")
-		if last and #last < 6 then last = nil end
+		if last and (#last < 6 or JOB[last]) then last = nil end
 		for _, o in ipairs(QuestObjectives()) do
 			local t = plain(o.text)
 			if type(t) == "string" and (t:find(name, 1, true) or (last and last ~= name and t:find(last, 1, true))) then
@@ -479,6 +501,8 @@ local function QuestInfo(unit)
 		end
 	end
 end
+
+M.QuestInfo = QuestInfo
 
 -------------------------------------------------------------------------------
 -- 퀘스트 오브젝트 (바닥에서 줍기 · 부수기 · 열기 같은 상호작용 물체)
@@ -495,8 +519,11 @@ QuestObjectives = function()
 	if not (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetQuestObjectives) then return objCache end
 	for i = 1, C_QuestLog.GetNumQuestLogEntries() do
 		local info = C_QuestLog.GetInfo(i)
-		if info and not info.isHeader and info.questID then
-			for _, o in ipairs(C_QuestLog.GetQuestObjectives(info.questID) or {}) do
+		local qid = info and not info.isHeader and info.questID
+		-- 다 끝낸(보고만 남은) 퀘스트는 빼기: 포에버는 끝낸 퀘스트 목표가 "안 끝남"으로 남을 때가 있다
+		local over = qid and ((C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(qid)) or (C_QuestLog.IsComplete and C_QuestLog.IsComplete(qid)))
+		if qid and not over then
+			for _, o in ipairs(C_QuestLog.GetQuestObjectives(qid) or {}) do
 				if o and not o.finished and type(o.text) == "string" and o.text ~= "" then
 					table.insert(objCache, o)
 				end
