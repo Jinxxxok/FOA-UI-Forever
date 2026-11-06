@@ -18,6 +18,7 @@ local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 local GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
 local GetItemStats = (C_Item and C_Item.GetItemStats) or GetItemStats
 local plain = Ink.plain or function(v) return v end
+local RATING_IDX, RatingPct
 
 -------------------------------------------------------------------------------
 -- 가중치 (1 = 공격력 1 또는 주문력 1 정도의 값어치)
@@ -192,7 +193,8 @@ local function ParseEffect(text, out)
 	local low = text:lower()
 	for _, e in ipairs(EFFECTS) do
 		if text:find(e[1]) or low:find(e[2]) then
-			local n = tonumber(text:match("(%d+)%%")) or tonumber(text:match("(%d+)"))
+			-- "0.3%" 같은 소수도 그대로 (예전엔 "3%"로 읽어서 10배가 됐다)
+			local n = tonumber(text:match("(%d+%.?%d*)%%")) or tonumber(text:match("(%d+%.?%d*)"))
 			if n and (not e[4] or text:find("%%")) then
 				out[e[3]] = (out[e[3]] or 0) + n
 				return
@@ -206,7 +208,7 @@ local tipCache = {}
 local function ReadTooltip(link)
 	local c = tipCache[link]
 	if c then return c end
-	local r = { effects = {} }
+	local r = { effects = {}, pcts = {} }
 	if not (C_TooltipInfo and C_TooltipInfo.GetHyperlink) then return r end
 	local ok, data = pcall(C_TooltipInfo.GetHyperlink, link)
 	if not ok or not data or not data.lines then return r end
@@ -226,7 +228,19 @@ local function ReadTooltip(link)
 			end
 			local rt = plain(line.rightText)
 			if type(rt) == "string" and (IsRed(line.rightColor)) then r.no = true end
-			if onEquip and t:find(onEquip, 1, true) then ParseEffect(t, r.effects) end
+			if onEquip and t:find(onEquip, 1, true) then ParseEffect(t, r.effects)
+			elseif t:find("%%") then
+				-- 포에버 능력치 줄의 % ("적중률 0.3%") → 등급을 % 로 바꿀 때 그대로 쓴다
+				local n = tonumber(t:match("(%d+%.?%d*)%%"))
+				if n then
+					local key = (t:find("주문.-적중") or t:lower():find("spell.-hit")) and "shit"
+						or (t:find("주문.-치명") or t:lower():find("spell.-crit")) and "scrit"
+						or (t:find("적중") or t:lower():find("hit")) and "hit"
+						or (t:find("치명") or t:lower():find("crit")) and "crit"
+						or (t:find("가속") or t:lower():find("haste")) and "haste"
+					if key and not r.pcts[key] then r.pcts[key] = n end
+				end
+			end
 		end
 	end
 	if complete then tipCache[link] = r else M.missed = true end
@@ -245,6 +259,21 @@ local RANGED = { INVTYPE_RANGED = true, INVTYPE_RANGEDRIGHT = true, INVTYPE_THRO
 local OFFHAND_FACTOR = 0.5
 
 local scoreCache = {}
+-- 등급 → % (내 레벨 기준)
+RATING_IDX = {
+	hit = CR_HIT_MELEE or 6, crit = CR_CRIT_MELEE or 9, shit = CR_HIT_SPELL or 8,
+	scrit = CR_CRIT_SPELL or 11, haste = CR_HASTE_MELEE or 18,
+}
+RatingPct = function(cr, v)
+	if v ~= math.floor(v) then return v end
+	if GetCombatRatingBonusForCombatRatingValue then
+		local ok, p = pcall(GetCombatRatingBonusForCombatRatingValue, cr, v)
+		p = ok and plain(p)
+		if type(p) == "number" and p >= 0 and p < v + 1 then return p end
+	end
+	return v > 5 and v / 14 or v
+end
+
 function M:Score(link, asOffhand)
 	if not link then return 0 end
 	local w = self:Weights()
@@ -265,8 +294,14 @@ function M:Score(link, asOffhand)
 				-- 방어도는 가중치가 없는 특성도 아주 조금 쳐준다 (나머지가 같을 때 방어도 높은 쪽)
 				total = total + v * (w.armor or 0.004)
 			else
-				-- 클래식식 적중 · 치명타는 1% 단위. 혹시 등급 수치(큰 숫자)로 오면 대략 1% = 14 로 본다
-				if (short == "hit" or short == "crit" or short == "shit" or short == "scrit" or short == "haste") and v > 5 then v = v / 14 end
+				-- 적중 · 치명타 · 가속은 1% 단위로 바꿔서 계산
+				--  포에버는 등급 수치(정수)로 온다 → 게임이 내 레벨 기준으로 % 로 바꿔 준다 (툴팁의 "적중률 0.3%")
+				--  소수면 이미 % · 바꿔 주는 함수가 없으면 예전처럼 대략 1% = 14
+				local cr = RATING_IDX[short]
+				if cr then
+					local tp = ReadTooltip(link).pcts[short]
+					v = tp or RatingPct(cr, v)
+				end
 				total = total + v * (w[short] or 0)
 			end
 		end
@@ -396,6 +431,23 @@ local SLOTS = {
 }
 
 
+-- 착용 장비 한 칸 평균 점수 (셔츠 · 겉옷 빼고) · 잠깐 기억
+local baseCache, baseAt = 0, -10
+function M:SlotBaseline()
+	local now = GetTime()
+	if now - baseAt < 3 then return baseCache end
+	local sum, n = 0, 0
+	for slot = 1, 18 do
+		if slot ~= 4 then
+			local l = Equipped(slot)
+			local v = l and FOREVER and self:Score(l, slot == 17)
+			if type(v) == "number" and v > 0 then sum, n = sum + v, n + 1 end
+		end
+	end
+	baseCache, baseAt = (n > 0) and (sum / n) or 0, now
+	return baseCache
+end
+
 -- 결과: { pct, new, old, level, empty } 또는 nil (비교할 수 없음)
 function M:Compare(link)
 	if not link or Ink.db.itemCompare == false or self:Mode() == "off" then return end
@@ -474,7 +526,11 @@ function M:Compare(link)
 	local pct
 	if empty then pct = 100
 	elseif old <= 0 then pct = (new > 0) and 100 or 0 -- 둘 다 점수 0 (예: 방어도만 다른 천 장갑) → 비슷
-	else pct = (new - old) / math.max(math.abs(old), 1) * 100 end
+	else
+		-- 원거리 칸처럼 원래 점수가 아주 작은 칸은 조금만 좋아도 수천 % 가 나와서,
+		--  착용 장비 한 칸 평균 점수보다 작으면 그 평균을 기준으로 잰다
+		pct = (new - old) / math.max(math.abs(old), self:SlotBaseline(), 1) * 100
+	end
 	local lvl = tip.level
 	if lvl and lvl <= (UnitLevel("player") or 0) then lvl = nil end
 	return { pct = pct, new = new, old = old, level = lvl, empty = empty }
