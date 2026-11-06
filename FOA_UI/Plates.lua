@@ -452,13 +452,26 @@ local function ScanQuestLines(unit)
 	end
 end
 
+local QuestObjectives
 local function QuestInfo(unit)
 	if Ink.db.questPlates == false then return end
-	if C_QuestLog and C_QuestLog.UnitIsRelatedToActiveQuest then
-		local ok, rel = pcall(C_QuestLog.UnitIsRelatedToActiveQuest, unit)
-		if ok and plain(rel) == false then return end
+	-- 1) 툴팁의 퀘스트 목표 줄 (가장 정확)
+	--   포에버(클래식)는 "고기 · 가죽 줍기" 같은 전리품 퀘스트 몹을 퀘스트 관련 몹으로 알려 주지 않아서,
+	--   예전처럼 그 대답(false)만 보고 건너뛰면 요리 퀘스트 몹에 표시가 안 떴다 → 툴팁은 늘 읽는다
+	local info = ScanQuestLines(unit)
+	if info then return info end
+	-- 2) 퀘스트 목표 글자에 몹 이름이 들어 있으면 (예: "식인독수리 고기" ← 식인독수리) 줍기 퀘스트
+	local okN, name = pcall(UnitName, unit)
+	name = okN and plain(name)
+	if type(name) == "string" and #name >= 4 and QuestObjectives then
+		for _, o in ipairs(QuestObjectives()) do
+			local t = plain(o.text)
+			if type(t) == "string" and t:find(name, 1, true) then
+				local have, need = o.numFulfilled, o.numRequired
+				return { kind = (o.type == "monster") and "kill" or "loot", text = (need and need > 0 and have) and (have .. "/" .. need) or "" }
+			end
+		end
 	end
-	return ScanQuestLines(unit)
 end
 
 -------------------------------------------------------------------------------
@@ -469,7 +482,7 @@ end
 -------------------------------------------------------------------------------
 local objCache -- 아직 안 끝난 퀘스트 목표 목록 (퀘스트 로그가 바뀌면 다시 만든다)
 
-local function QuestObjectives()
+QuestObjectives = function()
 	if objCache then return objCache end
 	objCache = {}
 	if not (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetQuestObjectives) then return objCache end
