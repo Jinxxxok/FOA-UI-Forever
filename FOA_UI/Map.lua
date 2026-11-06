@@ -370,7 +370,38 @@ local function FlightKnown(id)
 	return Ink.cdb and Ink.cdb.flightKnown and Ink.cdb.flightKnown[id]
 end
 
+-- 지금 서 있는 곳에서 가장 가까운 비행 지점을 "가 본 곳"으로 (새 비행 경로를 배웠을 때 · 비행 지도를 열 때)
+function M:MarkNearestFlight()
+	local pmap = C_Map.GetBestMapForUnit("player")
+	local pos = pmap and C_Map.GetPlayerMapPosition(pmap, "player")
+	if not pos then return end
+	local px, py = pos:GetXY()
+	if not (px and py) then return end
+	local fac = UnitFactionGroup("player")
+	local facN = fac == "Horde" and 1 or (fac == "Alliance" and 2 or 0)
+	local best, bd
+	for id, f in pairs(ns.FLIGHT_DB or {}) do
+		if f[4] == 0 or f[4] == facN then
+			local d
+			local x, y = ToMap(f[1], f[2] / 100, f[3] / 100, pmap)
+			if x then d = (x - px) ^ 2 + (y - py) ^ 2
+			else
+				local qx, qy = ToMap(pmap, px, py, f[1])
+				if qx then d = (qx - f[2] / 100) ^ 2 + (qy - f[3] / 100) ^ 2 end
+			end
+			if d and (not bd or d < bd) then best, bd = id, d end
+		end
+	end
+	-- 지역 지도 기준 약 4% 안쪽일 때만 (엉뚱한 곳을 찍지 않게)
+	if best and bd < 0.04 ^ 2 then
+		Ink.cdb.flightKnown = Ink.cdb.flightKnown or {}
+		Ink.cdb.flightKnown[best] = true
+		return best
+	end
+end
+
 function M:RememberFlights()
+	pcall(M.MarkNearestFlight, M)
 	if not (C_TaxiMap and C_TaxiMap.GetAllTaxiNodes) then return end
 	local mapID = GetTaxiMapID and GetTaxiMapID()
 	local ok, nodes = pcall(C_TaxiMap.GetAllTaxiNodes, mapID or 0)
@@ -1435,9 +1466,21 @@ function M:Init()
 	self:Hook()
 	local e = CreateFrame("Frame")
 	for ev in pairs(EVENT_ROLE) do pcall(e.RegisterEvent, e, ev) end
-	for _, ev in ipairs({ "GOSSIP_SHOW", "ADDON_LOADED", "TAXI_NODE_STATUS_CHANGED", "BAG_UPDATE_DELAYED", "QUEST_TURNED_IN", "DYNAMIC_GOSSIP_POI_UPDATED" }) do pcall(e.RegisterEvent, e, ev) end
+	for _, ev in ipairs({ "GOSSIP_SHOW", "ADDON_LOADED", "TAXI_NODE_STATUS_CHANGED", "BAG_UPDATE_DELAYED", "QUEST_TURNED_IN", "DYNAMIC_GOSSIP_POI_UPDATED",
+		"UI_INFO_MESSAGE", "CHAT_MSG_SYSTEM" }) do pcall(e.RegisterEvent, e, ev) end
 	C_Timer.After(5, function() pcall(M.ScanBagsForBooks, M, "bags") end)
-	e:SetScript("OnEvent", function(_, event)
+	e:SetScript("OnEvent", function(_, event, a1, a2)
+		-- "새 비행 경로를 발견했습니다!" → 서 있는 곳의 비행 지점을 가 본 곳으로
+		if event == "UI_INFO_MESSAGE" or event == "CHAT_MSG_SYSTEM" then
+			local msg = event == "UI_INFO_MESSAGE" and a2 or a1
+			if ERR_NEWTAXIPATH and msg == ERR_NEWTAXIPATH then
+				C_Timer.After(0.2, function()
+					pcall(M.MarkNearestFlight, M)
+					if WorldMapFrame and WorldMapFrame:IsShown() then M:Refresh() end
+				end)
+			end
+			return
+		end
 		if event == "ADDON_LOADED" then
 			if not M.hooked then M:Hook() end
 			return
@@ -1451,7 +1494,10 @@ function M:Init()
 			C_Timer.After(0.1, function() pcall(M.RememberGossipPoi, M) end)
 			return
 		end
-		if event == "TAXIMAP_OPENED" then pcall(M.RememberFlights, M) end
+		if event == "TAXIMAP_OPENED" then
+			pcall(M.RememberFlights, M)
+			C_Timer.After(0.3, function() pcall(M.RememberFlights, M) end)
+		end
 		if event == "BANKFRAME_OPENED" then
 			C_Timer.After(0.5, function() pcall(M.ScanBagsForBooks, M, "bank") end)
 		end
