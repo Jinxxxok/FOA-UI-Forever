@@ -6,7 +6,7 @@ local M = Ink:Module("Quest")
 local F, C = Ink.font, Ink.c
 local safe, plain = Ink.safe, Ink.plain
 
-local W, MAX_QUESTS, MAX_OBJ = 240, 8, 3
+local W, MAX_QUESTS, MAX_OBJ = 240, 6, 3
 
 local function CleanObjective(text)
 	if not text then return "" end
@@ -34,7 +34,7 @@ function M:Build()
 	f.line:SetPoint("TOPLEFT", 0, -20)
 	f.line:SetPoint("TOPRIGHT", 0, -20)
 	f.rows = {}
-	-- 8개보다 많으면 휠로 넘겨 보기
+	-- 6개보다 많으면 휠로 넘겨 보기
 	f.more = Ink:Text(f, F.sans, 10, C.muted, "LEFT")
 	f.more:Hide()
 	f:EnableMouseWheel(true)
