@@ -1163,6 +1163,8 @@ local SOFT_CVARS = {
 	SoftTargetNameplateInteract = "1", -- 그 대상에 이름표
 	SoftTargetIconInteract = "1",      -- 줍기 · 상호작용 물체 위에 게임 아이콘
 	SoftTargetIconGameObject = "1",    -- 바닥 물체(퀘스트 물건 등)에도
+	SoftTargetInteractRange = "30",    -- 잡는 거리 (기본 10미터라 바로 앞까지 가야 떴다)
+	SoftTargetInteractArc = "2",       -- 앞쪽만이 아니라 옆에 있는 물체도
 }
 
 function M:ApplyObjectCVars()
