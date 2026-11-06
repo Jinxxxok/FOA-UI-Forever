@@ -586,6 +586,32 @@ function M:ActiveQuestTitles()
 	return t
 end
 
+-- 물체 진단 기록 (/foa obj · 저장 파일 objDiag): 이름 · 툴팁 줄 · 판정 결과
+function M:ObjDiag(unit, where, info)
+	local okN, name = pcall(UnitName, unit)
+	name = okN and plain(name) or "?"
+	local okG, g = pcall(UnitGUID, unit)
+	g = okG and plain(g) or "?"
+	local lines = {}
+	if C_TooltipInfo and C_TooltipInfo.GetUnit then
+		local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
+		for i, l in ipairs(ok and data and data.lines or {}) do
+			local t = plain(l.leftText)
+			lines[#lines + 1] = tostring(plain(l.type)) .. ":" .. (type(t) == "string" and t or "?")
+			if i >= 6 then break end
+		end
+	end
+	local okR, rel = false, nil
+	if C_QuestLog and C_QuestLog.UnitIsRelatedToActiveQuest then okR, rel = pcall(C_QuestLog.UnitIsRelatedToActiveQuest, unit) end
+	local rec = string.format("%s %s [%s] %s rel=%s 툴팁=%s → %s", date("%H:%M:%S"), where, name, tostring(g):sub(1, 24),
+		tostring(okR and plain(rel)), table.concat(lines, " | "), info and ("퀘스트 " .. (info.text or "")) or "아님")
+	Ink.db.objDiag = Ink.db.objDiag or {}
+	local d = Ink.db.objDiag
+	if d[#d] ~= rec then d[#d + 1] = rec end
+	while #d > 15 do table.remove(d, 1) end
+	return rec
+end
+
 -- 물체 이름표: 퀘스트 물체만 보인다 (배지 + 이름 + 진행 수치), 나머지 물체는 숨김
 function M:DrawObject(f, unit)
 	self:SetFriendly(f, true)
@@ -601,6 +627,7 @@ function M:DrawObject(f, unit)
 	end
 	local info = ObjectQuestInfo(unit)
 	f.objInfo = info
+	pcall(M.ObjDiag, M, unit, "plate", info)
 	if info then
 		local q = QUEST_COLOR
 		f.role.icon:SetTexture(Ink.icon(info.kind == "kill" and "QuestKill" or "QuestLoot"))
@@ -1138,7 +1165,13 @@ function M:Init()
 	}) do
 		e:RegisterEvent(ev)
 	end
+	pcall(e.RegisterEvent, e, "PLAYER_SOFT_INTERACT_CHANGED")
 	local function OnEvent(_, event, unit)
+		if event == "PLAYER_SOFT_INTERACT_CHANGED" then
+			-- 바라보는 물체가 바뀔 때마다 진단 기록 (이름표가 안 생기는 경우도 알 수 있게)
+			if UnitExists("softinteract") then pcall(M.ObjDiag, M, "softinteract", "soft", nil) end
+			return
+		end
 		if event == "NAME_PLATE_UNIT_ADDED" then
 			M:OnAdded(unit)
 			return

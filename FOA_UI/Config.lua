@@ -1815,6 +1815,16 @@ SlashCmdList.INKUI = function(msg)
 		print("|cffFFF468FOA|r 모든 위치를 기본값으로 되돌렸어요.")
 	elseif msg == "debug" then
 		print("|cffFFF468FOA|r 마지막 오라 오류: " .. tostring(Ink.auraErr or "없음"))
+	elseif msg == "obj" or msg == "물체" then
+		-- 지금 바라보는 상호작용 물체(소프트 타겟) 진단
+		local P = Ink.modules.Plates
+		local u = UnitExists and UnitExists("softinteract") and "softinteract" or nil
+		print("|cffFFF468FOA|r 상호작용 대상: " .. (u and "있음" or "없음 (물체 쪽을 바라보고 가까이)") ..
+			"  ·  SoftTargetInteract=" .. tostring(GetCVar and GetCVar("SoftTargetInteract")) ..
+			"  ·  이름표=" .. tostring(u and C_NamePlate and C_NamePlate.GetNamePlateForUnit(u) ~= nil))
+		if u and P and P.ObjDiag then print("|cffFFF468FOA|r " .. P:ObjDiag(u, "명령", nil)) end
+		local d = Ink.db.objDiag or {}
+		for i = math.max(1, #d - 4), #d do print("|cff8E939B" .. d[i] .. "|r") end
 	elseif msg == "log" then
 		local bl = Ink.db.blockedLog
 		if not bl or #bl == 0 then
