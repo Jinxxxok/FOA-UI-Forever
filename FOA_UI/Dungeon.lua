@@ -310,17 +310,44 @@ local function ItemArrived()
 		pcall(M.PaintBis, M)
 	end)
 end
-local function RequestItem(id)
-	-- 답이 안 오면 30초 뒤에야 다시 요청
-	local now = GetTime()
-	if requested[id] and now - requested[id] < 30 then return end
-	requested[id] = now
+-- 서버에 아이템 정보를 한꺼번에 너무 많이 물으면 뒤쪽 요청이 버려진다
+--  (레벨 BIS 후보 수백 개를 먼저 물어서, 나중에 연 붉은십자군 수도원 등의 전리품이 끝내 안 오던 문제)
+--  → 줄을 세워 조금씩 보내고, 지금 화면에 보이는 것(prio)은 맨 앞으로 · 8초 안에 안 오면 다시 줄 세우기
+local queue, queued = {}, {}
+local pumpTicker
+local function Send(id)
+	requested[id] = GetTime()
 	if Item and Item.CreateFromItemID then
 		local it = Item:CreateFromItemID(id)
 		if it.IsItemEmpty and it:IsItemEmpty() then return end
 		it:ContinueOnItemLoad(ItemArrived)
 	elseif C_Item.RequestLoadItemDataByID then
 		pcall(C_Item.RequestLoadItemDataByID, id)
+	end
+end
+local function Pump()
+	local n = 0
+	while n < 4 and #queue > 0 do
+		local id = table.remove(queue, 1)
+		queued[id] = nil
+		local cached = C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(id)
+		if not cached then Send(id); n = n + 1 end
+	end
+	if #queue == 0 and pumpTicker then pumpTicker:Cancel(); pumpTicker = nil end
+end
+local function RequestItem(id, prio)
+	if not id then return end
+	if C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(id) then return end
+	local t = requested[id]
+	if t and GetTime() - t < 8 then return end
+	if queued[id] then
+		if not prio then return end
+		for i, q in ipairs(queue) do if q == id then table.remove(queue, i) break end end
+	end
+	queued[id] = true
+	if prio then table.insert(queue, 1, id) else queue[#queue + 1] = id end
+	if not pumpTicker then
+		if C_Timer.NewTicker then pumpTicker = C_Timer.NewTicker(0.2, Pump) else Pump() end
 	end
 end
 
@@ -361,7 +388,7 @@ end
 local function LooseItem(id)
 	local _, _, _, _, icon = C_Item.GetItemInfoInstant(id)
 	local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
-	if not name then RequestItem(id) end
+	if not name then RequestItem(id, true) end
 	local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
 	local _, link = C_Item.GetItemInfo(id)
 	local data = ns.BIS
@@ -461,7 +488,7 @@ ForeverScan = function(key, quiet)
 				end
 				if not name then
 					data.missing = data.missing + 1
-					if not quiet then RequestItem(id) end
+					if not quiet then RequestItem(id, true) end
 				end
 				local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
 				table.insert(boss.items, {
@@ -833,10 +860,13 @@ function M:BuildList(f)
 	body:SetSize(SB_W - 16, 10)
 	sf:SetScrollChild(body)
 	sf:EnableMouseWheel(true)
+	-- 스크롤 범위는 내용 높이로 직접 계산 (블리자드 범위 값이 다시 그리기 직후엔 늦게 바뀌어서 잘 안 내려가던 문제)
 	sf:SetScript("OnMouseWheel", function(self, d)
-		local r = self:GetVerticalScrollRange() or 0
-		self:SetVerticalScroll(math.max(0, math.min(r, self:GetVerticalScroll() - d * 44)))
+		local r = math.max(0, (body:GetHeight() or 0) - (self:GetHeight() or 0))
+		self:SetVerticalScroll(math.max(0, math.min(r, self:GetVerticalScroll() - d * 60)))
 	end)
+	f:EnableMouseWheel(true)
+	f:SetScript("OnMouseWheel", function(_, d) sf:GetScript("OnMouseWheel")(sf, d) end)
 	f.sf, f.body = sf, body
 	f.heads, f.rows = {}, {}
 	f.empty = Ink:Text(body, F.sans, 11, C.dim, "CENTER")
@@ -2031,7 +2061,7 @@ function M:PaintList(f, data, mode)
 				row.itemID, row.link = it.id, it.link
 				row.icon:Set(it.icon, it.quality, SLOT_GLYPH[it.slot or -1])
 				local q = QCOL[it.quality or 1] or QCOL[1]
-				row.name:SetText(it.name or (((self.sbRetry or 0) >= 20) and ("아이템 #" .. it.id .. " (마우스를 올려 보기)") or "불러오는 중…"))
+				row.name:SetText(it.name or (((self.sbRetry or 0) >= 40) and ("아이템 #" .. it.id .. " (마우스를 올려 보기)") or "불러오는 중…"))
 				row.name:SetTextColor(q[1], q[2], q[3])
 				local sub = it.slotText or SLOT_NAME[it.slot or -1] or ""
 				if it.armor and it.armor ~= "" then sub = sub .. " · " .. it.armor end
@@ -2055,9 +2085,9 @@ function M:PaintList(f, data, mode)
 		end
 	end
 	-- 포에버: 아이템 이름이 아직 안 온 게 있으면 잠깐씩 다시 (서버가 늦게 보내 준다)
-	if FOREVER and data and data.missing > 0 and (self.sbRetry or 0) < 20 then
+	if FOREVER and data and data.missing > 0 and (self.sbRetry or 0) < 40 then
 		self.sbRetry = (self.sbRetry or 0) + 1
-		C_Timer.After(0.8, function()
+		C_Timer.After(1.5, function()
 			if self.sidebar and self.sidebar:IsShown() then self.dirty = true; self:PaintSidebar() end
 		end)
 	elseif data and data.missing == 0 then
@@ -2077,6 +2107,8 @@ function M:PaintList(f, data, mode)
 	end
 	f.empty:SetText(emptyText)
 	body:SetHeight(math.max(10, y))
+	local maxS = math.max(0, y - (f.sf:GetHeight() or 0))
+	if f.sf:GetVerticalScroll() > maxS then f.sf:SetVerticalScroll(maxS) end
 end
 
 -------------------------------------------------------------------------------

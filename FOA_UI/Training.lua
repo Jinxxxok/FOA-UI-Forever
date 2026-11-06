@@ -176,7 +176,12 @@ local function Row(body)
 		self.hl:SetVertexColor(1, 1, 1, 0.05)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 		local _, id = KnownRank(self.e.name)
-		if id and self.e.rank <= 1 and GameTooltip.SetSpellByID then
+		-- 아직 안 배운 기술도 진짜 기술 툴팁 (게임 파일에서 뽑은 주문 번호 · ClassSpellIDs.lua)
+		local _, cls = UnitClass("player")
+		local ids = ns.CLASS_SPELL_IDS and ns.CLASS_SPELL_IDS[cls]
+		local exact = ids and ids[self.e.level .. ":" .. self.e.name]
+		if exact then id = exact end
+		if id and (exact or self.e.rank <= 1) and GameTooltip.SetSpellByID then
 			GameTooltip:SetSpellByID(id)
 		else
 			GameTooltip:AddLine(self.e.name, 1, 1, 1)
