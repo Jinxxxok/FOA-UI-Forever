@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.53.8"
+Ink.version = "0.54.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1127,6 +1127,7 @@ local defaults = {
 	questMap = true,
 	questClass = true,
 	bisCrafts = true,
+	bisQuests = true,
 	mapScaleUp = false,
 }
 

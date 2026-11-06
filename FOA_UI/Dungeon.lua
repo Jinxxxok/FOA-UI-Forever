@@ -394,6 +394,7 @@ end
 
 function M:SourceText(it)
 	if it.srcText then return it.srcText end
+	if it.quest then return self:QuestSourceText(it) end
 	if it.craft then
 		local t = "제작 · " .. (M.CRAFT_PROF and M.CRAFT_PROF[it.craft] or "전문기술")
 		if it.spell and M.RecipeFor and M:RecipeFor(it.spell) then t = t .. " · 제조법 상인" end
@@ -478,7 +479,7 @@ end
 function M:BuildRanksForever()
 	local lvl = UnitLevel("player") or 60
 	local skey = SpecKey()
-	local key = skey .. ":" .. lvl .. (Ink.db.bisCrafts == false and "" or ":c")
+	local key = skey .. ":" .. lvl .. (Ink.db.bisCrafts == false and "" or ":c") .. (Ink.db.bisQuests == false and "" or ":q")
 	if self.rankKey == key and not self.dirty then return end
 	self.rankKey, self.dirty = key, nil
 	wipe(self.ranks)
@@ -507,8 +508,10 @@ function M:BuildRanksForever()
 	self.levelMode = lvl < 60
 	if self.levelMode then
 		self:AddCrafts(pool, lvl)
+		self:AddQuestRewards(pool, lvl)
 		return self:BuildLevelRanks(pool, lvl)
 	end
+	self:AddQuestRewards(pool, lvl)
 	local function Fill()
 		-- 공략 대체가 3개 안 되는 칸은 던전 전리품 중 FOA 점수(직업 · 특성 가중치) 높은 순으로 채운다
 		local sc = ns.Score
@@ -659,7 +662,7 @@ end
 -- 자료 출처 한 줄
 function M:SourceLabel()
 	if FOREVER and self.levelMode then
-		return (UnitLevel("player") or 1) .. "레벨 착용 가능\n던전 전리품" .. (Ink.db.bisCrafts ~= false and ns.FOREVER_CRAFTS and " + 제작템" or "") .. " · FOA 점수 순"
+		return (UnitLevel("player") or 1) .. "레벨 착용 가능\n던전 전리품" .. (Ink.db.bisCrafts ~= false and ns.FOREVER_CRAFTS and " + 제작템" or "") .. (Ink.db.bisQuests ~= false and ns.FOREVER_QREWARDS and " + 퀘스트 보상" or "") .. " · FOA 점수 순"
 	end
 	if FOREVER then
 		return self.spec and ("BIS · 대체: " .. self.spec.src .. " (레이드 전) + FOA 점수") or "대체: FOA 점수 (공략 BIS 준비 중)"
@@ -988,6 +991,76 @@ function M:AddCrafts(pool, lvl)
 			end
 		end
 	end
+end
+
+-- 퀘스트 보상 장비도 후보로 (ForeverQuestRewards.lua · AllTheThings MIT)
+--  내 진영 · 내 직업 퀘스트만, 이미 끝낸 퀘스트는 빼고, 퀘스트 레벨로 대충 레벨 창을 좁힌다
+function M:AddQuestRewards(pool, lvl)
+	if Ink.db.bisQuests == false or not ns.FOREVER_QREWARDS then return end
+	local fac = UnitFactionGroup("player")
+	local facN = fac == "Horde" and 1 or (fac == "Alliance" and 2 or 0)
+	local _, _, classID = UnitClass("player")
+	local done = C_QuestLog.IsQuestFlaggedCompleted
+	self.questById = self.questById or {}
+	for _, e in ipairs(ns.FOREVER_QREWARDS) do
+		local id, qid, qlvl, qfac, cls = e[1], e[2], e[3], e[4], e[9]
+		local okFac = qfac == 0 or qfac == facN
+		local okCls = #cls == 0
+		if not okCls then for _, c in ipairs(cls) do if c == classID then okCls = true break end end end
+		if okFac and okCls and qlvl <= lvl + 6 and qlvl >= lvl - 22 and not (done and done(qid)) then
+			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
+			local slot = iid and loc and EQUIP_EJ[loc]
+			if slot then
+				local it = self.questById[id]
+				if not it then
+					it = { id = id, icon = icon, slot = slot, quest = qid, qlvl = qlvl, qmap = e[5], qx = e[6], qy = e[7], qnpc = e[8] }
+					self.questById[id] = it
+				end
+				if not it.name then
+					local cached = not C_Item.IsItemDataCachedByID or C_Item.IsItemDataCachedByID(id)
+					if cached then
+						local name, link, q = C_Item.GetItemInfo(id)
+						it.name, it.link, it.quality = name, link, q or 2
+					end
+				end
+				-- 던전 전리품 · 제작템과 같은 아이템이면 그쪽을 쓴다
+				if ForMyClass(it) and not (self.craftById and self.craftById[id]) then
+					pool[slot] = pool[slot] or {}
+					table.insert(pool[slot], it)
+				end
+			end
+		end
+	end
+end
+
+local function QuestTitleOf(qid)
+	local Q = Ink.modules.QuestMap
+	local t = (Q and Q.QuestTitle and Q:QuestTitle(qid)) or (C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(qid))
+	if not t and C_QuestLog.RequestLoadQuestByID then pcall(C_QuestLog.RequestLoadQuestByID, qid) end
+	return t
+end
+
+function M:QuestSourceText(it)
+	local info = it.qmap and it.qmap > 0 and C_Map.GetMapInfo and C_Map.GetMapInfo(it.qmap)
+	local inLog = C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(it.quest)
+	return "퀘스트 · " .. (QuestTitleOf(it.quest) or "보상") .. (inLog and " (진행 중)" or "") .. (info and ("  ·  " .. info.name) or "")
+end
+
+-- BIS 툴팁에 붙이는 퀘스트 정보
+function M:QuestRewardTooltip(it, tt)
+	tt = tt or GameTooltip
+	tt:AddLine(" ")
+	tt:AddLine("|cffFFF468FOA|r  퀘스트 보상", 1, 1, 1)
+	Ink.TipLine(tt, (QuestTitleOf(it.quest) or ("퀘스트 #" .. it.quest)) .. (it.qlvl and it.qlvl > 0 and ("  ·  " .. it.qlvl .. "레벨부터") or ""), 0.96, 0.95, 0.9)
+	local Q = Ink.modules.QuestMap
+	local giver = it.qnpc and it.qnpc > 0 and Q and Q.GiverName and Q:GiverName(it.qnpc)
+	local info = it.qmap and it.qmap > 0 and C_Map.GetMapInfo and C_Map.GetMapInfo(it.qmap)
+	if giver then tt:AddLine("주는 NPC: " .. giver, 1, 0.82, 0.32) end
+	if info then tt:AddLine(info.name .. string.format("  %.1f, %.1f", it.qx or 0, it.qy or 0), 0.7, 0.72, 0.75) end
+	local inLog = C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(it.quest)
+	if inLog then tt:AddLine("지금 진행 중인 퀘스트예요", 0.44, 0.83, 0.55)
+	else tt:AddLine("선행 퀘스트가 있을 수 있어요", 0.56, 0.58, 0.61) end
+	if info then tt:AddLine("클릭: 퀘스트 주는 곳을 지도에", 0.56, 0.58, 0.61) end
 end
 
 -- 만렙 전 "레벨 최고템": 부위마다 지금 착용 가능한(요구 레벨 ≤ 내 레벨) 내 직업 장비를 FOA 점수 순으로 4개
@@ -2939,6 +3012,7 @@ function M:BuildBisPanel()
 				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 				if self.link then GameTooltip:SetHyperlink(self.link) else GameTooltip:SetItemByID(self.itemID) end
 				if self.it and self.it.craft then pcall(M.CraftTooltip, M, self.it) end
+				if self.it and self.it.quest then pcall(M.QuestRewardTooltip, M, self.it) end
 				GameTooltip:Show()
 			end
 		end)
@@ -2946,6 +3020,12 @@ function M:BuildBisPanel()
 		-- 제작템: 클릭하면 제조법 상인 위치를 지도에
 		r:SetScript("OnMouseUp", function(self)
 			local it = self.it
+			-- 퀘스트 보상: 퀘스트 주는 곳을 지도에
+			if it and it.quest and it.qmap and it.qmap > 0 then
+				local Q = Ink.modules.QuestMap
+				if Q and Q.Waypoint then Q:Waypoint({ mapID = it.qmap, wx = it.qx / 100, wy = it.qy / 100 }) end
+				return
+			end
 			if not (it and it.craft and it.spell) then return end
 			local rc = M:RecipeFor(it.spell)
 			local P = Ink.modules.Professions

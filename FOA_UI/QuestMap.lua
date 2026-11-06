@@ -515,7 +515,12 @@ function M:TurnIns(mapID)
 	for i = 1, n do
 		local info = C_QuestLog.GetInfo and C_QuestLog.GetInfo(i)
 		local id = info and not info.isHeader and info.questID
-		if id and not seen[id] and not poi[id] and Ready(id) then
+		-- 받은 곳으로 보고 위치를 짐작하는 건 "목표를 다 채운" 퀘스트만.
+		--  · 목표가 없는 퀘스트(편지 배달 · 누구와 대화)는 받자마자 완료로 나오지만 보고는 다른 NPC 라서 짐작하면 엉뚱한 곳에 뜬다
+		--  · 막 받은 퀘스트는 목표 정보가 오기 전 잠깐 "완료"로 보여서 내 자리에 물음표가 떴다 사라졌다 → 몇 초 기다린다
+		local fresh = id and M.acceptedAt and M.acceptedAt[id] and (GetTime() - M.acceptedAt[id] < 6)
+		local objs = id and not fresh and C_QuestLog.GetQuestObjectives and C_QuestLog.GetQuestObjectives(id)
+		if id and not seen[id] and not poi[id] and not fresh and objs and #objs > 0 and Ready(id) then
 			local r = QuestRow(id)
 			local pts = r and r[2] or {}
 			for k = 1, #pts, 3 do
@@ -810,10 +815,20 @@ function M:Init()
 		"PLAYER_LEVEL_UP", "SKILL_LINES_CHANGED", "QUEST_DATA_LOAD_RESULT", "UPDATE_FACTION" }) do
 		pcall(e.RegisterEvent, e, ev)
 	end
-	e:SetScript("OnEvent", function(_, event)
+	e:SetScript("OnEvent", function(_, event, a1, a2)
 		if event == "ADDON_LOADED" then
 			if not M.hooked then M:Hook() end
 			return
+		end
+		if event == "QUEST_ACCEPTED" then
+			-- 본섭은 (퀘스트ID), 클래식은 (로그 번호, 퀘스트ID)
+			local id = (type(a2) == "number" and a2 > 0) and a2 or a1
+			if type(id) == "number" then
+				M.acceptedAt = M.acceptedAt or {}
+				M.acceptedAt[id] = GetTime()
+			end
+			-- 목표 · 게임 보고 위치가 도착한 뒤에 다시 그린다
+			C_Timer.After(6.5, function() M.miniDirty = true; M.poiDirty = true; M:Queue() end)
 		end
 		if event == "QUEST_DATA_LOAD_RESULT" then
 			-- 이름이 도착하면 열린 툴팁만 다시

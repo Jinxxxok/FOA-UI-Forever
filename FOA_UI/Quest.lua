@@ -451,6 +451,7 @@ function M:Update()
 			title = C_QuestLog.GetTitleForQuestID(id) or ""
 			objs = C_QuestLog.GetQuestObjectives(id) or {}
 			complete = C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(id) or C_QuestLog.IsComplete(id)
+			if complete and #objs == 0 and self:Fresh(id) then complete = false end
 		end
 		local tag = QuestTag(id)
 		local qi2 = qinfo[id]
@@ -733,6 +734,11 @@ function M:PlayDoneSound(which)
 end
 
 -- 퀘스트 로그를 훑어서 "방금 완료 상태가 된" 퀘스트를 찾는다
+function M:Fresh(id)
+	local t = self.acceptedAt and self.acceptedAt[id]
+	return t and (GetTime() - t < 6) or false
+end
+
 function M:CheckDone()
 	local now = {}
 	local n = C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetNumQuestLogEntries() or 0
@@ -741,7 +747,8 @@ function M:CheckDone()
 		if info and not info.isHeader and info.questID and info.questID > 0 and not info.isHidden then
 			local id = info.questID
 			local done = (C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(id)) or C_QuestLog.IsComplete(id)
-			now[id] = done and true or false
+			if M:Fresh(id) then done = nil end
+			now[id] = (done == nil) and nil or (done and true or false)
 			local objs = C_QuestLog.GetQuestObjectives(id)
 			-- 목표가 없는 퀘스트(바로 보고하는 심부름)는 받자마자 완료라 알리지 않는다
 			if done and self.doneState and self.doneState[id] == false and objs and #objs > 0 then
@@ -789,6 +796,12 @@ function M:Init()
 			-- 클래식: (logIndex, questID) · 최신: (questID)
 			local qid = arg2 or arg1
 			C_Timer.After(0.3, function() pcall(M.WatchClass, M, qid) end)
+			-- 막 받은 퀘스트는 목표 정보가 오기 전 잠깐 "완료"로 보인다 → 몇 초 동안은 완료로 치지 않는다
+			if type(qid) == "number" then
+				M.acceptedAt = M.acceptedAt or {}
+				M.acceptedAt[qid] = GetTime()
+				C_Timer.After(6.5, function() M:CheckDone(); M:Update() end)
+			end
 		end
 		if event == "QUEST_LOG_UPDATE" or event == "UNIT_QUEST_LOG_CHANGED" or event == "QUEST_ACCEPTED" then
 			if not donePending then
