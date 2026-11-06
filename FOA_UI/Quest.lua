@@ -97,7 +97,7 @@ local function Row(i)
 		local id = self.questID
 		if not id then return end
 		if btn == "RightButton" then
-			if C_SuperTrack and C_SuperTrack.SetSuperTrackedQuestID then C_SuperTrack.SetSuperTrackedQuestID(id) end
+			M:AbandonQuest(id)
 		elseif IsShiftKeyDown() then
 			if C_QuestLog.RemoveQuestWatch then C_QuestLog.RemoveQuestWatch(id) end
 		elseif QuestMapFrame_OpenToQuestDetails then
@@ -108,7 +108,7 @@ local function Row(i)
 		self.title:SetAlpha(0.8)
 		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
 		GameTooltip:AddLine(self.title:GetText() or "", 1, 1, 1)
-		Ink.TipLine(GameTooltip, "클릭: 퀘스트 보기 · 우클릭: 추적 지점 · Shift 클릭: 목록에서 빼기", 0.7, 0.7, 0.7)
+		Ink.TipLine(GameTooltip, "클릭: 퀘스트 보기 · 우클릭: 퀘스트 포기 · Shift 클릭: 목록에서 빼기", 0.7, 0.7, 0.7)
 		GameTooltip:Show()
 	end)
 	r:SetScript("OnLeave", function(self) self.title:SetAlpha(1); GameTooltip:Hide() end)
@@ -143,6 +143,63 @@ end
 -------------------------------------------------------------------------------
 -- 갱신
 -------------------------------------------------------------------------------
+-- 퀘스트 포기: 블리자드 확인 창을 띄운다 (바로 지우지 않는다)
+function M:AbandonQuest(id)
+	if type(id) ~= "number" then return end
+	if QuestMapQuestOptions_AbandonQuest and pcall(QuestMapQuestOptions_AbandonQuest, id) then return end
+	local title = C_QuestLog.GetTitleForQuestID(id) or ""
+	if C_QuestLog.SetSelectedQuest and C_QuestLog.SetAbandonQuest then
+		C_QuestLog.SetSelectedQuest(id)
+		C_QuestLog.SetAbandonQuest()
+		local items = C_QuestLog.GetAbandonQuestItems and C_QuestLog.GetAbandonQuestItems()
+		if items and StaticPopupDialogs and StaticPopupDialogs["ABANDON_QUEST_WITH_ITEMS"] then
+			StaticPopup_Hide("ABANDON_QUEST")
+			StaticPopup_Show("ABANDON_QUEST_WITH_ITEMS", title, items)
+		else
+			if StaticPopup_Hide then StaticPopup_Hide("ABANDON_QUEST_WITH_ITEMS") end
+			StaticPopup_Show("ABANDON_QUEST", title)
+		end
+	elseif SelectQuestLogEntry and SetAbandonQuest then
+		local idx = C_QuestLog.GetLogIndexForQuestID(id)
+		if not idx then return end
+		SelectQuestLogEntry(idx)
+		SetAbandonQuest()
+		StaticPopup_Show("ABANDON_QUEST", (GetAbandonQuestName and GetAbandonQuestName()) or title)
+	end
+end
+
+-- 퀘스트 레벨 색 (이름표 레벨과 같은 색): 빨강 +5 · 주황 +3 · 노랑 ±2 · 초록 · 회색
+local LVL_COL = {
+	red = { 1.00, 0.42, 0.37 }, orange = { 1.00, 0.62, 0.30 }, yellow = { 1.00, 0.86, 0.36 },
+	green = { 0.44, 0.83, 0.55 }, gray = { 0.56, 0.58, 0.61 },
+}
+local function LevelColor(lv)
+	local me = UnitLevel("player") or 1
+	local d = lv - me
+	if d >= 5 then return LVL_COL.red elseif d >= 3 then return LVL_COL.orange elseif d >= -2 then return LVL_COL.yellow end
+	local green = (GetQuestGreenRange and GetQuestGreenRange()) or ((me <= 5) and 5 or (me <= 39 and (math.floor(me / 10) + 5) or (math.floor(me / 5) + 1)))
+	return (-d <= green) and LVL_COL.green or LVL_COL.gray
+end
+M.LevelColor = LevelColor
+
+-- 퀘스트 목록의 지역 머리줄 → [퀘스트] = { 지역, 레벨 }, 지역 순서
+local function QuestLogInfo()
+	local map, order, zone = {}, {}, nil
+	local n = C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetNumQuestLogEntries() or 0
+	for i = 1, n do
+		local info = C_QuestLog.GetInfo and C_QuestLog.GetInfo(i)
+		if info then
+			if info.isHeader then
+				zone = info.title
+				if zone and not order[zone] then order[#order + 1] = zone; order[zone] = #order end
+			elseif info.questID then
+				map[info.questID] = { zone = zone, level = info.level }
+			end
+		end
+	end
+	return map, order
+end
+
 local function WatchedQuests()
 	local list = {}
 	local n = C_QuestLog.GetNumQuestWatches and C_QuestLog.GetNumQuestWatches() or 0
@@ -277,19 +334,59 @@ function M:PaintClass(y)
 	return -(cy - y) + 6
 end
 
+-- 지역 머리줄: 점 · 지역 이름 · 옅은 선 · 개수
+function M:ZoneHead(i)
+	local f = self.frame
+	f.zheads = f.zheads or {}
+	local h = f.zheads[i]
+	if h then return h end
+	h = CreateFrame("Frame", nil, f)
+	h:SetSize(W, 14)
+	h.t = Ink:Text(h, F.semi, 10, C.muted, "LEFT")
+	h.t:SetPoint("LEFT", 0, 0)
+	h.n = Ink:Text(h, F.latin, 10, C.dim, "RIGHT")
+	h.n:SetPoint("RIGHT", 0, 0)
+	h.line = h:CreateTexture(nil, "ARTWORK")
+	h.line:SetHeight(1)
+	h.line:SetPoint("LEFT", h.t, "RIGHT", 8, 0)
+	h.line:SetPoint("RIGHT", h.n, "LEFT", -6, 0)
+	f.zheads[i] = h
+	return h
+end
+
 function M:Update()
 	local f = self.frame
 	if not f or not f:IsShown() then return end
 	local quests = WatchedQuests()
 	if #quests == 0 and self.testing then quests = { "test1", "test2" } end
-	-- 진행 중인 직업 퀘스트를 맨 위로
+	-- 지역별로 묶기: 진행 중인 직업 퀘스트 → 지금 있는 지역 → 퀘스트 목록 순서
 	local cset = ClassSet()
-	if cset then
-		local a, b = {}, {}
-		for _, id in ipairs(quests) do if cset[id] then a[#a + 1] = id else b[#b + 1] = id end end
-		for _, id in ipairs(b) do a[#a + 1] = id end
-		quests = a
+	local qinfo, zorder = QuestLogInfo()
+	local here = GetRealZoneText and GetRealZoneText() or ""
+	local CLASSG, OTHER = "\001직업", "기타"
+	local group = {}
+	if self.testing and not next(qinfo) then
+		qinfo = { test1 = { zone = "죽음의 폐광", level = 20 }, test2 = { zone = "서부 몰락지대", level = 16 } }
 	end
+	for _, id in ipairs(quests) do
+		local q = qinfo[id]
+		group[id] = (cset and cset[id]) and CLASSG or (q and q.zone) or OTHER
+	end
+	local function rank(g)
+		if g == CLASSG then return 0 elseif g == here then return 1 elseif zorder[g] then return 2 + zorder[g] end
+		return 999
+	end
+	local pos = {}
+	for i, id in ipairs(quests) do pos[id] = i end
+	table.sort(quests, function(a, b)
+		local ra, rb = rank(group[a]), rank(group[b])
+		if ra ~= rb then return ra < rb end
+		return pos[a] < pos[b]
+	end)
+	local gcount = {}
+	for _, id in ipairs(quests) do gcount[group[id]] = (gcount[group[id]] or 0) + 1 end
+	local lastG
+	local nh = 0
 	local _, numQuests = C_QuestLog.GetNumQuestLogEntries()
 	local maxQ = C_QuestLog.GetMaxNumQuestsCanAccept and C_QuestLog.GetMaxNumQuestsCanAccept() or 35
 	f.count:SetText(string.format("%d / %d", numQuests or 0, maxQ))
@@ -311,6 +408,31 @@ function M:Update()
 		local idx = qi - offset
 		shown = idx
 		local r = Row(idx)
+		local g = group[id]
+		local newG = (g ~= lastG)
+		if newG then
+			lastG = g
+			nh = nh + 1
+			if not combat then
+				local h = self:ZoneHead(nh)
+				h:ClearAllPoints()
+				h:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y - ((idx > 1 or (self.classH or 0) > 0) and 4 or 0))
+				if g == CLASSG then
+					local rgb = ClassRGB()
+					h.t:SetText("직업 퀘스트 진행 중")
+					h.t:SetTextColor(rgb[1], rgb[2], rgb[3])
+					h.line:SetColorTexture(rgb[1], rgb[2], rgb[3], 0.18)
+				else
+					h.t:SetText(g)
+					local hc = (g == here) and C.soft or C.muted
+					h.t:SetTextColor(hc[1], hc[2], hc[3])
+					h.line:SetColorTexture(1, 1, 1, 0.08)
+				end
+				h.n:SetText(tostring(gcount[g] or ""))
+				h:Show()
+			end
+			y = y - ((idx > 1 or (self.classH or 0) > 0) and 26 or 22)
+		end
 		if not combat then
 			r:ClearAllPoints()
 			r:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
@@ -331,6 +453,13 @@ function M:Update()
 			complete = C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(id) or C_QuestLog.IsComplete(id)
 		end
 		local tag = QuestTag(id)
+		local qi2 = qinfo[id]
+		local lvp = ""
+		if qi2 and type(qi2.level) == "number" and qi2.level > 0 then
+			local lc = LevelColor(qi2.level)
+			lvp = string.format("|cff%02x%02x%02x%d|r  ", math.floor(lc[1] * 255), math.floor(lc[2] * 255), math.floor(lc[3] * 255), qi2.level)
+		end
+		title = lvp .. title
 		if cset and cset[id] then
 			local rgb = ClassRGB()
 			r.title:SetText(string.format("%s |cff%02x%02x%02x(직업)|r", title, math.floor(rgb[1] * 255), math.floor(rgb[2] * 255), math.floor(rgb[3] * 255)))
@@ -339,7 +468,7 @@ function M:Update()
 		else
 			r.title:SetText(title)
 		end
-		r.div:SetShown(idx > 1 or (self.classH or 0) > 0)
+		r.div:SetShown(not newG and (idx > 1 or (self.classH or 0) > 0))
 		local isSuper = (super == id)
 		r.title:SetTextColor(isSuper and C.accent[1] or C.text[1], isSuper and C.accent[2] or C.text[2], isSuper and C.accent[3] or C.text[3])
 		r.mark:SetShown(isSuper)
@@ -448,6 +577,7 @@ function M:Update()
 			f.rows[i]:Hide()
 			f.rows[i].item:Hide()
 		end
+		for i = nh + 1, #(f.zheads or {}) do f.zheads[i]:Hide() end
 		f:SetHeight(-y)
 	end
 	self.lastCount = #quests
