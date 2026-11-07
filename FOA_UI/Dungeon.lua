@@ -1549,6 +1549,10 @@ end
 -- 진행 경로: 보스를 순서대로 뱀 모양(ㄹ자)으로 잇는다. 입구 → 1 → 2 … → 막보(해골)
 --  처치한 보스 = 초록 체크 · 다음 보스 = 노란 테 · 내 추천템이 나오는 보스 = 노란 점
 local RT_ROW = 54
+-- 던전 퀘스트 시작 안내 (DungeonQuestNotes.lua): 좌표가 없는 퀘스트의 짧은 설명 · 근처 보스 · 보고하는 곳
+local function DQNote(id) return ns.DUNGEON_QUEST_NOTES and ns.DUNGEON_QUEST_NOTES[id] end
+M.DQNote = DQNote
+
 local function RouteNode(route)
 	local n = CreateFrame("Button", nil, route)
 	n:SetSize(30, 30)
@@ -1574,6 +1578,12 @@ local function RouteNode(route)
 	n.dot:SetSize(7, 7)
 	n.dot:SetPoint("CENTER", n.disc, "TOPRIGHT", -2, -2)
 	n.dot:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
+	-- 이 보스 근처에서 시작하는 퀘스트가 있으면 왼쪽 위에 작은 느낌표
+	n.qb = n:CreateTexture(nil, "OVERLAY", nil, 4)
+	n.qb:SetTexture(Ink.icon("QuestBang"))
+	n.qb:SetSize(11, 11)
+	n.qb:SetPoint("CENTER", n.disc, "TOPLEFT", 1, -1)
+	n.qb:Hide()
 	n.label = Ink:Text(route, F.sans, 9, C.soft, "CENTER")
 	n.label:SetWordWrap(true)
 	if n.label.SetMaxLines then n.label:SetMaxLines(2) end
@@ -1617,6 +1627,18 @@ function M:BossTooltip(owner, bi)
 	GameTooltip:AddDoubleLine("전리품", nAll .. "개", 0.7, 0.72, 0.75, 1, 1, 1)
 	GameTooltip:AddDoubleLine("내 직업", nCls .. "개", 0.7, 0.72, 0.75, 1, 1, 1)
 	if nRec > 0 then GameTooltip:AddDoubleLine("추천 (BIS · 대체)", nRec .. "개", 0.7, 0.72, 0.75, 1, 0.96, 0.41) end
+	-- 이 근처에서 시작하는 퀘스트
+	local nq = b.npc and self:QuestsNearBoss(self.showing)[b.npc]
+	if nq and #nq > 0 then
+		GameTooltip:AddLine(" ")
+		GameTooltip:AddLine("이 근처에서 시작하는 퀘스트", 0.89, 0.75, 0.48)
+		for _, e in ipairs(nq) do
+			local t = C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(e.id)
+			local nt = DQNote(e.id)
+			GameTooltip:AddLine((e.state == "log" and "|cffFFF468▸|r " or "|cffE3C07A!|r ") .. (t and t ~= "" and t or ("퀘스트 #" .. e.id)), 0.92, 0.92, 0.9)
+			if nt and nt[2] then Ink.TipLine(GameTooltip, "   " .. nt[2], 0.56, 0.58, 0.61) end
+		end
+	end
 	GameTooltip:AddLine("클릭: 목록에서 이 보스로", 0.55, 0.57, 0.6)
 	GameTooltip:Show()
 end
@@ -1709,6 +1731,7 @@ function M:PaintRoute(route, data, W, hidden)
 			Line(ex, b.y, b.x + (right and GAP or -GAP), b.y, done)
 		end
 	end
+	local nearQ = self:QuestsNearBoss(self.showing)
 	for i = 1, n do
 		local bi = main[i]
 		local b = data.bosses[bi]
@@ -1722,6 +1745,12 @@ function M:PaintRoute(route, data, W, hidden)
 		local rec = false
 		for _, it in ipairs(b.items) do if self.ranks[it.id] then rec = true break end end
 		nd.dot:SetShown(rec and not b.killed)
+		local nq = b.npc and nearQ[b.npc]
+		nd.qb:SetShown(nq and #nq > 0 and true or false)
+		if nq and #nq > 0 then
+			local qc = nq.log and C.accent or C.gold
+			nd.qb:SetVertexColor(qc[1], qc[2], qc[3])
+		end
 		nd.disc:SetVertexColor(0.07, 0.075, 0.09, 1)
 		if b.killed then
 			nd.disc:SetVertexColor(DOWN_C[1] * 0.22, DOWN_C[2] * 0.22, DOWN_C[3] * 0.22, 1)
@@ -2817,6 +2846,22 @@ function M:DungeonQuestList(key)
 	return out
 end
 
+-- 보스 NPC → 그 근처에서 시작하는 (아직 안 끝낸) 퀘스트들 · 진행 중인 게 있으면 .log
+function M:QuestsNearBoss(key)
+	local out = {}
+	if not (key and ns.DUNGEON_QUEST_NOTES) then return out end
+	for _, e in ipairs(self:DungeonQuestList(key)) do
+		local nt = DQNote(e.id)
+		if nt and nt[1] and nt[1] > 0 and e.state ~= "done" then
+			local t = out[nt[1]] or {}
+			out[nt[1]] = t
+			t[#t + 1] = e
+			if e.state == "log" then t.log = true end
+		end
+	end
+	return out
+end
+
 local DQ_STATE = {
 	log = { "진행 중", C.accent }, ok = { "받을 수 있음", C.green }, soon = { "", C.orange },
 	pre = { "", C.muted }, done = { "완료", C.dim },
@@ -2940,7 +2985,12 @@ local function QuestRow(p, i)
 	r:SetScript("OnClick", function(self)
 		local q = self.e and self.e.q
 		local Q = Ink.modules.QuestMap
-		if q and q[4] > 0 and Q and Q.Waypoint then Q:Waypoint({ mapID = q[4], wx = q[5] / 100, wy = q[6] / 100 }) end
+		if q and q[4] > 0 and Q and Q.Waypoint then
+			Q:Waypoint({ mapID = q[4], wx = q[5] / 100, wy = q[6] / 100 })
+		elseif q and Q and Q.Waypoint then
+			local nt = DQNote(q[1])
+			if nt and nt[3] then Q:Waypoint({ mapID = nt[3], wx = nt[4] / 100, wy = nt[5] / 100 }) end
+		end
 	end)
 	p.rows[i] = r
 	return r
@@ -2965,7 +3015,7 @@ function M:QuestTip(r)
 		tt:AddLine("시작: 아이템 " .. (ItemName(item) and ("[" .. ItemName(item) .. "]") or ("#" .. item)), 1, 0.82, 0.32)
 		if from then
 			tt:AddLine(from .. " 드랍  ·  던전 안에서 얻어요", 0.7, 0.72, 0.75)
-		else
+		elseif not DQNote(e.id) then
 			tt:AddLine("아이템을 얻는 곳은 자료에 없어요", 0.56, 0.58, 0.61)
 		end
 	elseif q[7] > 0 then
@@ -2974,6 +3024,18 @@ function M:QuestTip(r)
 		tt:AddLine("시작: 던전 안 물체", 1, 0.82, 0.32)
 	elseif (q[11] or 0) ~= 0 then
 		tt:AddLine("시작: 아이템 (" .. (DropFrom(q) or "던전 몹") .. " 드랍)", 1, 0.82, 0.32)
+	end
+	local note = DQNote(e.id)
+	if note and note[2] then Ink.TipLine(tt, note[2], 0.78, 0.8, 0.84) end
+	if note and note[1] and note[1] > 0 and q[4] == 0 then
+		local data = self.showing and self:Scan(self.showing)
+		for _, bb in ipairs(data and data.bosses or {}) do
+			if bb.npc == note[1] then tt:AddLine("던전 화면: " .. (BossName(bb) or bb.name) .. " 근처 (경로에 느낌표)", 0.89, 0.75, 0.48) break end
+		end
+	end
+	if note and note[3] and q[4] == 0 then
+		local nz = ZoneName(note[3])
+		tt:AddLine("보고: " .. (note[6] or "NPC") .. ((nz and not (note[6] or ""):find(nz, 1, true)) and ("  ·  " .. nz) or "") .. string.format("  %.1f, %.1f", note[4], note[5]), 0.7, 0.72, 0.75)
 	end
 	if zone then
 		if kind == KIND_TURNIN then
@@ -3026,10 +3088,14 @@ function M:QuestTip(r)
 	end
 	tt:AddLine(" ")
 	local hint
-	if q[4] > 0 then
+	if q[4] == 0 and note and note[3] then
+		hint = "클릭: 보고하는 곳을 지도에"
+	elseif q[4] > 0 then
 		hint = (q[14] == KIND_TURNIN) and "클릭: 보고하는 곳을 지도에" or "클릭: 시작 위치를 지도에"
 	elseif q[14] == KIND_IN_NPC or q[14] == KIND_IN_OBJ or (q[14] == KIND_DROP and DropFrom(q)) then
 		hint = "던전 안에서 시작해서 지도 안내는 없어요"
+	elseif note then
+		hint = "지도 안내는 없어요 · 위 설명을 참고하세요"
 	else
 		hint = "시작 위치 정보가 없어요"
 	end
@@ -3129,7 +3195,9 @@ function M:PaintQuests()
 		local giver, zone = NpcOf(q[7]), ZoneName(q[4])
 		local kind = q[14] or 0
 		local sub
-		if (q[13] or 0) > 0 or ((q[11] or 0) ~= 0 and q[7] == 0) then
+		if kind == KIND_IN_OBJ then
+			sub = "던전 안 물체에서 시작"
+		elseif (q[13] or 0) > 0 or ((q[11] or 0) ~= 0 and q[7] == 0) then
 			local from = DropFrom(q)
 			sub = "아이템으로 시작" .. (from and ("  ·  " .. from .. " 드랍") or "")
 			if kind == KIND_TURNIN and zone then sub = sub .. "  ·  보고 " .. zone end
@@ -3138,6 +3206,13 @@ function M:PaintQuests()
 		elseif kind == KIND_IN_OBJ then
 			sub = "던전 안 물체에서 시작"
 		else sub = zone or "" end
+		local nt = DQNote(q[1])
+		if nt and q[4] == 0 and nt[1] and nt[1] > 0 then
+			local data = self.showing and self:Scan(self.showing)
+			for _, bb in ipairs(data and data.bosses or {}) do
+				if bb.npc == nt[1] then sub = sub .. "  ·  " .. (BossName(bb) or bb.name) .. " 근처" break end
+			end
+		end
 		if #q[8] > 0 then sub = sub .. "  ·  선행 " .. #q[8] end
 		r.sub:SetText(sub)
 		local st = DQ_STATE[e.state]
