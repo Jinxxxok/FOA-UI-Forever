@@ -2497,6 +2497,11 @@ SlashCmdList.INKUI = function(msg)
 			print("|cffFFF468FOA|r 막힌 동작 (최근 " .. math.min(#bl, 12) .. "개):")
 			for i = math.max(1, #bl - 11), #bl do print("|cffFFF468FOA|r " .. bl[i]) end
 		end
+		local enc = Ink.db.encLog
+		if enc and #enc > 0 then
+			print("|cffFFF468FOA|r 보스 이름이 안 맞은 전투 (최근 " .. math.min(#enc, 6) .. "개):")
+			for i = math.max(1, #enc - 5), #enc do print("|cff8E939B" .. enc[i] .. "|r") end
+		end
 		local errs = Ink.db and Ink.db.errors
 		if errs and #errs > 0 then
 			print("|cffFFF468FOA|r 최근 오류 (최대 8개):")

@@ -1196,12 +1196,20 @@ local function KillSet(key)
 end
 M.KillSet = KillSet
 
+-- 이 보스를 잡았으면 앞 보스도 잡은 것 (앞 보스가 죽어야 나오는 보스)
+--  스니드(643)는 스니드의 벌목기(642)가 부서져야 튀어나온다 · 벌목기는 전투 단위가 따로 없고 바로 이어져서 놓치기 쉽다
+local KILL_IMPLIES = { [643] = { 642 } }
+
 function M:MarkKill(key, npc)
 	if not (key and npc) then return end
 	local k = KillSet(key)
-	if k[npc] then return end
-	k[npc], k.t = true, time()
-	if self.sidebar and self.sidebar:IsShown() then self:PaintSidebar() end
+	local changed = false
+	local function mark(n)
+		if not k[n] then k[n], k.t = true, time(); changed = true end
+		for _, m in ipairs(KILL_IMPLIES[n] or {}) do mark(m) end
+	end
+	mark(npc)
+	if changed and self.sidebar and self.sidebar:IsShown() then self:PaintSidebar() end
 end
 
 -- 지금 들어와 있는 포에버 던전 (인스턴스 번호 · 지도 번호 · 이름. 날개가 여러 개면 마지막에 고른 날개 → 레벨)
@@ -3449,13 +3457,56 @@ function M:OnForeverEnter()
 end
 
 -- 보스 처치: 전투 종료 이벤트의 이름 / 대상이 죽은 걸 보고 NPC 번호로
-function M:OnBossKilled(name)
+-- 이름 비교: 띄어쓰기 · 기호를 빼고, 한쪽이 다른 쪽에 들어 있어도 같은 보스 (전투 이름이 "남작" ↔ "흉측한 남작" 처럼 다를 때)
+local function NormName(s)
+	if type(s) ~= "string" then return end
+	s = s:lower():gsub("<.->", ""):gsub("[%s%p]", "")
+	return s ~= "" and s or nil
+end
+
+function M:OnBossKilled(name, encID)
 	local key = self.hereKey or self:MatchInstance()
 	name = plain(name)
 	if not key or type(name) ~= "string" then return end
 	local data = self:Scan(key, true)
+	local n = NormName(name)
+	local best
 	for _, b in ipairs(data and data.bosses or {}) do
-		if b.npc and (BossName(b) == name or b.name == name or b.en == name) then return self:MarkKill(key, b.npc) end
+		if b.npc then
+			for _, cand in ipairs({ BossName(b), b.name, b.en }) do
+				local c = NormName(cand)
+				if c and n then
+					if c == n then return self:MarkKill(key, b.npc) end
+					if #c >= 2 and #n >= 2 and (n:find(c, 1, true) or c:find(n, 1, true)) then best = best or b end
+				end
+			end
+		end
+	end
+	if best then return self:MarkKill(key, best.npc) end
+	-- 못 맞춘 전투 이름은 기록 (/foa log 로 보고 보스 이름을 맞춘다)
+	Ink.db.encLog = Ink.db.encLog or {}
+	local log = Ink.db.encLog
+	log[#log + 1] = date("%m-%d %H:%M ") .. key .. " · " .. name .. (encID and (" · #" .. tostring(plain(encID))) or "")
+	while #log > 20 do table.remove(log, 1) end
+end
+
+-- 시체 전리품 창: 전리품이 나온 시체의 NPC 번호로 처치 판정 (전투 밖이라 값이 비공개가 아니다)
+function M:CheckLoot()
+	local key = self.hereKey
+	if not (key and GetNumLootItems and GetLootSourceInfo) then return end
+	local d = FLoot(key)
+	if not d then return end
+	local boss = {}
+	for _, b in ipairs(d.bosses or {}) do if b[3] then boss[b[3]] = true end end
+	for i = 1, (GetNumLootItems() or 0) do
+		local src = { GetLootSourceInfo(i) }
+		for j = 1, #src, 2 do
+			local guid = plain(src[j])
+			if type(guid) == "string" then
+				local npc = tonumber((select(6, strsplit("-", guid))))
+				if npc and boss[npc] then self:MarkKill(key, npc) end
+			end
+		end
 	end
 end
 
@@ -4207,7 +4258,8 @@ function M:Init()
 			"CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE", "PLAYER_LEVEL_UP" }) do pcall(e.RegisterEvent, e, ev) end
 		-- 던전 입장 · 보스 처치 (진행 경로)
 		local w = CreateFrame("Frame")
-		for _, ev in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ENCOUNTER_END", "BOSS_KILL", "PLAYER_TARGET_CHANGED" }) do
+		for _, ev in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ENCOUNTER_END", "BOSS_KILL", "PLAYER_TARGET_CHANGED",
+			"LOOT_OPENED", "UPDATE_MOUSEOVER_UNIT", "PLAYER_REGEN_ENABLED" }) do
 			pcall(w.RegisterEvent, w, ev)
 		end
 		pcall(w.RegisterUnitEvent, w, "UNIT_HEALTH", "target")
@@ -4215,9 +4267,16 @@ function M:Init()
 			if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
 				C_Timer.After(1, function() pcall(M.OnForeverEnter, M) end)
 			elseif event == "ENCOUNTER_END" then
-				if plain(a5) == 1 then pcall(M.OnBossKilled, M, a2) end
+				if plain(a5) == 1 then pcall(M.OnBossKilled, M, a2, a1) end
 			elseif event == "BOSS_KILL" then
-				pcall(M.OnBossKilled, M, a2)
+				pcall(M.OnBossKilled, M, a2, a1)
+			elseif event == "LOOT_OPENED" then
+				if M.hereKey then pcall(M.CheckLoot, M) end
+			elseif event == "UPDATE_MOUSEOVER_UNIT" then
+				if M.hereKey and not InCombatLockdown() then pcall(M.CheckDead, M, "mouseover") end
+			elseif event == "PLAYER_REGEN_ENABLED" then
+				-- 전투 중엔 사망 여부가 비공개라 못 읽은 것: 전투가 끝나면 대상을 다시 본다
+				if M.hereKey then C_Timer.After(0.3, function() pcall(M.CheckDead, M, "target") end) end
 			elseif M.hereKey then
 				pcall(M.CheckDead, M, "target")
 			end
