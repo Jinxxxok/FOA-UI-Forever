@@ -856,21 +856,26 @@ local function TabColors(tab, selected)
 	end
 end
 
+-- 채팅 틀 · 입력창을 꾸민 기록은 FOA 안쪽 표에 (블리자드 채팅 틀에 값을 써 넣으면 채팅 보내기가 오염될 수 있다)
+local chatSkinned = setmetatable({}, { __mode = "k" })
+local chatSkin = setmetatable({}, { __mode = "k" })
+
 local function SkinEditBox(eb, cf)
-	if not eb or eb.inkSkinned then return end
-	eb.inkSkinned = true
+	if not eb or chatSkinned[eb] then return end
+	chatSkinned[eb] = true
 	hideTextures(eb)
 	for _, k in ipairs({ "Left", "Mid", "Right", "FocusLeft", "FocusMid", "FocusRight" }) do
 		if eb[k] then eb[k]:SetAlpha(0) end
 		local g = eb.GetName and _G[eb:GetName() .. k]
 		if g then g:SetAlpha(0) end
 	end
-	eb.inkBg = Ink:Round(eb, "BACKGROUND", true, false)
-	eb.inkBg:SetAllPoints()
-	eb.inkBg:SetVertexColor(0, 0, 0, 0.45)
-	eb.inkBd = Ink:Round(eb, "BORDER", true, true)
-	eb.inkBd:SetAllPoints()
-	eb.inkBd:SetVertexColor(1, 1, 1, 0.14)
+	local bg = Ink:Round(eb, "BACKGROUND", true, false)
+	bg:SetAllPoints()
+	bg:SetVertexColor(0, 0, 0, 0.45)
+	local bd = Ink:Round(eb, "BORDER", true, true)
+	bd:SetAllPoints()
+	bd:SetVertexColor(1, 1, 1, 0.14)
+	chatSkin[eb] = { bg = bg, bd = bd }
 	eb:SetFont(F.sans, 13, "")
 	if eb.header then eb.header:SetFont(F.semi, 13, "") end
 	if eb.headerSuffix then eb.headerSuffix:SetFont(F.semi, 13, "") end
@@ -928,8 +933,8 @@ function M:ApplyChatFont()
 end
 
 local function SkinChatFrame(cf)
-	if not cf or cf.inkSkinned then return end
-	cf.inkSkinned = true
+	if not cf or chatSkinned[cf] then return end
+	chatSkinned[cf] = true
 	local name = cf:GetName()
 	-- 블리자드 기본 배경은 마우스를 올리면 다시 밝아지므로 투명도를 고정한다
 	for _, suffix in ipairs(CHAT_FRAME_TEXTURES or {}) do
@@ -946,10 +951,11 @@ local function SkinChatFrame(cf)
 	if cf.ScrollToBottomButton then Ink:Fade(cf.ScrollToBottomButton) end
 	local bf = cf.buttonFrame or _G[name .. "ButtonFrame"]
 	if bf then Ink:KeepHidden(bf) end
-	cf.inkBg = Ink:Round(cf, "BACKGROUND", false, false, -7)
-	cf.inkBg:SetPoint("TOPLEFT", -10, 30)
-	cf.inkBg:SetPoint("BOTTOMRIGHT", 10, -40)
-	cf.inkBg:SetVertexColor(0, 0, 0, 0.28)
+	local cbg = Ink:Round(cf, "BACKGROUND", false, false, -7)
+	cbg:SetPoint("TOPLEFT", -10, 30)
+	cbg:SetPoint("BOTTOMRIGHT", 10, -40)
+	cbg:SetVertexColor(0, 0, 0, 0.28)
+	chatSkin[cf] = { bg = cbg }
 	local _, size = cf:GetFont()
 	local cpath, cflags = M:ChatFont()
 	cf:SetFont(cpath, (size and size > 0) and size or 13, cflags)
@@ -957,6 +963,57 @@ local function SkinChatFrame(cf)
 	cf:SetShadowColor(0, 0, 0, 0.8)
 	SkinTab(_G[name .. "Tab"])
 	SkinEditBox(cf.editBox or _G[name .. "EditBox"], cf)
+end
+
+-------------------------------------------------------------------------------
+-- 채팅 입력: 위 · 아래 화살표만 눌러도 보냈던 글을 다시 불러온다 (원래는 Alt + 화살표)
+--  보낸 글은 최근 40줄까지 저장해 두고 다시 접속해도 이어서 불러온다
+-------------------------------------------------------------------------------
+local CHAT_HIST_MAX = 40
+local function EditBoxes()
+	local t = {}
+	for i = 1, (NUM_CHAT_WINDOWS or 10) do
+		local eb = _G["ChatFrame" .. i .. "EditBox"]
+		if eb then t[#t + 1] = eb end
+	end
+	return t
+end
+
+function M:SetupChatHistory()
+	local on = Ink.db.chatArrows ~= false
+	for _, eb in ipairs(EditBoxes()) do
+		if eb.SetAltArrowKeyMode then pcall(eb.SetAltArrowKeyMode, eb, not on) end
+	end
+	if self.histHooked then return end
+	self.histHooked = true
+	local saved = Ink.db.chatHistory
+	if type(saved) == "table" then
+		for _, eb in ipairs(EditBoxes()) do
+			if eb.AddHistoryLine then
+				for _, line in ipairs(saved) do if type(line) == "string" then pcall(eb.AddHistoryLine, eb, line) end end
+			end
+		end
+	end
+	if type(ChatEdit_AddHistory) == "function" then
+		hooksecurefunc("ChatEdit_AddHistory", function(eb)
+			pcall(function()
+				local text = plain(eb:GetText())
+				if type(text) ~= "string" or text == "" then return end
+				local ctype = plain(eb:GetAttribute("chatType"))
+				local line = (type(ctype) == "string" and _G["SLASH_" .. ctype .. "1"]) or ""
+				if ctype == "WHISPER" then
+					line = line .. " " .. (plain(eb:GetAttribute("tellTarget")) or "")
+				elseif ctype == "CHANNEL" then
+					line = "/" .. (plain(eb:GetAttribute("channelTarget")) or "")
+				end
+				line = (line ~= "" and (line .. " ") or "") .. text
+				local h = Ink.db.chatHistory or {}
+				Ink.db.chatHistory = h
+				if h[#h] ~= line then h[#h + 1] = line end
+				while #h > CHAT_HIST_MAX do table.remove(h, 1) end
+			end)
+		end)
+	end
 end
 
 function M:SkinChat()
@@ -969,6 +1026,7 @@ function M:SkinChat()
 		if FCF_OpenTemporaryWindow then
 			hooksecurefunc("FCF_OpenTemporaryWindow", function()
 				for _, n in ipairs(CHAT_FRAMES or {}) do SkinChatFrame(_G[n]) end
+				pcall(M.SetupChatHistory, M)
 			end)
 		end
 		if FCFTab_UpdateColors then
@@ -1386,6 +1444,7 @@ function M:Init()
 	if Ink.db.xp then self:BuildXP() end
 	self:SkinActionBars()
 	self:SkinChat()
+	pcall(self.SetupChatHistory, self)
 	self:SkinQuest()
 	self:SkinBuffs()
 	-- 부가 기능은 하나가 실패해도 나머지에 영향이 없게 따로따로

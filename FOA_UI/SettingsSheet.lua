@@ -322,6 +322,8 @@ function M:BuildRegistry()
 					get = function() return Ink.db.chatFontPath and "pick" or (Ink.db.chatFont or "set") end,
 					set = function(v) Ink.db.chatFont = v; Ink.db.chatFontPath = nil end, apply = chatFont },
 				SW("chatOutline", "채팅 글자 테두리", "밝은 배경에서도 또렷하게", { def = false, apply = chatFont }),
+				SW("chatArrows", "채팅 화살표로 지난 글", "입력창에서 위 · 아래 화살표로 보냈던 글 다시 부르기", { def = true,
+					apply = function() call("Blizzard", "SetupChatHistory") end }),
 			} },
 			{ t = "화면 구성", rows = {
 				SW("launcher", "진영 메뉴", "왼쪽 위 진영 문양 메뉴", { reload = true, hud = "launcher" }),

@@ -619,7 +619,8 @@ function M:UpdateMode()
 	end
 	local inInstance, kind = IsInInstance()
 	local scenario = C_Scenario and C_Scenario.IsInScenario and C_Scenario.IsInScenario()
-	local useBlizzard = (inInstance and kind ~= "none") or scenario
+	-- 던전 · 공격대 안에서도 FOA 목록을 쓴다. 블리자드 목표 추적기는 시나리오(던전 · 공격대가 아닌 것)에서만
+	local useBlizzard = scenario and not (inInstance and (kind == "party" or kind == "raid"))
 	local otf = ObjectiveTrackerFrame
 	M.hideOTF = not useBlizzard
 	if otf and not M.otfAlphaHook then
