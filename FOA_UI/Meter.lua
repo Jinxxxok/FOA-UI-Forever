@@ -598,6 +598,96 @@ function M:Schedule()
 	end)
 end
 
+-------------------------------------------------------------------------------
+-- 인스턴스에 들어가면 "미터기 기록을 지울까요?" (설정: 묻기 · 자동으로 지우기 · 끄기)
+--  같은 인스턴스에 다시 들어오거나(시체 달리기) /reload 할 때마다 묻지 않게:
+--  다른 인스턴스이거나 마지막으로 물은 지 30분이 지났을 때만
+-------------------------------------------------------------------------------
+local function ResetMeter()
+	if C_DamageMeter and C_DamageMeter.ResetAllCombatSessions then pcall(C_DamageMeter.ResetAllCombatSessions) end
+	M:Refresh()
+end
+
+function M:BuildAsk()
+	local a = CreateFrame("Frame", "FOAMeterAsk", Ink.root)
+	a:SetSize(330, 92)
+	a:SetFrameStrata("DIALOG")
+	a:EnableMouse(true)
+	a:Hide()
+	a.bg = Ink:Round(a, "BACKGROUND", false, false)
+	a.bg:SetAllPoints()
+	a.bg:SetVertexColor(0.04, 0.045, 0.06, 0.96)
+	a.bd = Ink:Round(a, "BORDER", false, true)
+	a.bd:SetAllPoints()
+	a.bd:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.45)
+	a.title = Ink:Text(a, F.semi, 13, C.text, "LEFT")
+	a.title:SetPoint("TOPLEFT", 16, -14)
+	a.title:SetText("미터기 기록을 지울까요?")
+	a.sub = Ink:Text(a, F.sans, 11, C.muted, "LEFT")
+	a.sub:SetPoint("TOPLEFT", a.title, "BOTTOMLEFT", 0, -4)
+	a.sub:SetWidth(298)
+	local function btn(text, primary, fn)
+		local b = CreateFrame("Button", nil, a)
+		b:SetSize(96, 26)
+		b.bg = Ink:Round(b, "BACKGROUND", true, false)
+		b.bg:SetAllPoints()
+		b.t = Ink:Text(b, F.semi, 12, primary and { 0.067, 0.075, 0.094 } or C.soft, "CENTER")
+		b.t:SetPoint("CENTER")
+		b.t:SetText(text)
+		local function paint(hot)
+			if primary then b.bg:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], hot and 1 or 0.9)
+			else b.bg:SetVertexColor(1, 1, 1, hot and 0.1 or 0.05) end
+		end
+		paint(false)
+		b:SetScript("OnEnter", function() paint(true) end)
+		b:SetScript("OnLeave", function() paint(false) end)
+		b:SetScript("OnClick", function() a:Hide(); fn() end)
+		return b
+	end
+	a.yes = btn("지우기", true, ResetMeter)
+	a.yes:SetPoint("BOTTOMRIGHT", -12, 12)
+	a.no = btn("그대로", false, function() end)
+	a.no:SetPoint("RIGHT", a.yes, "LEFT", -6, 0)
+	a:SetScript("OnShow", function(self)
+		if self.timer then self.timer:Cancel() end
+		self.timer = C_Timer.NewTimer and C_Timer.NewTimer(25, function() self:Hide() end)
+	end)
+	self.ask = a
+	return a
+end
+
+function M:AskReset()
+	local mode = Ink.db.meterReset or "ask"
+	if mode == "off" then return end
+	local inInstance, kind = IsInInstance()
+	if not inInstance or (kind ~= "party" and kind ~= "raid") then return end
+	local name, _, _, diffName, _, _, _, instID = GetInstanceInfo()
+	instID = plain(instID)
+	local last = Ink.cdb.meterAsk
+	local now = time()
+	if last and last.id == instID and now - (last.t or 0) < 30 * 60 then return end
+	Ink.cdb.meterAsk = { id = instID, t = now }
+	if mode == "auto" then
+		ResetMeter()
+		print("|cffFFF468FOA|r 새 인스턴스 · 미터기 기록을 지웠어요.")
+		return
+	end
+	local function show()
+		if InCombatLockdown() then return end
+		local a = self.ask or self:BuildAsk()
+		a.sub:SetText((plain(name) or "새 인스턴스") .. "  ·  이전 기록을 지우고 새로 셀까요?")
+		a:ClearAllPoints()
+		if self.frame and self.frame:IsShown() then
+			a:SetPoint("BOTTOMRIGHT", self.frame, "TOPRIGHT", 0, 10)
+		else
+			a:SetPoint("TOP", Ink.root, "TOP", 0, -160)
+		end
+		a:Show()
+	end
+	-- 로딩 화면이 끝나고 잠깐 뒤에
+	C_Timer.After(2, show)
+end
+
 function M:Init()
 	if Ink.db.meter == false then return end
 	if not C_DamageMeter then return end
@@ -624,6 +714,8 @@ function M:Init()
 		pcall(e.RegisterEvent, e, ev)
 	end
 	e:SetScript("OnEvent", function(_, event)
+		if event == "PLAYER_ENTERING_WORLD" then pcall(M.AskReset, M) end
+		if event == "PLAYER_REGEN_DISABLED" and M.ask then M.ask:Hide() end
 		if event:find("THREAT") or event == "PLAYER_TARGET_CHANGED" or event == "GROUP_ROSTER_UPDATE" then
 			M:RefreshThreat()
 		else

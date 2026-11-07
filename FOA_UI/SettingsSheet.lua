@@ -442,6 +442,8 @@ function M:BuildRegistry()
 			{ t = "미터기", rows = {
 				SW("meter", "피해량 미터기", "피해량 · 치유량", { reload = true, hud = "meter" }),
 				SW("threat", "위협 수준", "미터기 옆 어그로 막대", { reload = true, hud = "threat", dep = "meter" }),
+				{ kind = "seg", key = "meterReset", label = "인스턴스 들어갈 때", desc = "미터기 기록 지우기", dep = "meter",
+					opts = { { "ask", "묻기" }, { "auto", "자동 지우기" }, { "off", "그대로" } }, def = "ask" },
 			} },
 			{ t = "알림", rows = {
 				SW("bossMod", "보스 알림", "패턴 타이머 · 경고", { reload = true, hud = { "bossWarn", "bossBars" } }),
