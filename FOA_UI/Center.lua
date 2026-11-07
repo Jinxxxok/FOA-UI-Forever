@@ -279,6 +279,10 @@ ns.StyleSlot, ns.SlotState = StyleSlot, SlotState
 
 local skinned = setmetatable({}, { __mode = "k" })
 
+-- 블리자드 쿨다운 관리자 틀에는 값을 써 넣지 않는다 (기술을 쓸 때마다 블리자드가 이 틀을 갱신하며 읽는다)
+local cdHooked = setmetatable({}, { __mode = "k" })
+local vState = {}   -- 뷰어 → { arranging, hooked, count }
+local function VS(v) local t = vState[v]; if not t then t = {}; vState[v] = t end return t end
 local function SkinItem(item, small)
 	if not item or skinned[item] then return end
 	skinned[item] = true
@@ -312,8 +316,8 @@ local function SkinItem(item, small)
 	local s = StyleSlot(item, icon, cd, small)
 	if ns.FX and cd then pcall(ns.FX.AttachCooldown, item, cd, small and 30 or 40, s.top) end
 	-- 효과(오라) 표시 중인지: 블리자드가 오라 시간 표시로 바꿀 때 알려준다
-	if cd and cd.SetUseAuraDisplayTime and not cd.inkHooked then
-		cd.inkHooked = true
+	if cd and cd.SetUseAuraDisplayTime and not cdHooked[cd] then
+		cdHooked[cd] = true
 		hooksecurefunc(cd, "SetUseAuraDisplayTime", function(_, v)
 			SlotState(s, plain(v) and "aura" or "ready")
 		end)
@@ -350,8 +354,8 @@ function M:ArrangeViewer(info)
 	local anchor = self[info.key]
 	if not v or not anchor or not canMove(v) then return end
 	if EditModeManagerFrame and EditModeManagerFrame:IsShown() then return end
-	if v.inkArranging then return end
-	v.inkArranging = true
+	if VS(v).arranging then return end
+	VS(v).arranging = true
 	safe(function()
 		local items = {}
 		ForEachItem(v, function(it)
@@ -388,16 +392,16 @@ function M:ArrangeViewer(info)
 			end
 		end
 	end)
-	v.inkArranging = nil
+	VS(v).arranging = nil
 end
 
 function M:HookViewer(info)
 	local v = _G[info.name]
-	if not v or v.inkHooked then return end
-	v.inkHooked = true
+	if not v or VS(v).hooked then return end
+	VS(v).hooked = true
 	-- 블리자드가 배치를 바꾸는 즉시(같은 화면 프레임 안에서) 다시 맞춘다
 	local function again()
-		if v.inkArranging then return end
+		if VS(v).arranging then return end
 		M:ArrangeViewer(info)
 	end
 	hooksecurefunc(v, "SetPoint", again)
@@ -413,8 +417,8 @@ function M:HookViewer(info)
 	v:HookScript("OnUpdate", function()
 		local count = 0
 		ForEachItem(v, function(it) if it:IsShown() then count = count + 1 end end)
-		if count ~= v.inkCount then
-			v.inkCount = count
+		if count ~= VS(v).count then
+			VS(v).count = count
 			again()
 		end
 	end)

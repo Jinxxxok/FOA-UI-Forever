@@ -446,16 +446,21 @@ end
 -- 6~9. 행동 단축바 · 쿨다운 칸
 -------------------------------------------------------------------------------
 -- 쿨다운이 끝나는 순간 빛 고리 (전역 쿨다운 1.5초는 제외: 2.5초 넘게 돈 것만)
+-- 블리자드 쿨다운 틀(쿨다운 관리자 칸)에는 값을 써 넣지 않고 FOA 안쪽 표에 기억한다
+local cdFX = setmetatable({}, { __mode = "k" })
+local cdStart = setmetatable({}, { __mode = "k" })
+local ringOf = setmetatable({}, { __mode = "k" })
+function FX.RingOf(owner) return owner and ringOf[owner] end
 function FX.AttachCooldown(owner, cd, size, top)
-	if not cd or cd.inkFX then return end
-	cd.inkFX = true
+	if not cd or cdFX[cd] then return end
+	cdFX[cd] = true
 	local host = top or owner
 	local ring = FX.Ring(host, size * 1.05)
-	owner.fxRing = ring
-	cd:HookScript("OnShow", function(self) self.inkStart = GetTime() end)
+	ringOf[owner] = ring
+	cd:HookScript("OnShow", function(self) cdStart[self] = GetTime() end)
 	cd:HookScript("OnCooldownDone", function(self)
-		local st = self.inkStart
-		self.inkStart = nil
+		local st = cdStart[self]
+		cdStart[self] = nil
 		if not FX.on("cdReady") or not st then return end
 		if owner.fxPreview and not FX.demo.cdReady then return end
 		if GetTime() - st > 2.5 and owner:IsVisible() then ring() end
@@ -1320,12 +1325,13 @@ Every("manaLow", 6, function()
 end)
 
 Every("cdReady", 2.2, function(n)
-	for _, b in ipairs(SomeButtons(2, n * 3)) do if b.fxRing then b.fxRing() end end
+	for _, b in ipairs(SomeButtons(2, n * 3)) do local r = FX.RingOf(b); if r then r() end end
 	local c = Ink.modules.Center
 	local row = c and c.pvMain
 	if row and row:IsShown() and row.slots then
 		local s = row.slots[(n % #row.slots) + 1]
-		if s and s.fxRing then s.fxRing() end
+		local r = FX.RingOf(s)
+		if r then r() end
 	end
 end)
 

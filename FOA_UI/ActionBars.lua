@@ -56,21 +56,28 @@ end
 M.Settings = Settings
 
 -- 블리자드 바 숨기기: 부모만 숨김 틀로 (Hide/이벤트 끄기는 오염 위험이 있어 안 함)
+-- 블리자드 바를 숨긴 기록은 FOA 안쪽 표에만 둔다.
+--  블리자드 틀에 값을 써 넣으면(frame.xxx = …) 블리자드 코드가 그 틀을 읽을 때 실행이 FOA 로 오염돼
+--  전투 중 바 위치 바꾸기 · 행동 단추 갱신이 막히고 기술을 쓸 때마다 오류가 난다.
+local blizzHidden = setmetatable({}, { __mode = "k" })
+local reparenting = setmetatable({}, { __mode = "k" })
+local function ToHidden(f)
+	reparenting[f] = true
+	f:SetParent(Ink.hidden)
+	reparenting[f] = nil
+end
+
 local function HideBlizz(frame)
 	if type(frame) == "string" then frame = _G[frame] end
-	if not frame or frame.foaHidden then return end
-	frame.foaHidden = true
+	if not frame or blizzHidden[frame] then return end
+	blizzHidden[frame] = true
 	frame:SetParent(Ink.hidden)
-	-- 화면 배치 관리자가 이 바 자리를 다시 잡지 않게 (전투 중 "막힌 동작" 줄이기)
-	frame.ignoreFramePositionManager = true
 	hooksecurefunc(frame, "SetParent", function(self, p)
-		if p == Ink.hidden or self.foaReparent then return end
+		if p == Ink.hidden or reparenting[self] then return end
 		local function again()
 			if EditModeManagerFrame and EditModeManagerFrame:IsShown() then C_Timer.After(0.3, again) return end
 			if InCombatLockdown() then M.pendingHide = true return end
-			self.foaReparent = true
-			self:SetParent(Ink.hidden)
-			self.foaReparent = nil
+			ToHidden(self)
 		end
 		C_Timer.After(0, again)
 	end)
@@ -683,8 +690,8 @@ function M:HideAllBlizz()
 		local f
 		for _, n in ipairs(d.blizz) do f = f or _G[n] end
 		if f and d.header then
-			if f.foaHidden then
-				if f:GetParent() ~= Ink.hidden then f.foaReparent = true; f:SetParent(Ink.hidden); f.foaReparent = nil end
+			if blizzHidden[f] then
+				if f:GetParent() ~= Ink.hidden then ToHidden(f) end
 			else
 				HideBlizz(f)
 			end
@@ -692,10 +699,10 @@ function M:HideAllBlizz()
 	end
 	for _, d in ipairs(EXTRA) do
 		local f = _G[d.blizz]
-		if f and not f.foaHidden then
+		if f and not blizzHidden[f] then
 			HideBlizz(f)
 		elseif f and f:GetParent() ~= Ink.hidden then
-			f.foaReparent = true; f:SetParent(Ink.hidden); f.foaReparent = nil
+			ToHidden(f)
 		end
 	end
 end

@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.56.1"
+Ink.version = "0.56.2"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -896,19 +896,22 @@ end
 -------------------------------------------------------------------------------
 -- 완전히 끄기: 이벤트 해제 + 숨김 부모로 이동 (클릭도 막힘). 전투 중이면 전투 후 처리
 local pendingDisable = {}
+-- 끈 블리자드 틀 기록은 FOA 안쪽 표에만 (블리자드 틀에 값을 써 넣으면 그 틀을 읽는 블리자드 코드가 오염된다)
+local inkDisabled = setmetatable({}, { __mode = "k" })
+local inkReparenting = setmetatable({}, { __mode = "k" })
 function Ink:Disable(frame, keepEvents)
 	if type(frame) == "string" then frame = _G[frame] end
-	if type(frame) ~= "table" or not frame.IsProtected or frame.inkDisabled then return end
+	if type(frame) ~= "table" or not frame.IsProtected or inkDisabled[frame] then return end
 	if frame:IsProtected() and InCombatLockdown() then
 		pendingDisable[frame] = keepEvents or false
 		return
 	end
-	frame.inkDisabled = true
+	inkDisabled[frame] = true
 	if not keepEvents then frame:UnregisterAllEvents() end
 	Ink.safe(frame.Hide, frame)
 	frame:SetParent(hiddenParent)
 	hooksecurefunc(frame, "SetParent", function(self, p)
-		if p ~= hiddenParent and not self.inkReparenting then
+		if p ~= hiddenParent and not inkReparenting[self] then
 			local function again()
 				if EditModeManagerFrame and EditModeManagerFrame:IsShown() then
 					C_Timer.After(0.25, again)
@@ -918,9 +921,9 @@ function Ink:Disable(frame, keepEvents)
 					pendingDisable[self] = true
 					return
 				end
-				self.inkReparenting = true
+				inkReparenting[self] = true
 				self:SetParent(hiddenParent)
-				self.inkReparenting = nil
+				inkReparenting[self] = nil
 			end
 			C_Timer.After(0, again)
 		end
@@ -1039,26 +1042,35 @@ end
 -- FOA 코드에서 난 Lua 오류를 저장 파일에도 남긴다 (게임 오류 표시가 꺼져 있어도 원인을 찾을 수 있게)
 --  같은 오류는 횟수만 늘린다 · 원래 오류 처리기는 그대로 부른다
 do
-	local orig = geterrorhandler and geterrorhandler()
 	local seen = {}
-	if orig and seterrorhandler then
-		seterrorhandler(function(msg, ...)
-			local ok = pcall(function()
-				local m = tostring(msg)
-				if m:find("FOA_UI", 1, true) and Ink.db then
-					local key = m:sub(1, 160)
-					seen[key] = (seen[key] or 0) + 1
-					local n = seen[key]
-					if n == 1 or n == 10 or n == 100 then
-						local st = debugstack and debugstack(3, 4, 0) or ""
-						st = st:gsub("Interface/AddOns/", ""):gsub("\n", " ← ")
-						Ink:LogError("LUA x" .. n .. " " .. m .. " || " .. st:sub(1, 300))
-					end
-				end
-			end)
-			return orig(msg, ...)
-		end)
+	local mine, orig
+	local function record(msg)
+		local m = tostring(msg)
+		if not Ink.db then return end
+		-- 블리자드 파일에서 난 오류도 남긴다 (FOA 가 블리자드 값을 오염시켜서 생긴 오류일 수 있다)
+		local ours = m:find("FOA_UI", 1, true) ~= nil
+		local key = m:sub(1, 160)
+		seen[key] = (seen[key] or 0) + 1
+		local n = seen[key]
+		if n == 1 or n == 10 or n == 100 or n == 1000 then
+			local st = debugstack and debugstack(4, 6, 0) or ""
+			st = st:gsub("Interface/AddOns/", ""):gsub("\n", " ← ")
+			Ink:LogError((ours and "LUA x" or "블리자드 LUA x") .. n .. " " .. m .. " || " .. st:sub(1, 400))
+		end
 	end
+	-- 블리자드가 나중에 오류 처리기를 갈아 끼우면 FOA 기록이 빠지므로, 접속 · 화면 전환 때 다시 씌운다
+	function Ink:HookErrors()
+		if not (geterrorhandler and seterrorhandler) then return end
+		local cur = geterrorhandler()
+		if cur == mine then return end
+		orig = cur
+		mine = function(msg, ...)
+			pcall(record, msg)
+			if orig then return orig(msg, ...) end
+		end
+		seterrorhandler(mine)
+	end
+	Ink:HookErrors()
 end
 
 local function callAll(method, ...)
@@ -1189,6 +1201,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 		return
 	end
 	if event == "PLAYER_LOGIN" then
+		pcall(Ink.HookErrors, Ink)
 		Ink:ApplyDamageFont()
 		pcall(Ink.DetectDensity, Ink)
 		InkUIDB = InkUIDB or {}
@@ -1229,16 +1242,17 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 		end
 		print("|T" .. Ink.tex.logo .. ":14:14|t |cffFFF468FOA|r " .. Ink.version .. " 로드됨 · /foa 로 설정 열기")
 	elseif event == "PLAYER_ENTERING_WORLD" then
+		pcall(Ink.HookErrors, Ink)
 		Ink:Relayout()
 		C_Timer.After(1, function() Ink:Relayout() end)
 		callAll("Refresh")
 	elseif event == "PLAYER_REGEN_ENABLED" then
 		for f, keep in pairs(pendingDisable) do
 			pendingDisable[f] = nil
-			if f.inkDisabled then
-				f.inkReparenting = true
+			if inkDisabled[f] then
+				inkReparenting[f] = true
 				f:SetParent(hiddenParent)
-				f.inkReparenting = nil
+				inkReparenting[f] = nil
 			else
 				Ink:Disable(f, keep)
 			end
