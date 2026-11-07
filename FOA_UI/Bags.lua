@@ -68,6 +68,49 @@ local function Category(itemID, quality, bag)
 end
 
 -------------------------------------------------------------------------------
+-- 퀘스트에 필요한 일반 아이템 (요리 재료 · 가죽 등)
+--  퀘스트 목표 글("멧돼지 갈비: 3/8")에서 아이템 이름을 읽어, 가방의 같은 이름 아이템에 표시한다.
+--  목표를 다 채웠어도 보고하기 전까지는 표시 (그 전에 팔면 다시 모아야 한다)
+-------------------------------------------------------------------------------
+local need = {}        -- 아이템 이름 → { { title, have, want }, ... }
+local needDirty = true
+
+local function ObjName(text)
+	if type(text) ~= "string" or text == "" then return end
+	local name = text:gsub("%d+%s*/%s*%d+", ""):gsub("[:：]", "")
+	name = name:gsub("^%s+", ""):gsub("%s+$", "")
+	if name ~= "" then return name end
+end
+
+function M:RebuildNeed()
+	needDirty = false
+	wipe(need)
+	if not (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetInfo and C_QuestLog.GetQuestObjectives) then return end
+	for i = 1, (C_QuestLog.GetNumQuestLogEntries() or 0) do
+		local info = C_QuestLog.GetInfo(i)
+		if info and not info.isHeader and info.questID then
+			for _, o in ipairs(C_QuestLog.GetQuestObjectives(info.questID) or {}) do
+				if plain(o.type) == "item" then
+					local nm = ObjName(plain(o.text))
+					if nm then
+						local t = need[nm] or {}
+						need[nm] = t
+						t[#t + 1] = { title = plain(info.title) or "", have = tonumber(plain(o.numFulfilled)) or 0, want = tonumber(plain(o.numRequired)) or 0 }
+					end
+				end
+			end
+		end
+	end
+end
+
+local function NeedOf(name)
+	if needDirty then pcall(M.RebuildNeed, M) end
+	name = plain(name)
+	return type(name) == "string" and need[name] or nil
+end
+M.NeedOf = NeedOf
+
+-------------------------------------------------------------------------------
 -- 세부 분류 (소모품 / 재료 안에서 작은 제목으로 나눈다)
 --  이름은 블리자드 하위 분류 이름(한국어)을 그대로 쓰고, 몇 가지는 묶는다.
 -------------------------------------------------------------------------------
@@ -231,6 +274,14 @@ local function SkinButton(b)
 	s.free = Ink:Text(top, F.latinB, 11, C.soft, "CENTER")
 	s.free:SetPoint("CENTER")
 	s.free:Hide()
+
+	-- 퀘스트에 필요한 일반 아이템: 왼쪽 위 작은 느낌표
+	s.qneed = top:CreateTexture(nil, "OVERLAY", nil, 7)
+	s.qneed:SetTexture(Ink.icon("QuestBang"))
+	s.qneed:SetSize(12, 12)
+	s.qneed:SetPoint("TOPLEFT", 2, -2)
+	s.qneed:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 1)
+	s.qneed:Hide()
 end
 
 local holders = {}      -- 만들어 둔 칸 (부모 프레임)
@@ -269,6 +320,7 @@ local function Paint(h)
 		s.ilvl:SetText("")
 		s.new:Hide()
 		s.up:Hide()
+		if s.qneed then s.qneed:Hide() end
 		s.cd:Clear()
 		b:SetAlpha(1)
 		return
@@ -279,7 +331,8 @@ local function Paint(h)
 
 	local q = info.quality or 1
 	local quest = C_Container.GetContainerItemQuestInfo and C_Container.GetContainerItemQuestInfo(bag, slot)
-	if quest and (quest.isQuestItem or quest.questID) then
+	local qn = NeedOf(info.itemName or C_Item.GetItemInfo(info.itemID))
+	if (quest and (quest.isQuestItem or quest.questID)) or qn then
 		s.border:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 1)
 	elseif q >= 2 then
 		local r, g, bl = C_Item.GetItemQualityColor(q)
@@ -300,6 +353,9 @@ local function Paint(h)
 		if ok and plain(lvl) and lvl > 1 then text = tostring(lvl) end
 	end
 	s.ilvl:SetText(text)
+	s.qneed:ClearAllPoints()
+	s.qneed:SetPoint(text ~= "" and "LEFT" or "TOPLEFT", 2, text ~= "" and 0 or -2)
+	s.qneed:SetShown(qn and true or false)
 	if text ~= "" and q >= 2 then
 		local r, g, bl = C_Item.GetItemQualityColor(q)
 		s.ilvl:SetTextColor(r, g, bl)
@@ -1025,7 +1081,31 @@ function M:Sync(user)
 	end)
 end
 
+-- 아이템 툴팁: 퀘스트에 필요한 아이템이면 어느 퀘스트에 몇 개 필요한지 (팔기 전에 보이게)
+function M:HookNeedTooltip()
+	if self.needTip or not (TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum.TooltipDataType) then return end
+	self.needTip = true
+	TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tt, data)
+		pcall(function()
+			if not tt.AddLine then return end
+			local id = data and plain(data.id)
+			local name = type(id) == "number" and C_Item.GetItemInfo(id)
+			local list = name and NeedOf(name)
+			if not list then return end
+			tt:AddLine(" ")
+			tt:AddLine("퀘스트에 필요해요 · 보고하기 전까지 팔지 마세요", C.gold[1], C.gold[2], C.gold[3])
+			for i, e in ipairs(list) do
+				if i > 4 then break end
+				local full = e.want > 0 and e.have >= e.want
+				tt:AddDoubleLine("  " .. e.title, e.want > 0 and (e.have .. " / " .. e.want) or "",
+					0.85, 0.86, 0.88, full and 0.44 or 1, full and 0.83 or 0.96, full and 0.55 or 0.41)
+			end
+		end)
+	end)
+end
+
 function M:Init()
+	self:HookNeedTooltip()
 	if Ink.db.bags == false then return end
 	self:Build()
 
@@ -1043,10 +1123,18 @@ function M:Init()
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({ "BAG_CONTAINER_UPDATE", "BAG_UPDATE_DELAYED", "BAG_UPDATE", "ITEM_LOCK_CHANGED", "BAG_UPDATE_COOLDOWN",
 		"INVENTORY_SEARCH_UPDATE", "BAG_NEW_ITEMS_UPDATED", "PLAYER_MONEY", "PLAYER_REGEN_ENABLED",
-		"QUEST_ACCEPTED", "UNIT_QUEST_LOG_CHANGED", "PLAYER_EQUIPMENT_CHANGED" }) do
+		"QUEST_ACCEPTED", "UNIT_QUEST_LOG_CHANGED", "PLAYER_EQUIPMENT_CHANGED", "QUEST_LOG_UPDATE", "QUEST_REMOVED", "QUEST_TURNED_IN" }) do
 		pcall(e.RegisterEvent, e, ev)
 	end
 	e:SetScript("OnEvent", function(_, event)
+		-- 퀘스트가 바뀌면 "퀘스트에 필요한 아이템" 목록을 다시 읽는다
+		if event == "QUEST_ACCEPTED" or event == "UNIT_QUEST_LOG_CHANGED" or event == "QUEST_LOG_UPDATE" or event == "QUEST_REMOVED" or event == "QUEST_TURNED_IN" then
+			needDirty = true
+			if event == "QUEST_LOG_UPDATE" then
+				if M.frame:IsShown() then M:Paint() end
+				return
+			end
+		end
 		-- 장비 착용 / 아이템 이동 직후엔 자동 "가방 닫기"를 잠깐 막는다
 		if event == "ITEM_LOCK_CHANGED" or event == "PLAYER_EQUIPMENT_CHANGED" then
 			M.equipGuard = GetTime() + 1
