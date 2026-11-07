@@ -2756,6 +2756,20 @@ local function ZoneName(map)
 	local info = map and map > 0 and C_Map.GetMapInfo and C_Map.GetMapInfo(map)
 	return info and info.name
 end
+-- 시작 아이템 이름 (못 불러왔으면 요청만)
+local function ItemName(id)
+	if not id or id <= 0 then return end
+	local name = C_Item.GetItemInfo(id)
+	if not name and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+	return name
+end
+-- 아이템이 나오는 곳: 보스 이름 · 던전 몹
+local function DropFrom(q)
+	if (q[11] or 0) == -1 then return "던전 몹" end
+	return NpcOf(q[11]) or ((q[11] or 0) > 0 and "던전 보스" or nil)
+end
+-- 위치 종류 (DungeonQuests.lua 14번째): 0 주는 곳 · 1 보고하는 곳 · 2 던전 안 NPC · 3 던전 안 물체 · 4 던전 드랍
+local KIND_TURNIN, KIND_IN_NPC, KIND_IN_OBJ, KIND_DROP = 1, 2, 3, 4
 
 -- 선행 퀘스트를 처음부터 순서대로 (깊이 8까지, 갈래는 모두)
 local function Chain(id, out, seen, depth)
@@ -2945,12 +2959,29 @@ function M:QuestTip(r)
 	-- 시작
 	tt:AddLine(" ")
 	local giver, zone = NpcOf(q[7]), ZoneName(q[4])
-	if q[7] > 0 then
-		tt:AddLine("시작: " .. (giver or "퀘스트 주는 NPC"), 1, 0.82, 0.32)
-	elseif q[11] > 0 then
-		tt:AddLine("시작: 아이템 (" .. (NpcOf(q[11]) or "던전 몹") .. " 드랍)", 1, 0.82, 0.32)
+	local kind, item = q[14] or 0, q[13] or 0
+	if item > 0 then
+		local from = DropFrom(q)
+		tt:AddLine("시작: 아이템 " .. (ItemName(item) and ("[" .. ItemName(item) .. "]") or ("#" .. item)), 1, 0.82, 0.32)
+		if from then
+			tt:AddLine(from .. " 드랍  ·  던전 안에서 얻어요", 0.7, 0.72, 0.75)
+		else
+			tt:AddLine("아이템을 얻는 곳은 자료에 없어요", 0.56, 0.58, 0.61)
+		end
+	elseif q[7] > 0 then
+		tt:AddLine("시작: " .. (giver or "퀘스트 주는 NPC") .. (kind == KIND_IN_NPC and "  |cff8E939B(던전 안)|r" or ""), 1, 0.82, 0.32)
+	elseif kind == KIND_IN_OBJ then
+		tt:AddLine("시작: 던전 안 물체", 1, 0.82, 0.32)
+	elseif (q[11] or 0) ~= 0 then
+		tt:AddLine("시작: 아이템 (" .. (DropFrom(q) or "던전 몹") .. " 드랍)", 1, 0.82, 0.32)
 	end
-	if zone then tt:AddLine(zone .. string.format("  %.1f, %.1f", q[5], q[6]), 0.7, 0.72, 0.75) end
+	if zone then
+		if kind == KIND_TURNIN then
+			tt:AddLine("보고: " .. (NpcOf(q[15]) or "NPC") .. "  ·  " .. zone .. string.format("  %.1f, %.1f", q[5], q[6]), 0.7, 0.72, 0.75)
+		else
+			tt:AddLine(zone .. string.format("  %.1f, %.1f", q[5], q[6]), 0.7, 0.72, 0.75)
+		end
+	end
 	-- 경험치 · 돈 (게임이 알려 주는 경우만)
 	local okX, xp = pcall(GetQuestLogRewardXP, e.id)
 	local okM, money = pcall(GetQuestLogRewardMoney, e.id)
@@ -2994,7 +3025,15 @@ function M:QuestTip(r)
 		end
 	end
 	tt:AddLine(" ")
-	tt:AddLine(q[4] > 0 and "클릭: 시작 위치를 지도에" or "시작 위치 정보가 없어요", 0.56, 0.58, 0.61)
+	local hint
+	if q[4] > 0 then
+		hint = (q[14] == KIND_TURNIN) and "클릭: 보고하는 곳을 지도에" or "클릭: 시작 위치를 지도에"
+	elseif q[14] == KIND_IN_NPC or q[14] == KIND_IN_OBJ or (q[14] == KIND_DROP and DropFrom(q)) then
+		hint = "던전 안에서 시작해서 지도 안내는 없어요"
+	else
+		hint = "시작 위치 정보가 없어요"
+	end
+	tt:AddLine(hint, 0.56, 0.58, 0.61)
 	tt:Show()
 end
 
@@ -3088,9 +3127,16 @@ function M:PaintQuests()
 		local tc = e.state == "done" and C.dim or C.text
 		r.title:SetTextColor(tc[1], tc[2], tc[3])
 		local giver, zone = NpcOf(q[7]), ZoneName(q[4])
+		local kind = q[14] or 0
 		local sub
-		if q[7] > 0 then sub = (giver or "NPC") .. (zone and ("  ·  " .. zone) or "")
-		elseif q[11] > 0 then sub = "드랍으로 시작  ·  " .. (NpcOf(q[11]) or "던전 몹")
+		if (q[13] or 0) > 0 or ((q[11] or 0) ~= 0 and q[7] == 0) then
+			local from = DropFrom(q)
+			sub = "아이템으로 시작" .. (from and ("  ·  " .. from .. " 드랍") or "")
+			if kind == KIND_TURNIN and zone then sub = sub .. "  ·  보고 " .. zone end
+		elseif q[7] > 0 then
+			sub = (giver or "NPC") .. (zone and ("  ·  " .. zone) or (kind == KIND_IN_NPC and "  ·  던전 안" or ""))
+		elseif kind == KIND_IN_OBJ then
+			sub = "던전 안 물체에서 시작"
 		else sub = zone or "" end
 		if #q[8] > 0 then sub = sub .. "  ·  선행 " .. #q[8] end
 		r.sub:SetText(sub)
