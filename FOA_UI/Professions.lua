@@ -37,7 +37,9 @@ local function SkillByName(name)
 		end
 	end
 	if GetProfessions and GetProfessionInfo then
-		for _, idx in ipairs({ GetProfessions() }) do
+		local list = { GetProfessions() }
+		for i = 1, 6 do
+			local idx = list[i]
 			if idx then
 				local n, _, rank, max = GetProfessionInfo(idx)
 				if n and (n == name or name:find(n, 1, true) or n:find(name, 1, true)) and (max or 0) > 0 then return rank, max end

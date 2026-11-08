@@ -515,8 +515,9 @@ function M:Refresh()
 			elseif KEY_ROLE[sp.role] then k = sp.role end
 			if k then
 				local cur = pick[k]
-				if not cur or cur.seed or (sp.t or 0) >= (cur.t or 0) then
-					pick[k] = { x = sp.x, y = sp.y, name = (name:sub(1, 4) ~= "poi:") and name or nil, sub = sp.sub, t = sp.t }
+				local q = sp.d or 0   -- 0 = 말을 걸어 본 자리, 1 · 2 = 지나가며 본 자리 (작을수록 정확)
+				if not cur or cur.seed or q < (cur.q or 0) or (q == (cur.q or 0) and (sp.t or 0) >= (cur.t or 0)) then
+					pick[k] = { x = sp.x, y = sp.y, name = (name:sub(1, 4) ~= "poi:") and name or nil, sub = sp.sub, t = sp.t, q = q }
 				end
 			end
 		end
@@ -532,6 +533,23 @@ function M:Refresh()
 				local label = KeyLabel(k)
 				local note = sp.seed and "기본 위치 · 한 번 들르면 정확한 자리로 바뀌어요" or nil
 				put(sp.x, sp.y, kind, k, sp.name or label, sp.name and label or (sp.sub and ("<" .. sp.sub .. ">")), note)
+			end
+		end
+	end
+
+	-- 1-2) 필드 마을: 내 직업 상급자 + 내가 배운 전문기술 상급자만 (나머지까지 띄우면 지도가 어지럽다)
+	--  자리는 게임에서 배운다: 말을 걸거나, 마우스를 올리거나, 이름표가 가까이 보일 때 그 NPC 자리를 기억
+	if Ink.db.mapNpcs ~= false and Ink.db.mapFieldTrainers ~= false and mapID and not CAPITAL[mapID] and not wide then
+		local mine = M.MyTrainerKeys()
+		for name, sp in pairs((Ink.db.npcSpots and Ink.db.npcSpots[mapID]) or {}) do
+			local k = name:sub(1, 4) ~= "poi:" and M.SpotTrainerKey(sp)
+			if k and mine[k] then
+				local kind = CLASS_TOKEN[k] and "cls" or "prof"
+				if (kind == "cls" and cat.cls ~= false) or (kind == "prof" and cat.prof ~= false) then
+					local label = KeyLabel(k)
+					local note = (sp.d or 0) > 0 and "지나가며 본 자리 · 말을 걸면 정확한 자리로 바뀌어요" or nil
+					put(sp.x, sp.y, kind, k, name, sp.sub and ("<" .. sp.sub .. ">") or label, note)
+				end
 			end
 		end
 	end
@@ -1402,6 +1420,112 @@ function M:RememberGossipPoi()
 end
 
 -------------------------------------------------------------------------------
+-- 상급자 열쇠: 내 직업(c1 …) + 내가 배운 전문기술(p171 …)
+-------------------------------------------------------------------------------
+local PROF_BY_NAME = {}
+for k, v in pairs(PROF_KO) do PROF_BY_NAME[v] = k end
+local PROF_EN = { Alchemy = "p171", Blacksmithing = "p164", Leatherworking = "p165", Tailoring = "p197", Engineering = "p202",
+	Enchanting = "p333", Herbalism = "p182", Mining = "p186", Skinning = "p393", Cooking = "p185", ["First Aid"] = "p129", Fishing = "p356" }
+function M.MyTrainerKeys()
+	local out = {}
+	local _, tok = UnitClass("player")
+	for k, t in pairs(CLASS_TOKEN) do if t == tok then out[k] = true end end
+	if GetProfessions and GetProfessionInfo then
+		-- 배운 게 없는 칸은 nil 이라 ipairs 로는 뒤쪽(낚시 · 요리)을 놓친다
+		local list = { GetProfessions() }
+		for i = 1, 6 do
+			local idx = list[i]
+			if idx then
+				local ok, nm, _, _, _, _, _, line = pcall(GetProfessionInfo, idx)
+				if ok then
+					if line and PROF_KO["p" .. line] then out["p" .. line] = true end
+					local k = nm and (PROF_BY_NAME[nm] or PROF_EN[nm])
+					if k then out[k] = true end
+				end
+			end
+		end
+	end
+	if GetNumSkillLines and GetSkillLineInfo then
+		for i = 1, GetNumSkillLines() do
+			local nm, header = GetSkillLineInfo(i)
+			local k = nm and not header and (PROF_BY_NAME[nm] or PROF_EN[nm])
+			if k then out[k] = true end
+		end
+	end
+	return out
+end
+
+-- 기억한 자리가 상급자인지: 훈련사 창을 연 자리거나, 직함이 상급자 · 수습/숙련/전문/대가 ○○ 인 경우
+local function RankedSub(sub)
+	return type(sub) == "string" and (sub:find("상급자") or sub:find("지도자") or sub:find("^수습 ") or sub:find("^숙련 ")
+		or sub:find("^전문 ") or sub:find("^대가 ") or sub:find("^장인 ") or sub:find("Trainer") or sub:find("^Apprentice ")
+		or sub:find("^Journeyman ") or sub:find("^Expert ") or sub:find("^Artisan ") or sub:find("^Master "))
+end
+function M.SpotTrainerKey(sp)
+	if type(sp) ~= "table" or type(sp.sub) ~= "string" then return end
+	if sp.role == "trainer" or RankedSub(sp.sub) then return TrainerKey(sp.sub) end
+end
+
+-------------------------------------------------------------------------------
+-- 지나가며 상급자 자리 배우기: 마우스를 올리거나 대상으로 잡거나, 친선 이름표가 가까이 있을 때
+--  NPC 자리는 알 수 없어서 "내가 서 있는 곳"을 쓰고, 가까울수록(1 = 약 10미터, 2 = 약 28미터) 정확한 것으로 친다
+--  말을 걸어서 배운 자리(d 없음)는 지나가며 본 자리로 덮어쓰지 않는다
+-------------------------------------------------------------------------------
+local subCache = {}   -- NPC 번호 → 직함 (없으면 false)
+local function NpcID(unit)
+	local g = plain(UnitGUID(unit))
+	if type(g) ~= "string" then return end
+	local kind, _, _, _, _, id = strsplit("-", g)
+	if kind ~= "Creature" then return end
+	return tonumber(id)
+end
+function M:SpotUnit(unit)
+	if InCombatLockdown() or IsInInstance() or Ink.db.mapFieldTrainers == false then return end
+	if not UnitExists(unit) or plain(UnitIsPlayer(unit)) then return end
+	local id = NpcID(unit)
+	if not id then return end
+	local sub = subCache[id]
+	if sub == nil then
+		local P = Ink.modules.Plates
+		sub = (P and P.Subtitle and P.Subtitle(unit)) or false
+		subCache[id] = sub
+	end
+	if not (sub and RankedSub(sub) and TrainerKey(sub)) then return end
+	local d
+	local ok, near = pcall(CheckInteractDistance, unit, 3)
+	if ok and near then d = 1
+	else
+		ok, near = pcall(CheckInteractDistance, unit, 4)
+		if ok and near then d = 2 end
+	end
+	if not d then return end
+	local name = plain(UnitName(unit))
+	if type(name) ~= "string" then return end
+	local mapID = C_Map.GetBestMapForUnit("player")
+	local pos = mapID and C_Map.GetPlayerMapPosition(mapID, "player")
+	if not pos then return end
+	local x, y = pos:GetXY()
+	if not (x and y) or (x == 0 and y == 0) then return end
+	Ink.db.npcSpots = Ink.db.npcSpots or {}
+	local t = Ink.db.npcSpots[mapID] or {}
+	Ink.db.npcSpots[mapID] = t
+	local old = t[name]
+	if old and (old.d == nil or old.d < d) and old.role == "trainer" then return end
+	if old and old.d == d and math.abs((old.x or 0) - x) < 0.002 and math.abs((old.y or 0) - y) < 0.002 then return end
+	t[name] = { x = math.floor(x * 1000 + 0.5) / 1000, y = math.floor(y * 1000 + 0.5) / 1000, role = "trainer", sub = sub, t = time(), d = d }
+	if WorldMapFrame and WorldMapFrame:IsShown() then self:Refresh() end
+end
+
+-- 친선 이름표 훑기 (2초마다, 전투 · 인스턴스 밖에서만)
+function M:ScanPlates()
+	if InCombatLockdown() or IsInInstance() or not (C_NamePlate and C_NamePlate.GetNamePlates) then return end
+	for _, f in ipairs(C_NamePlate.GetNamePlates() or {}) do
+		local u = f.namePlateUnitToken or (f.UnitFrame and f.UnitFrame.unit)
+		if u and not plain(UnitIsPlayer(u)) and plain(UnitIsFriend("player", u)) then pcall(self.SpotUnit, self, u) end
+	end
+end
+
+-------------------------------------------------------------------------------
 -- NPC 자리 기억: 대화 · 상점 · 은행 · 훈련사 · 비행 · 우편함 창이 열릴 때 내 위치를 그 NPC 자리로
 -------------------------------------------------------------------------------
 local EVENT_ROLE = {
@@ -1534,7 +1658,8 @@ function M:Init()
 	local e = CreateFrame("Frame")
 	for ev in pairs(EVENT_ROLE) do pcall(e.RegisterEvent, e, ev) end
 	for _, ev in ipairs({ "GOSSIP_SHOW", "ADDON_LOADED", "TAXI_NODE_STATUS_CHANGED", "BAG_UPDATE_DELAYED", "QUEST_TURNED_IN", "DYNAMIC_GOSSIP_POI_UPDATED",
-		"UI_INFO_MESSAGE", "CHAT_MSG_SYSTEM" }) do pcall(e.RegisterEvent, e, ev) end
+		"UI_INFO_MESSAGE", "CHAT_MSG_SYSTEM", "UPDATE_MOUSEOVER_UNIT", "PLAYER_TARGET_CHANGED", "SKILL_LINES_CHANGED" }) do pcall(e.RegisterEvent, e, ev) end
+	C_Timer.NewTicker(2, function() pcall(M.ScanPlates, M) end)
 	C_Timer.After(5, function() pcall(M.ScanBagsForBooks, M, "bags") end)
 	e:SetScript("OnEvent", function(_, event, a1, a2)
 		-- "새 비행 경로를 발견했습니다!" → 서 있는 곳의 비행 지점을 가 본 곳으로
@@ -1550,6 +1675,12 @@ function M:Init()
 		end
 		if event == "ADDON_LOADED" then
 			if not M.hooked then M:Hook() end
+			return
+		end
+		if event == "UPDATE_MOUSEOVER_UNIT" then pcall(M.SpotUnit, M, "mouseover") return end
+		if event == "PLAYER_TARGET_CHANGED" then pcall(M.SpotUnit, M, "target") return end
+		if event == "SKILL_LINES_CHANGED" then
+			if WorldMapFrame and WorldMapFrame:IsShown() then M:Refresh() end
 			return
 		end
 		if event == "BAG_UPDATE_DELAYED" or event == "QUEST_TURNED_IN" then

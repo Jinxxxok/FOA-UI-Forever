@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.57.5"
+Ink.version = "0.57.6"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1128,6 +1128,7 @@ local defaults = {
 	profGuide = true,
 	ahTooltip = true,
 	mapEntrances = true,
+	mapFieldTrainers = true,
 	mapReveal = true,
 	questMinimap = true,
 	questTurnIn = true,

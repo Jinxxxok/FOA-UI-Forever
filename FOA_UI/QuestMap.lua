@@ -105,7 +105,9 @@ local function KnownSkills()
 	if profSkills then return profSkills end
 	profSkills = {}
 	if GetProfessions then
-		for _, idx in ipairs({ GetProfessions() }) do
+		local list = { GetProfessions() }
+		for i = 1, 6 do
+			local idx = list[i]
 			if idx then
 				local _, _, _, _, _, _, line = GetProfessionInfo(idx)
 				if line then profSkills[line] = true end

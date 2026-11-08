@@ -375,6 +375,7 @@ function M:BuildRegistry()
 				SW("mapLayer", "지도 표시", "비행 지점 · 주요 NPC · 배편 · 도서관 책", { reload = true }),
 				SW("mapReveal", "지도 밝히기", "안 가 본 곳도 살짝 어둡게 보여 줘요", { apply = worldMap }),
 				SW("mapEntrances", "던전 입구", "누르면 전리품 · 진행 경로", { apply = worldMap }),
+				SW("mapFieldTrainers", "마을의 내 상급자", "필드 마을엔 내 직업 · 배운 전문기술 상급자만 · 지나가면 자리를 배워요", { apply = worldMap }),
 				SW("mapScaleUp", "창 지도 크게", "창으로 띄운 세계 지도 크기", { def = false,
 					apply = function() call("Map", "ApplyScale") end }),
 				{ kind = "slider", key = "mapScalePct", label = "지도 크기", min = 100, max = 150, step = 5, fmt = "%d%%", def = 130,
