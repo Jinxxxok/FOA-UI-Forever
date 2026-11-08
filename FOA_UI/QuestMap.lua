@@ -34,6 +34,61 @@ local function Index()
 	return byMap
 end
 
+-- 지역 지도를 볼 때 그 안의 도시(아이언포지 · 오그리마 …) 퀘스트도 보이게:
+--  도시 지도 좌표를 지금 보는 지역 지도 좌표로 바꿔서 더한다 (미니맵은 서 있는 도시 지도로 봐서 보였는데 세계 지도엔 안 보였다)
+local cityRect = {}
+local function CityRect(child, parent)
+	local key = child * 100000 + parent
+	local v = cityRect[key]
+	if v == nil then
+		v = false
+		if C_Map.GetMapRectOnMap then
+			local ok, l, r, t, b = pcall(C_Map.GetMapRectOnMap, child, parent)
+			if ok and l and r and t and b and r > l and b > t and l > -0.02 and r < 1.02 and t > -0.02 and b < 1.02 and (r - l) < 0.5 then
+				v = { l, r, t, b }
+			end
+		end
+		cityRect[key] = v
+	end
+	return v or nil
+end
+
+local cityMaps
+local function CityMaps()
+	if cityMaps then return cityMaps end
+	cityMaps = {}
+	local CITY = Enum.UIMapType and Enum.UIMapType.City or 4
+	for m in pairs(Index()) do
+		local info = C_Map.GetMapInfo and C_Map.GetMapInfo(m)
+		if info and info.mapType == CITY then cityMaps[#cityMaps + 1] = m end
+	end
+	return cityMaps
+end
+
+-- 이 지도에 그릴 퀘스트 목록 (지역 지도면 안에 든 도시 것까지)
+local function MapEntries(mapID)
+	local own = Index()[mapID]
+	local info = C_Map.GetMapInfo and C_Map.GetMapInfo(mapID)
+	local ZONE = Enum.UIMapType and Enum.UIMapType.Zone or 3
+	if not (info and info.mapType == ZONE) then return own end
+	local out
+	for _, cm in ipairs(CityMaps()) do
+		if cm ~= mapID then
+			local rc = CityRect(cm, mapID)
+			if rc then
+				if not out then
+					out = {}
+					for i, e in ipairs(own or {}) do out[i] = e end
+				end
+				for _, e in ipairs(Index()[cm]) do
+					out[#out + 1] = { r = e.r, x = rc[1] + e.x * (rc[2] - rc[1]), y = rc[3] + e.y * (rc[4] - rc[3]), city = cm }
+				end
+			end
+		end
+	end
+	return out or own
+end
+
 local function Has(list, v)
 	for _, x in ipairs(list) do if x == v then return true end end
 	return false
@@ -430,7 +485,7 @@ end
 -- 지도 하나의 받을 수 있는 퀘스트 묶음 (같은 NPC끼리)
 -------------------------------------------------------------------------------
 function M:Groups(mapID)
-	local list = mapID and Index()[mapID]
+	local list = mapID and MapEntries(mapID)
 	local order, cnt = {}, { on = 0, soon = 0, rep = 0 }
 	if not list then return order, cnt end
 	local _, _, raceID = UnitRace("player")
@@ -545,7 +600,7 @@ function M:Refresh()
 	local cv = Canvas()
 	if not (wm and cv and wm:IsShown() and self.layer) then return end
 	local mapID = wm:GetMapID()
-	local list = mapID and Index()[mapID]
+	local list = mapID and MapEntries(mapID)
 	local n, nOn, nSoon, nRep = 0, 0, 0, 0
 	if list and not Ink.db.questMapHide then
 		local order, cnt = self:Groups(mapID)
