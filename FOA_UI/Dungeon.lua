@@ -2756,6 +2756,15 @@ local DQ_INST = {
 }
 M.DQ_INST = DQ_INST
 local DQ_W = 300
+-- 화면 오른쪽 끝까지 남은 폭 (frame 단위)
+local function RoomRight(frame, of)
+	local fs = frame:GetEffectiveScale()
+	local ur, r = UIParent:GetRight(), of:GetRight()
+	if not (ur and r and fs and fs > 0) then return 9999 end
+	local sr = ur * UIParent:GetEffectiveScale() / fs
+	return sr - r * of:GetEffectiveScale() / fs
+end
+M.RoomRight = RoomRight
 local DQ_ROW = 46
 
 local dqIndex, qdbIndex
@@ -3143,9 +3152,16 @@ function M:PaintQuests()
 	-- 자리: 항상 전리품 칸 오른쪽 바깥 (던전 화면에서도 지도를 가리지 않게)
 	p:ClearAllPoints()
 	p.tab:ClearAllPoints()
-	p:SetPoint("TOPLEFT", f, "TOPRIGHT", 8, 0)
-	p:SetPoint("BOTTOMLEFT", f, "BOTTOMRIGHT", 8, 0)
-	p.tab:SetPoint("TOPLEFT", f, "TOPRIGHT", 4, -24)
+	if RoomRight(p, f) >= DQ_W + 8 then
+		p:SetPoint("TOPLEFT", f, "TOPRIGHT", 8, 0)
+		p:SetPoint("BOTTOMLEFT", f, "BOTTOMRIGHT", 8, 0)
+		p.tab:SetPoint("TOPLEFT", f, "TOPRIGHT", 4, -24)
+	else
+		-- 오른쪽에 자리가 없으면 (지도 최대화 등) 전리품 칸 왼쪽에
+		p:SetPoint("TOPRIGHT", f, "TOPLEFT", -8, 0)
+		p:SetPoint("BOTTOMRIGHT", f, "BOTTOMLEFT", -8, 0)
+		p.tab:SetPoint("TOPRIGHT", f, "TOPLEFT", -4, -24)
+	end
 	p:SetFrameLevel(f:GetFrameLevel() + 1)
 	p.tab:SetFrameLevel(f:GetFrameLevel() + 2)
 	if Ink.db.dQuestsHide then
@@ -3277,6 +3293,7 @@ function M:PaintQuests()
 end
 
 -- 지도 옆에 붙이기 / 떼기
+
 function M:ShowFor(jid, anchor)
 	if not jid or not Ink.db.dungeon then return self:HideSidebar() end
 	if not self.sidebar then self:BuildSidebar() end
@@ -3286,9 +3303,19 @@ function M:ShowFor(jid, anchor)
 	f:ClearAllPoints()
 	f:SetFrameStrata("HIGH")
 	if anchor then
-		f:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 8, 0)
-		f:SetPoint("BOTTOMLEFT", anchor, "BOTTOMRIGHT", 8, 0)
 		f:SetScale(1)
+		local sc = anchor.ScrollContainer
+		if sc and RoomRight(f, anchor) < SB_W + 8 then
+			-- 지도를 최대화하면 오른쪽에 자리가 없어 지도 위 축소 · 닫기 단추를 가렸다
+			--  → 지도 그림 칸 안쪽 오른쪽에 (제목 줄 · 단추 줄 아래부터) 붙인다
+			f:SetPoint("TOPRIGHT", sc, "TOPRIGHT", -6, -6)
+			f:SetPoint("BOTTOMRIGHT", sc, "BOTTOMRIGHT", -6, 6)
+			self.sidebarInside = true
+		else
+			f:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 8, 0)
+			f:SetPoint("BOTTOMLEFT", anchor, "BOTTOMRIGHT", 8, 0)
+			self.sidebarInside = nil
+		end
 	else
 		f:SetHeight(620)
 		f:SetPoint("RIGHT", Ink.root, "RIGHT", -300, 40)
@@ -3387,6 +3414,10 @@ function M:HookMap()
 		if not M.testing then M:HideBoard(); M:HideSidebar() end
 	end)
 	if wm.OnMapChanged then hooksecurefunc(wm, "OnMapChanged", function() M:UpdateMap() end) end
+	-- 최대화 · 원래 크기로 바꾸면 전리품 칸 자리도 다시 (최대화 땐 지도 안쪽으로)
+	for _, fn in ipairs({ "Maximize", "Minimize" }) do
+		if wm[fn] then hooksecurefunc(wm, fn, function() C_Timer.After(0, function() if wm:IsShown() and not M.boardOn then M:UpdateMap() end end) end) end
+	end
 end
 
 -------------------------------------------------------------------------------
