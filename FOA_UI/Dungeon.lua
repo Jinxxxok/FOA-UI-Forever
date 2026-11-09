@@ -470,6 +470,31 @@ end
 M.FLoot = FLoot
 
 -- quiet: 이름이 없어도 서버에 요청하지 않는다 (추천 계산용으로 모든 던전을 훑을 때)
+-- 퀘스트를 시작하는 아이템 → 그 퀘스트를 받을 수 있는 진영 (다른 진영 것은 전리품 목록에서 뺀다:
+--  "티탄의 유물"처럼 얼라 · 호드용이 따로 있어서 같은 이름이 두 번 보였다)
+local startItemFac
+local function OtherFactionItem(id)
+	if not startItemFac then
+		if not ns.DUNGEON_QUESTS then return false end
+		startItemFac = {}
+		for _, list in pairs(ns.DUNGEON_QUESTS or {}) do
+			for _, q in ipairs(list) do
+				local item, fac = q[13] or 0, q[3] or 0
+				if item > 0 then
+					local t = startItemFac[item] or {}
+					startItemFac[item] = t
+					t[fac] = true
+				end
+			end
+		end
+	end
+	local t = startItemFac[id]
+	if not t or t[0] then return false end
+	local fg = UnitFactionGroup("player")
+	local facN = fg == "Horde" and 1 or (fg == "Alliance" and 2 or 0)
+	return facN ~= 0 and not t[facN]
+end
+
 ForeverScan = function(key, quiet)
 	local d = FLoot(key)
 	if not d then return end
@@ -479,7 +504,7 @@ ForeverScan = function(key, quiet)
 		for _, id in ipairs(b[2]) do
 			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
 			-- 게임 자료에 없는 아이템(패치로 바뀐 번호)은 건너뛴다. 안 그러면 영원히 "불러오는 중"
-			if iid then
+			if iid and not OtherFactionItem(id) then
 				local cached = not C_Item.IsItemDataCachedByID or C_Item.IsItemDataCachedByID(id)
 				local name, link
 				if cached then
@@ -2856,6 +2881,35 @@ function M:DungeonQuestList(key)
 			out[#out + 1] = e
 		end
 	end
+	-- 같은 퀘스트 묶기: 이름이 같은 것(단계 · 아이템별로 나뉜 것)과 직접 묶은 것(DUNGEON_QUEST_GROUP)은 한 줄로
+	--  보여 줄 대표: 진행 중 > 받을 수 있음 > 곧 > 선행 필요 > 완료 순, 같으면 번호가 작은 것
+	local groups, merged = {}, {}
+	for _, e in ipairs(out) do
+		local g = ns.DUNGEON_QUEST_GROUP and ns.DUNGEON_QUEST_GROUP[e.id]
+		if not g then
+			local t = QTitle(e.id)
+			if t then g = "t:" .. t end
+		end
+		local cur = g and groups[g]
+		if not g then
+			merged[#merged + 1] = e
+		elseif not cur then
+			e.variants = 1
+			groups[g] = e
+			merged[#merged + 1] = e
+			e.slot = #merged
+		else
+			local n = cur.variants + 1
+			if e.order < cur.order or (e.order == cur.order and e.id < cur.id) then
+				e.variants, e.slot = n, cur.slot
+				merged[cur.slot] = e
+				groups[g] = e
+			else
+				cur.variants = n
+			end
+		end
+	end
+	out = merged
 	table.sort(out, function(a, b)
 		if a.order ~= b.order then return a.order < b.order end
 		if a.lvl ~= b.lvl then return a.lvl < b.lvl end
@@ -3250,6 +3304,7 @@ function M:PaintQuests()
 			end
 		end
 		if #q[8] > 0 then sub = sub .. "  ·  선행 " .. #q[8] end
+		if (e.variants or 1) > 1 then sub = sub .. "  ·  " .. e.variants .. "개 묶음" end
 		r.sub:SetText(sub)
 		local st = DQ_STATE[e.state]
 		local stText, col, fill, edge, icon = st[1], st[2], 0, 0, nil

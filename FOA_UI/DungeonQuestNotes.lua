@@ -138,3 +138,11 @@ for _, list in pairs(ns.DUNGEON_QUESTS or {}) do
 		end
 	end
 end
+
+-- 한 줄로 묶어 보여 줄 퀘스트 (이름만으로는 안 묶이는 것)
+--  [퀘스트] = "묶음 이름"
+ns.DUNGEON_QUEST_GROUP = {
+	-- 놈리건 · 삐까뻔쩍 세척기: 때 묻은 장비 종류마다 퀘스트가 따로 있다 (첫 세척 + 추가 세척)
+	[2951] = "sparkle", [2952] = "sparkle", [2953] = "sparkle",
+	[4601] = "sparkle", [4602] = "sparkle", [4603] = "sparkle", [4604] = "sparkle", [4605] = "sparkle", [4606] = "sparkle",
+}
