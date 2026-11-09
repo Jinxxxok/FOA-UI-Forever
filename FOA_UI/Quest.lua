@@ -102,8 +102,8 @@ local function Row(i)
 			M:AbandonQuest(id)
 		elseif IsShiftKeyDown() then
 			if C_QuestLog.RemoveQuestWatch then C_QuestLog.RemoveQuestWatch(id) end
-		elseif QuestMapFrame_OpenToQuestDetails then
-			QuestMapFrame_OpenToQuestDetails(id)
+		else
+			M:ShowQuest(id)
 		end
 	end)
 	r:SetScript("OnEnter", function(self)
@@ -146,6 +146,19 @@ end
 -- 갱신
 -------------------------------------------------------------------------------
 -- 퀘스트 포기: 블리자드 확인 창을 띄운다 (바로 지우지 않는다)
+-- 퀘스트 보기: 퀘스트 상세 창(팝업)으로. 지도 속 퀘스트 목록을 애드온 코드로 열면 지도 핀이 오염돼서
+--  전투 중 막힘(SetPassThroughButtons)이 생기므로, 팝업이 없으면 지도만 깨끗하게 열고 그 퀘스트를 추적으로
+function M:ShowQuest(id)
+	local idx = C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(id)
+	if idx and QuestLogPopupDetailFrame_Show and not InCombatLockdown() then
+		local ok = pcall(QuestLogPopupDetailFrame_Show, idx)
+		if ok then return end
+	end
+	if C_SuperTrack and C_SuperTrack.SetSuperTrackedQuestID then pcall(C_SuperTrack.SetSuperTrackedQuestID, id) end
+	local mapID = (GetQuestUiMapID and GetQuestUiMapID(id)) or C_Map.GetBestMapForUnit("player")
+	if mapID and mapID ~= 0 then Ink:OpenMap(mapID) end
+end
+
 function M:AbandonQuest(id)
 	if type(id) ~= "number" then return end
 	if QuestMapQuestOptions_AbandonQuest and pcall(QuestMapQuestOptions_AbandonQuest, id) then return end

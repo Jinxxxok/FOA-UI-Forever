@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.57.9"
+Ink.version = "0.58.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -878,6 +878,21 @@ function Ink:Anchor(w, h)
 end
 
 -- 블리자드 프레임을 앵커에 맞춘다 (스케일 차이를 보정해서 크기도 맞춤)
+-- 세계 지도 열기 (원하는 지역으로)
+--  애드온 코드에서 WorldMapFrame:SetMapID · OpenWorldMap · 퀘스트 상세 열기를 바로 부르면 그때 만들어지는
+--  지도 표시(핀)가 전부 FOA 로 오염돼서, 나중에 전투 중 지도가 핀을 다시 쓸 때
+--  SetPassThroughButtons · SetPropagateMouseClicks 가 막혔다.
+--  C_Map.OpenWorldMap 은 게임이 직접 "지도 열기" 이벤트를 보내 블리자드 코드가 깨끗한 상태로 열어 준다.
+function Ink:OpenMap(mapID)
+	if not mapID then return end
+	if C_Map and C_Map.OpenWorldMap then
+		return pcall(C_Map.OpenWorldMap, mapID)
+	end
+	-- 옛 클라이언트: 전투 중에는 열지 않는다 (오염된 핀이 전투 중에 막히지 않게)
+	if InCombatLockdown() then return end
+	if OpenWorldMap then return pcall(OpenWorldMap, mapID) end
+end
+
 function Ink:Fit(frame, anchor, point, w, h)
 	if not frame then return end
 	if frame.IsProtected and frame:IsProtected() and InCombatLockdown() then return end

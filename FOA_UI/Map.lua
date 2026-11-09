@@ -1196,11 +1196,8 @@ end
 -- 전리품 칸의 "입구" 버튼: 그 지역 지도를 열고 입구 표시에 물결 (몇 초)
 function M:FocusEntrance(key, mapID)
 	self.flashKey = key
-	if not (WorldMapFrame and WorldMapFrame:IsShown()) then
-		if OpenWorldMap then pcall(OpenWorldMap, mapID) elseif ToggleWorldMap then ToggleWorldMap() end
-	end
-	if WorldMapFrame and WorldMapFrame.SetMapID then WorldMapFrame:SetMapID(mapID) end
-	self:Refresh()
+	Ink:OpenMap(mapID)
+	C_Timer.After(0, function() if WorldMapFrame and WorldMapFrame:IsShown() then M:Refresh() end end)
 	C_Timer.After(6, function()
 		if M.flashKey == key then M.flashKey = nil; if WorldMapFrame and WorldMapFrame:IsShown() then M:Refresh() end end
 	end)

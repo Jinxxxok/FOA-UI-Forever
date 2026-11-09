@@ -1318,8 +1318,8 @@ function M:BuildForeverTop(f)
 		local Map = Ink.modules.Map
 		if Map and Map.FocusEntrance and Ink.db.mapEntrances ~= false then
 			Map:FocusEntrance(M.showing, e[1])
-		elseif WorldMapFrame and WorldMapFrame.SetMapID then
-			WorldMapFrame:SetMapID(e[1])
+		else
+			Ink:OpenMap(e[1])
 		end
 	end)
 	f.entr:SetScript("OnEnter", function(self)
@@ -2207,8 +2207,9 @@ function M:BuildBoard()
 	b.close:SetScript("OnEnter", function(self) self.icon:SetVertexColor(1, 1, 1) end)
 	b.close:SetScript("OnLeave", function(self) self.icon:SetVertexColor(C.muted[1], C.muted[2], C.muted[3]) end)
 	b.close:SetScript("OnClick", function()
-		if InCombatLockdown() then b:Hide() return end
-		if HideUIPanel then pcall(HideUIPanel, WorldMapFrame) else WorldMapFrame:Hide() end
+		-- 지도 창은 애드온 코드로 닫지 않는다 (지도 핀 오염 · 전투 중 막힘 원인). 판만 접고, 지도는 ESC · M 으로
+		M.boardOff = true
+		M:UpdateMap()
 	end)
 	b.map = Chip(b, 22)
 	b.map:SetPoint("RIGHT", b.close, "LEFT", -8, 0)
