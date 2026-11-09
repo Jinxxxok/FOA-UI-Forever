@@ -949,6 +949,74 @@ function M:ApplyChatFont()
 	end
 end
 
+-------------------------------------------------------------------------------
+-- 따로 떼어 낸 대화창 크기 조절 손잡이 (오른쪽 아래 모서리)
+--  기본 채팅창(1번)과 거기 붙은 탭은 편집 모드에서 크기를 바꾸고, 떼어 낸 창만 이 손잡이로 바꾼다
+--  블리자드 손잡이는 모양이 달라 숨겨 두고 FOA 손잡이를 따로 단다 (블리자드 틀에는 값을 써 넣지 않는다)
+-------------------------------------------------------------------------------
+local chatGrip = setmetatable({}, { __mode = "k" })
+local function GripShown(cf)
+	return cf ~= ChatFrame1 and cf:IsShown() and not plain(cf.isDocked) and not plain(cf.isLocked)
+end
+local function UpdateGrip(cf)
+	local g = chatGrip[cf]
+	if g then g:SetShown(GripShown(cf)) end
+end
+local function AddGrip(cf)
+	if chatGrip[cf] or cf == ChatFrame1 then return end
+	local g = CreateFrame("Button", nil, cf)
+	g:SetSize(18, 18)
+	g:SetPoint("BOTTOMRIGHT", cf, "BOTTOMRIGHT", 9, -3)
+	g:SetFrameLevel(cf:GetFrameLevel() + 20)
+	-- 점 여섯 개를 계단 모양으로 (◢)
+	g.dots = {}
+	for row = 0, 2 do
+		for col = 0, row do
+			local d = g:CreateTexture(nil, "OVERLAY")
+			d:SetSize(2, 2)
+			d:SetPoint("BOTTOMRIGHT", g, "BOTTOMRIGHT", -3 - col * 4, 3 + (2 - row) * 4)
+			g.dots[#g.dots + 1] = d
+		end
+	end
+	local function paint(on)
+		local c = on and C.accent or C.text
+		for _, d in ipairs(g.dots) do d:SetColorTexture(c[1], c[2], c[3], on and 1 or 0.35) end
+	end
+	paint(false)
+	g:SetScript("OnEnter", function(self)
+		paint(true)
+		GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
+		GameTooltip:AddLine("끌어서 크기 조절", 1, 1, 1)
+		GameTooltip:Show()
+	end)
+	g:SetScript("OnLeave", function() if not g.sizing then paint(false) end GameTooltip:Hide() end)
+	g:SetScript("OnMouseDown", function(_, btn)
+		if btn ~= "LeftButton" or not GripShown(cf) then return end
+		if cf.SetResizable and not cf:IsResizable() then cf:SetResizable(true) end
+		g.sizing = true
+		paint(true)
+		cf:StartSizing("BOTTOMRIGHT")
+	end)
+	g:SetScript("OnMouseUp", function()
+		if not g.sizing then return end
+		g.sizing = nil
+		cf:StopMovingOrSizing()
+		if not g:IsMouseOver() then paint(false) end
+		-- 다음 접속에도 그 크기로 (블리자드 손잡이가 하는 저장과 같은 것)
+		if FCF_SavePositionAndDimensions then pcall(FCF_SavePositionAndDimensions, cf) end
+	end)
+	g:SetScript("OnHide", function()
+		if g.sizing then g.sizing = nil; cf:StopMovingOrSizing() end
+		paint(false)
+	end)
+	chatGrip[cf] = g
+	cf:HookScript("OnShow", function() UpdateGrip(cf) end)
+	UpdateGrip(cf)
+end
+M.UpdateChatGrips = function()
+	for cf in pairs(chatGrip) do UpdateGrip(cf) end
+end
+
 local function SkinChatFrame(cf)
 	if not cf or chatSkinned[cf] then return end
 	chatSkinned[cf] = true
@@ -980,6 +1048,7 @@ local function SkinChatFrame(cf)
 	cf:SetShadowColor(0, 0, 0, 0.8)
 	SkinTab(_G[name .. "Tab"])
 	SkinEditBox(cf.editBox or _G[name .. "EditBox"], cf)
+	AddGrip(cf)
 end
 
 -------------------------------------------------------------------------------
@@ -1048,6 +1117,15 @@ function M:SkinChat()
 		end
 		if FCFTab_UpdateColors then
 			hooksecurefunc("FCFTab_UpdateColors", TabColors)
+		end
+		-- 창을 떼거나 붙이거나 잠글 때 손잡이 보이기 · 숨기기
+		for _, fn in ipairs({ "FCF_DockFrame", "FCF_UnDockFrame", "FCF_SetLocked", "FCF_OpenNewWindow", "FCF_Close" }) do
+			if type(_G[fn]) == "function" then
+				hooksecurefunc(fn, function()
+					for _, n in ipairs(CHAT_FRAMES or {}) do SkinChatFrame(_G[n]) end
+					C_Timer.After(0, M.UpdateChatGrips)
+				end)
+			end
 		end
 		if FCF_SetChatWindowFontSize then
 			hooksecurefunc("FCF_SetChatWindowFontSize", function(_, cf, size)
