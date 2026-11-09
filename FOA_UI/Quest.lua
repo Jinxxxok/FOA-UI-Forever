@@ -432,7 +432,9 @@ function M:Update()
 		if newG then
 			lastG = g
 			nh = nh + 1
-			if not combat then
+			do
+				-- 지역 머리글 · 퀘스트 줄은 보호 프레임이 아니라 전투 중에도 자리를 다시 잡는다
+				--  (예전엔 전투 중엔 자리를 안 옮겨서, 목표 줄 수가 바뀌면 다음 퀘스트와 겹쳐 보였다)
 				local h = self:ZoneHead(nh)
 				h:ClearAllPoints()
 				h:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y - ((idx > 1 or (self.classH or 0) > 0) and 4 or 0))
@@ -452,11 +454,14 @@ function M:Update()
 			end
 			y = y - ((idx > 1 or (self.classH or 0) > 0) and 26 or 22)
 		end
+		r:ClearAllPoints()
+		r:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
+		-- 퀘스트 아이템 단추는 보안 단추라 전투 밖에서만 옮긴다 (전투가 끝나면 다시 맞춘다)
 		if not combat then
-			r:ClearAllPoints()
-			r:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
 			r.item:ClearAllPoints()
 			r.item:SetPoint("TOPRIGHT", f, "TOPLEFT", -12, y + 2)
+		else
+			self.dirty = true
 		end
 		r.questID = type(id) == "number" and id or nil
 		local title, objs, complete
@@ -572,15 +577,15 @@ function M:Update()
 				r.item:SetAttribute("item", nil)
 				r.item:Hide()
 			end
-			r:SetHeight(-oy)
 		end
+		r:SetHeight(-oy)
 		r:Show()
 		y = y + oy - 10
 		end
 	end
 	-- 위 · 아래에 더 있으면 안내
 	local above, below = offset, math.max(0, total - offset - MAX_QUESTS)
-	if (above > 0 or below > 0) and not combat then
+	if above > 0 or below > 0 then
 		f.more:ClearAllPoints()
 		f.more:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y + 4)
 		local parts = {}
@@ -589,17 +594,16 @@ function M:Update()
 		f.more:SetText(table.concat(parts, "  ·  ") .. "  (휠로 넘기기)")
 		f.more:Show()
 		y = y - 14
-	elseif not combat then
+	else
 		f.more:Hide()
 	end
-	if not combat then
-		for i = shown + 1, #f.rows do
-			f.rows[i]:Hide()
-			f.rows[i].item:Hide()
-		end
-		for i = nh + 1, #(f.zheads or {}) do f.zheads[i]:Hide() end
-		f:SetHeight(-y)
+	for i = shown + 1, #f.rows do
+		f.rows[i]:Hide()
+		if not combat then f.rows[i].item:Hide() end
 	end
+	for i = nh + 1, #(f.zheads or {}) do f.zheads[i]:Hide() end
+	-- 목록 틀은 보안 단추(퀘스트 아이템)의 부모라 전투 중엔 크기를 못 바꾼다
+	if not combat then f:SetHeight(-y) end
 	self.lastCount = #quests
 	f:SetAlpha((shown > 0 or (self.classH or 0) > 0) and 1 or 0)
 end
