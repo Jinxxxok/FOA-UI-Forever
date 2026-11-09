@@ -437,6 +437,15 @@ local QuestObjectives
 local function Norm(t)
 	return (t:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("[%d%s%p]", ""))
 end
+-- 목표 글자에서 대상 이름만: 진행 수치 · 기호 · "처치" 같은 낱말을 뺀다 ("새끼 그물독거미 처치: 0/8" → "새끼 그물독거미")
+local function Phrase(t)
+	t = t:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("%d+%s*/%s*%d+", ""):gsub("%d+%%", ""):gsub("：", " "):gsub("[:%-%(%)%[%]]", " ")
+	local words = {}
+	for w in t:gmatch("%S+") do if not IsKill(w) then words[#words + 1] = w end end
+	return table.concat(words, " ")
+end
+M.Phrase = Phrase
+
 -- 툴팁 목표 줄이 지금 퀘스트 로그의 안 끝난 목표인지 (이미 끝냈거나 넘긴 퀘스트가 툴팁에 남아 있을 때 거른다)
 local function InLog(t)
 	if not (QuestObjectives and C_QuestLog and C_QuestLog.GetQuestObjectives and C_QuestLog.GetNumQuestLogEntries) then return true end
@@ -493,9 +502,21 @@ local function QuestInfo(unit)
 			["노상강도"] = true, ["경비대"] = true, ["수호병"] = true, ["파수병"] = true, ["병사"] = true, ["대장"] = true, ["두목"] = true }
 		local last = name:match("(%S+)$")
 		if last and (#last < 6 or JOB[last]) then last = nil end
+		local nName = Norm(name)
 		for _, o in ipairs(QuestObjectives()) do
 			local t = plain(o.text)
-			if type(t) == "string" and (t:find(name, 1, true) or (last and last ~= name and t:find(last, 1, true))) then
+			local hit
+			if type(t) == "string" then
+				local ph = Phrase(t)
+				if o.type == "monster" then
+					-- 처치 목표는 몹 이름이 통째로 같아야: "새끼 그물독거미 처치"에 그냥 "그물독거미"가 잡히면 안 된다
+					hit = ph == name or (nName ~= "" and Norm(ph) == nName)
+				else
+					-- 줍기 목표는 그 몹 이름으로 시작할 때만 ("식인독수리 고기" ← 식인독수리 / "새끼 거미 다리" ← 거미 X)
+					hit = ph:sub(1, #name) == name or (last and last ~= name and ph:sub(1, #last) == last)
+				end
+			end
+			if hit then
 				local have, need = o.numFulfilled, o.numRequired
 				return { kind = (o.type == "monster") and "kill" or "loot", text = (need and need > 0 and have) and (have .. "/" .. need) or "" }
 			end
