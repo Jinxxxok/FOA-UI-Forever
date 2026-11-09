@@ -1057,48 +1057,64 @@ end
 -------------------------------------------------------------------------------
 local CHAT_HIST_MAX = 40
 local function EditBoxes()
-	local t = {}
-	for i = 1, (NUM_CHAT_WINDOWS or 10) do
-		local eb = _G["ChatFrame" .. i .. "EditBox"]
-		if eb then t[#t + 1] = eb end
-	end
+	local t, seen = {}, {}
+	local function add(eb) if eb and not seen[eb] then seen[eb] = true; t[#t + 1] = eb end end
+	for i = 1, (NUM_CHAT_WINDOWS or 10) do add(_G["ChatFrame" .. i .. "EditBox"]) end
+	for _, n in ipairs(CHAT_FRAMES or {}) do local cf = _G[n]; add(cf and (cf.editBox or _G[n .. "EditBox"])) end
 	return t
 end
 
-function M:SetupChatHistory()
-	local on = Ink.db.chatArrows ~= false
-	for _, eb in ipairs(EditBoxes()) do
-		if eb.SetAltArrowKeyMode then pcall(eb.SetAltArrowKeyMode, eb, not on) end
-	end
-	if self.histHooked then return end
-	self.histHooked = true
-	local saved = Ink.db.chatHistory
-	if type(saved) == "table" then
-		for _, eb in ipairs(EditBoxes()) do
-			if eb.AddHistoryLine then
-				for _, line in ipairs(saved) do if type(line) == "string" then pcall(eb.AddHistoryLine, eb, line) end end
+-- 화살표만으로 지난 글 (게임 기본은 Alt + 화살표). 입력창이 열릴 때 · 포커스를 얻을 때마다 다시 걸어 둔다
+--  (한 번만 걸면 입력창이 다시 만들어지거나 블리자드가 되돌릴 때 풀렸다)
+local function ApplyArrows(eb)
+	if eb and eb.SetAltArrowKeyMode then pcall(eb.SetAltArrowKeyMode, eb, Ink.db.chatArrows == false) end
+end
+
+local histHooked = setmetatable({}, { __mode = "k" })
+local histRestoring = false
+local function SaveLine(line)
+	if histRestoring or type(line) ~= "string" then return end
+	line = line:gsub("^%s+", ""):gsub("%s+$", "")
+	if line == "" then return end
+	local h = Ink.db.chatHistory or {}
+	Ink.db.chatHistory = h
+	for i = #h, 1, -1 do if h[i] == line then table.remove(h, i) end end
+	h[#h + 1] = line
+	while #h > CHAT_HIST_MAX do table.remove(h, 1) end
+end
+
+local function HookBox(eb)
+	if not eb or histHooked[eb] then return end
+	histHooked[eb] = true
+	eb:HookScript("OnShow", ApplyArrows)
+	eb:HookScript("OnEditFocusGained", ApplyArrows)
+	-- 보낸 글 저장 + 다른 채팅 창 입력창에도 같은 기록 (어느 탭에서 쳐도 화살표로 불러오게)
+	if eb.AddHistoryLine then
+		hooksecurefunc(eb, "AddHistoryLine", function(self, line)
+			if histRestoring then return end
+			line = plain(line)
+			SaveLine(line)
+			histRestoring = true
+			for _, other in ipairs(EditBoxes()) do
+				if other ~= self and other.AddHistoryLine then pcall(other.AddHistoryLine, other, line) end
 			end
-		end
-	end
-	if type(ChatEdit_AddHistory) == "function" then
-		hooksecurefunc("ChatEdit_AddHistory", function(eb)
-			pcall(function()
-				local text = plain(eb:GetText())
-				if type(text) ~= "string" or text == "" then return end
-				local ctype = plain(eb:GetAttribute("chatType"))
-				local line = (type(ctype) == "string" and _G["SLASH_" .. ctype .. "1"]) or ""
-				if ctype == "WHISPER" then
-					line = line .. " " .. (plain(eb:GetAttribute("tellTarget")) or "")
-				elseif ctype == "CHANNEL" then
-					line = "/" .. (plain(eb:GetAttribute("channelTarget")) or "")
-				end
-				line = (line ~= "" and (line .. " ") or "") .. text
-				local h = Ink.db.chatHistory or {}
-				Ink.db.chatHistory = h
-				if h[#h] ~= line then h[#h + 1] = line end
-				while #h > CHAT_HIST_MAX do table.remove(h, 1) end
-			end)
+			histRestoring = false
 		end)
+	end
+	-- 지난 접속의 기록을 넣어 둔다
+	local saved = Ink.db.chatHistory
+	if type(saved) == "table" and eb.AddHistoryLine then
+		histRestoring = true
+		for _, line in ipairs(saved) do if type(line) == "string" then pcall(eb.AddHistoryLine, eb, line) end end
+		histRestoring = false
+	end
+	ApplyArrows(eb)
+end
+
+function M:SetupChatHistory()
+	for _, eb in ipairs(EditBoxes()) do
+		HookBox(eb)
+		ApplyArrows(eb)
 	end
 end
 
