@@ -137,6 +137,59 @@ local function TinyButton(parent, glyph, tip)
 	return b
 end
 
+-- 기록 지우기 단추: 실수로 누르는 걸 막으려고 두 번 눌러야 지운다 (첫 번째 누름 → 3초 동안 빨갛게 "한 번 더")
+local function ResetButton(parent)
+	local b = CreateFrame("Button", nil, parent)
+	b:SetSize(20, 20)
+	b.bg = Ink:Round(b, "BACKGROUND", true, false)
+	b.bg:SetAllPoints()
+	b.icon = b:CreateTexture(nil, "ARTWORK")
+	b.icon:SetTexture(Ink.icon("Undo"))
+	b.icon:SetSize(12, 12)
+	b.icon:SetPoint("CENTER")
+	local function paint()
+		local hot = b:IsMouseOver()
+		if b.armed then
+			b.bg:SetVertexColor(C.red[1], C.red[2], C.red[3], hot and 0.32 or 0.22)
+			b.icon:SetVertexColor(C.red[1], C.red[2], C.red[3])
+		else
+			b.bg:SetVertexColor(1, 1, 1, hot and 0.1 or 0.04)
+			local c = hot and C.accent or C.muted
+			b.icon:SetVertexColor(c[1], c[2], c[3])
+		end
+	end
+	local function tip()
+		GameTooltip:SetOwner(b, "ANCHOR_TOP")
+		if b.armed then
+			GameTooltip:SetText("한 번 더 누르면 지워요", C.red[1], C.red[2], C.red[3])
+		else
+			GameTooltip:SetText("미터기 기록 지우기", 1, 1, 1)
+			Ink.TipLine(GameTooltip, "현재 · 전체 기록을 모두 지워요 (두 번 눌러서)", 0.7, 0.72, 0.75)
+		end
+		GameTooltip:Show()
+	end
+	b:SetScript("OnEnter", function() paint() tip() end)
+	b:SetScript("OnLeave", function() paint() GameTooltip:Hide() end)
+	b:SetScript("OnClick", function()
+		if b.armed then
+			b.armed = nil
+			if M.ResetNow then M.ResetNow() end
+			print("|cffFFF468FOA|r 미터기 기록을 지웠어요.")
+		else
+			b.armed = GetTime()
+			local at = b.armed
+			C_Timer.After(3, function()
+				if b.armed == at then b.armed = nil; paint(); if b:IsMouseOver() then tip() end end
+			end)
+		end
+		paint()
+		if b:IsMouseOver() then tip() end
+	end)
+	b:SetScript("OnHide", function() b.armed = nil; paint() end)
+	paint()
+	return b
+end
+
 local function WinKey(slot) return slot == 1 and "meter" or ("meter" .. slot) end
 
 -- 창 하나 (slot 1 = 기본 창, 2~4 = 새로 연 창). 창마다 보기 종류 · 현재/전체가 따로
@@ -199,8 +252,10 @@ function M:BuildWindow(slot)
 		f.add = TinyButton(f, "+", "새 미터기 창 열기 (최대 " .. MAX_WIN .. "개)")
 		f.add:SetPoint("RIGHT", ses, "LEFT", -4, 0)
 		f.add:SetScript("OnClick", function() M:OpenWindow() end)
+		f.reset = ResetButton(f)
+		f.reset:SetPoint("RIGHT", f.add, "LEFT", -4, 0)
 		f.time = Ink:Text(f, F.latin, 11, C.muted, "RIGHT")
-		f.time:SetPoint("RIGHT", f.add, "LEFT", -6, 0)
+		f.time:SetPoint("RIGHT", f.reset, "LEFT", -6, 0)
 
 		f.line = f:CreateTexture(nil, "ARTWORK")
 		f.line:SetColorTexture(1, 1, 1, 0.05)
@@ -230,6 +285,8 @@ function M:LayoutWin(f)
 	for i = #f.rows + 1, n do f.rows[i] = Row(f, i) end
 	for i = n + 1, #f.rows do f.rows[i]:Hide() end
 	f.nrows = n
+	-- 좁은 창: 제목과 겹치지 않게 전투 시간은 숨긴다
+	if f.time then f.time:SetShown((f:GetWidth() or W) >= 250) end
 end
 
 function M:ResizeWin(f, w, h)
@@ -607,6 +664,7 @@ local function ResetMeter()
 	if C_DamageMeter and C_DamageMeter.ResetAllCombatSessions then pcall(C_DamageMeter.ResetAllCombatSessions) end
 	M:Refresh()
 end
+M.ResetNow = ResetMeter
 
 function M:BuildAsk()
 	local a = CreateFrame("Frame", "FOAMeterAsk", Ink.root)
