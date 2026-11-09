@@ -581,6 +581,15 @@ function M:HookDurability()
 	self:PlaceDurability()
 end
 
+-- 채팅창 맞추기 상태는 FOA 안쪽에 (블리자드 채팅 틀에 값을 써 넣으면 그 틀을 읽는 블리자드 코드가 오염된다)
+local chatState = {}
+
+-- 전투가 끝나면 채팅창 자리를 한 번 더 맞춘다 (전투 중 미뤄 둔 것 포함)
+function M:CombatEnd()
+	self.chatRefitAfterCombat = nil
+	if self.RefitChat and ChatFrame1 and self.chatAnchor then pcall(self.RefitChat) end
+end
+
 function M:BuildAnchors()
 	self.buffAnchor = Ink:Anchor(300, 40)
 	self.questAnchor = Ink:Anchor(240, 400)
@@ -596,9 +605,9 @@ function M:BuildAnchors()
 		self.chatAnchor:SetSize(w, h)
 		Ink:SaveSize("chat", w, h)
 		if ChatFrame1 then
-			ChatFrame1.foaFitting = true
+			chatState.fitting = true
 			Ink:Fit(ChatFrame1, self.chatAnchor, "BOTTOMLEFT", w, h)
-			ChatFrame1.foaFitting = nil
+			chatState.fitting = nil
 		end
 	end
 	cm.minW, cm.minH, cm.maxW, cm.maxH = 220, 70, 900, 600
@@ -630,22 +639,30 @@ function M:LayoutAnchors()
 			ChatFrame1:SetClampRectInsets(0, 0, 0, 0)
 		end)
 		local cw, ch = self.chatAnchor:GetSize()
-		ChatFrame1.foaFitting = true
+		chatState.fitting = true
 		Ink:Fit(ChatFrame1, self.chatAnchor, "BOTTOMLEFT", cw, ch)
-		ChatFrame1.foaFitting = nil
+		chatState.fitting = nil
 		-- 블리자드(편집 모드 · 채팅 창 위치 복원)가 채팅창을 다른 자리로 옮기면 FOA 자리로 다시
 		--  (포에버는 이게 늦게 와서 편집 모드 틀과 실제 채팅창 위치가 어긋났다)
-		if not ChatFrame1.foaRefitHook then
-			ChatFrame1.foaRefitHook = true
+		if not chatState.hooked then
+			chatState.hooked = true
+			-- 전투 중에도 되돌린다: 채팅창은 보호된 틀이 아니라 전투 중에 옮겨도 막히지 않는다
+			--  (전투에 들어갈 때 블리자드 화면 배치 관리자가 "아래 바가 있다"고 보고 채팅창을 위로 밀어 올리던 문제)
+			--  채팅창이 보호된 틀인 경우(예외)만 전투가 끝난 뒤로 미룬다
+			local function refitNow()
+				if ChatFrame1:IsProtected() and InCombatLockdown() then M.chatRefitAfterCombat = true return end
+				local w, h = M.chatAnchor:GetSize()
+				chatState.fitting = true
+				Ink:Fit(ChatFrame1, M.chatAnchor, "BOTTOMLEFT", w, h)
+				chatState.fitting = nil
+			end
+			M.RefitChat = refitNow
 			local function refit()
-				if ChatFrame1.foaFitting or InCombatLockdown() or ChatFrame1.foaRefitQueued then return end
-				ChatFrame1.foaRefitQueued = true
+				if chatState.fitting or chatState.queued then return end
+				chatState.queued = true
 				C_Timer.After(0, function()
-					ChatFrame1.foaRefitQueued = nil
-					local w, h = M.chatAnchor:GetSize()
-					ChatFrame1.foaFitting = true
-					Ink:Fit(ChatFrame1, M.chatAnchor, "BOTTOMLEFT", w, h)
-					ChatFrame1.foaFitting = nil
+					chatState.queued = nil
+					refitNow()
 				end)
 			end
 			hooksecurefunc(ChatFrame1, "SetPoint", refit)
