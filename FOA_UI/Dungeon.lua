@@ -1668,7 +1668,7 @@ function M:BossTooltip(owner, bi)
 		for _, e in ipairs(nq) do
 			local t = C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(e.id)
 			local nt = DQNote(e.id)
-			GameTooltip:AddLine((e.state == "log" and "|cffFFF468▸|r " or "|cffE3C07A!|r ") .. (t and t ~= "" and t or ("퀘스트 #" .. e.id)), 0.92, 0.92, 0.9)
+			GameTooltip:AddLine((e.state == "log" and (M.TipIcon("Wait", { 1, 0.96, 0.41 }) .. " ") or "|cffE3C07A!|r ") .. (t and t ~= "" and t or ("퀘스트 #" .. e.id)), 0.92, 0.92, 0.9)
 			if nt and nt[2] then Ink.TipLine(GameTooltip, "   " .. nt[2], 0.56, 0.58, 0.61) end
 		end
 	end
@@ -2792,6 +2792,13 @@ end
 M.RoomRight = RoomRight
 local DQ_ROW = 46
 
+-- 툴팁 글자 속 작은 아이콘 (게임 툴팁 글꼴엔 ✓ ▸ 같은 기호가 없어서 네모로 깨졌다)
+local function TipIcon(name, rgb)
+	return string.format("|T%s:12:12:0:-1:64:64:0:64:0:64:%d:%d:%d|t", Ink.icon(name),
+		math.floor(rgb[1] * 255), math.floor(rgb[2] * 255), math.floor(rgb[3] * 255))
+end
+M.TipIcon = TipIcon
+
 local dqIndex, qdbIndex
 -- 퀘스트 → 선행 목록 (던전 퀘스트 자료 + 전체 퀘스트 시작 자료)
 local function PreOf(id)
@@ -3151,7 +3158,7 @@ function M:QuestTip(r)
 			if i > 8 then tt:AddLine("… " .. (#chain - 8) .. "개 더", 0.56, 0.58, 0.61) break end
 			local _, dq, qr = PreOf(pid)
 			local done, inlog = QDone(pid), QInLog(pid)
-			local mark = done and "|cff6FD39A✓|r " or (inlog and "|cffFFF468▸|r " or "|cff8E939B·|r ")
+			local mark = done and (TipIcon("Check", { 0.44, 0.83, 0.6 }) .. " ") or (inlog and (TipIcon("Wait", { 1, 0.96, 0.41 }) .. " ") or "|cff8E939B·|r ")
 			local where = ""
 			if not done then
 				local npc = dq and NpcOf(dq[7]) or (qr and NpcOf(qr[14]))
