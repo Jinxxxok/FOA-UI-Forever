@@ -119,3 +119,22 @@ ns.DUNGEON_QUEST_NOTES = {
 	[96395] = { 0, "던전 두 번째 방의 유령 시종에게서 시작 (얼라이언스)" },
 	[98423] = { 261319, "마지막 보스 방 금고 문 뒤의 석판으로 시작 (얼라이언스)", 1455, 39.4, 55.8, "아이언포지 · 마그니 브론즈비어드 왕" },
 }
+
+-- 선행 퀘스트 보충: AllTheThings 자료에 선행이 빠진 포에버 던전 퀘스트 (게임 · 공략으로 확인한 것만)
+--  [던전 퀘스트] = { 선행 퀘스트들 (순서대로) }
+ns.DUNGEON_QUEST_PRE = {
+	-- 발굴 현장: 저습지 · 고원의 공포 (신록의수호자 레시엘): 레시엘 연계 3개(파괴의 손길 → Fire Taboo → Blisters on the Land)를 끝내야 받는다
+	[95646] = { 276, 277, 275 },
+	-- 발굴 현장: 저습지 · 고원 가죽 (제임스 할로란): 같은 NPC 의 Young Crocolisk Skins 를 먼저
+	[98815] = { 484 },
+}
+for _, list in pairs(ns.DUNGEON_QUESTS or {}) do
+	for _, q in ipairs(list) do
+		local add = ns.DUNGEON_QUEST_PRE[q[1]]
+		if add and type(q[8]) == "table" then
+			local have = {}
+			for _, p in ipairs(q[8]) do have[p] = true end
+			for _, p in ipairs(add) do if not have[p] then q[8][#q[8] + 1] = p end end
+		end
+	end
+end
