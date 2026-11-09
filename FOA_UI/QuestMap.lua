@@ -139,6 +139,14 @@ local function InLog(id)
 	return C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(id) ~= nil
 end
 
+-- 주는 NPC 에게 직접 말을 걸었는데 그 퀘스트를 안 주면 (자료와 포에버가 다를 때) 이 캐릭터에선 숨긴다
+--  레벨이 오르면 다시 보여 주고, 다음에 말을 걸 때 또 확인한다
+local function NotOffered(id, level)
+	local t = Ink.cdb and Ink.cdb.qNotOffered
+	local at = t and t[id]
+	return at and level <= at
+end
+
 -- 0 = 안 보임, 1 = 받을 수 있음, 2 = 곧(1~2레벨 뒤)
 local function State(r, ctx)
 	local id, lvl, fac = r[1], r[3], r[4]
@@ -151,6 +159,7 @@ local function State(r, ctx)
 	for _, s in ipairs(r[7]) do if not Done(s) then return 0 end end
 	if r[9] ~= 0 and not KnownSkills()[r[9]] then return 0 end
 	if not RepOK(r[10]) then return 0 end
+	if NotOffered(id, ctx.level) then return 0 end
 	if lvl > ctx.level then
 		return (lvl <= ctx.level + 2 and Ink.db.questMapSoon ~= false) and 2 or 0
 	end
@@ -863,13 +872,81 @@ function M:InitMinimap()
 	self.miniTicker = f
 end
 
+-------------------------------------------------------------------------------
+-- 퀘스트 주는 NPC 와 대화할 때: 자료상 받을 수 있는 퀘스트를 실제로 주는지 확인
+-------------------------------------------------------------------------------
+local function TalkNpcID()
+	local g = plain(UnitGUID("npc"))
+	if type(g) ~= "string" then return end
+	local kind, _, _, _, _, id = strsplit("-", g)
+	if kind ~= "Creature" then return end
+	return tonumber(id)
+end
+
+function M:CheckOffered(event)
+	local npc = TalkNpcID()
+	if not npc then return end
+	-- 이 NPC 가 주는 퀘스트 (자료)
+	local mine = {}
+	for _, r in ipairs(ns.QUEST_DB or {}) do if r[14] == npc then mine[#mine + 1] = r end end
+	if #mine == 0 then return end
+	-- 지금 실제로 주는 퀘스트 · 진행 중인 퀘스트
+	local offered, names, known = {}, {}, false
+	M.listAt = M.listAt or {}
+	if event == "QUEST_DETAIL" then
+		-- 목록에서 하나를 골라 연 상세창이면 그 NPC 의 다른 퀘스트는 모른다 → 바로 상세가 뜬 경우만 (주는 게 그것 하나)
+		if M.listAt[npc] and GetTime() - M.listAt[npc] < 120 then return end
+		local q = GetQuestID and GetQuestID()
+		if q and q ~= 0 then offered[q] = true; known = true end
+	elseif event == "GOSSIP_SHOW" and C_GossipInfo and C_GossipInfo.GetAvailableQuests then
+		for _, q in ipairs(C_GossipInfo.GetAvailableQuests() or {}) do if q.questID then offered[q.questID] = true end end
+		for _, q in ipairs(C_GossipInfo.GetActiveQuests and C_GossipInfo.GetActiveQuests() or {}) do if q.questID then offered[q.questID] = true end end
+		known = true
+	elseif event == "QUEST_GREETING" and GetNumAvailableQuests then
+		for i = 1, GetNumAvailableQuests() do
+			local qid = GetAvailableQuestInfo and select(5, GetAvailableQuestInfo(i))
+			if type(qid) == "number" and qid > 0 then offered[qid] = true end
+			local t = GetAvailableTitle and GetAvailableTitle(i)
+			if t then names[t] = true end
+		end
+		for i = 1, (GetNumActiveQuests and GetNumActiveQuests() or 0) do
+			local t = GetActiveTitle and GetActiveTitle(i)
+			if t then names[t] = true end
+		end
+		known = true
+	end
+	if not known then return end
+	if event ~= "QUEST_DETAIL" then M.listAt[npc] = GetTime() end
+	local _, _, classID = UnitClass("player")
+	local _, _, raceID = UnitRace("player")
+	local fg = UnitFactionGroup("player")
+	local level = UnitLevel("player") or 1
+	local ctx = { level = level, race = raceID, class = classID, fac = fg == "Horde" and 1 or (fg == "Alliance" and 2 or 0) }
+	Ink.cdb.qNotOffered = Ink.cdb.qNotOffered or {}
+	local t, changed = Ink.cdb.qNotOffered, false
+	for _, r in ipairs(mine) do
+		local id = r[1]
+		local name = QuestName(id)
+		local isOffered = offered[id] or (name and names[name])
+		if isOffered then
+			if t[id] then t[id] = nil; changed = true end
+		else
+			t[id] = nil
+			-- 자료상 지금 받을 수 있어야 하는데 안 주는 것만 (곧 받을 수 있는 것 · 이미 받은 것은 그대로)
+			if State(r, ctx) == 1 then t[id] = level; changed = true end
+		end
+	end
+	if changed then M.miniDirty = true; M.poiDirty = true; M:Queue() end
+end
+
 function M:Init()
 	if not ns.QUEST_DB or Ink.db.questMap == false then return end
 	self:Hook()
 	self:InitMinimap()
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({ "ADDON_LOADED", "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_REMOVED", "QUEST_LOG_UPDATE",
-		"PLAYER_LEVEL_UP", "SKILL_LINES_CHANGED", "QUEST_DATA_LOAD_RESULT", "UPDATE_FACTION" }) do
+		"PLAYER_LEVEL_UP", "SKILL_LINES_CHANGED", "QUEST_DATA_LOAD_RESULT", "UPDATE_FACTION",
+		"GOSSIP_SHOW", "QUEST_GREETING", "QUEST_DETAIL" }) do
 		pcall(e.RegisterEvent, e, ev)
 	end
 	e:SetScript("OnEvent", function(_, event, a1, a2)
@@ -886,6 +963,11 @@ function M:Init()
 			end
 			-- 목표 · 게임 보고 위치가 도착한 뒤에 다시 그린다
 			C_Timer.After(6.5, function() M.miniDirty = true; M.poiDirty = true; M:Queue() end)
+		end
+		if event == "GOSSIP_SHOW" or event == "QUEST_GREETING" or event == "QUEST_DETAIL" then
+			-- 대화창 목록이 다 채워진 뒤에 확인
+			C_Timer.After(0.2, function() pcall(M.CheckOffered, M, event) end)
+			return
 		end
 		if event == "QUEST_DATA_LOAD_RESULT" then
 			-- 이름이 도착하면 열린 툴팁만 다시
