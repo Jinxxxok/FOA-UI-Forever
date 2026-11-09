@@ -146,17 +146,17 @@ end
 -- 갱신
 -------------------------------------------------------------------------------
 -- 퀘스트 포기: 블리자드 확인 창을 띄운다 (바로 지우지 않는다)
--- 퀘스트 보기: 퀘스트 상세 창(팝업)으로. 지도 속 퀘스트 목록을 애드온 코드로 열면 지도 핀이 오염돼서
---  전투 중 막힘(SetPassThroughButtons)이 생기므로, 팝업이 없으면 지도만 깨끗하게 열고 그 퀘스트를 추적으로
+-- 퀘스트 보기: 지도 속 퀘스트 상세로 (원래 방식)
+--  애드온 코드로 여는 거라 지도 표시가 FOA 로 찍혀서, 나중에 전투 중 지도를 열면 블리자드가
+--  지도 표시의 "오른쪽 클릭 통과" 설정(SetPassThroughButtons)을 못 하는 일이 생긴다.
+--  화면 · 기능엔 영향이 거의 없어서(표시 위에서 오른쪽 클릭으로 지도 축소가 안 될 뿐) 채팅에는 안 띄운다.
 function M:ShowQuest(id)
-	local idx = C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(id)
-	if idx and QuestLogPopupDetailFrame_Show and not InCombatLockdown() then
-		local ok = pcall(QuestLogPopupDetailFrame_Show, idx)
+	if QuestMapFrame_OpenToQuestDetails then
+		local ok = pcall(QuestMapFrame_OpenToQuestDetails, id)
 		if ok then return end
 	end
-	if C_SuperTrack and C_SuperTrack.SetSuperTrackedQuestID then pcall(C_SuperTrack.SetSuperTrackedQuestID, id) end
-	local mapID = (GetQuestUiMapID and GetQuestUiMapID(id)) or C_Map.GetBestMapForUnit("player")
-	if mapID and mapID ~= 0 then Ink:OpenMap(mapID) end
+	local idx = C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(id)
+	if idx and QuestLogPopupDetailFrame_Show then pcall(QuestLogPopupDetailFrame_Show, idx) end
 end
 
 function M:AbandonQuest(id)

@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.58.1"
+Ink.version = "0.58.2"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1198,6 +1198,8 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 			-- FOA 가 숨겨 둔 블리자드 행동단축바를 블리자드가 전투 중에 다시 배치하려다 막힌 것은
 			-- 화면에 영향이 없으니 채팅에는 안 띄운다 (/foa log 에는 남김)
 			local fn = tostring(arg2)
+			-- 지도 표시(핀)의 "오른쪽 클릭 통과" 설정이 막힌 것도 화면에 영향이 없다 (퀘스트 상세를 FOA 목록에서 연 뒤 전투 중 지도를 열 때)
+			if fn:find("SetPassThroughButtons") or fn:find("SetPropagateMouseClicks") then return end
 			if fn:find("^MultiBar") or fn:find("^MainActionBar") or fn:find("^MainMenuBar[:%.]") or fn:find("^StanceBar") or fn:find("^PetActionBar")
 				or fn:find("^ActionButton%d") or fn:find("^StanceButton") or fn:find("^PetActionButton") or fn:find("^MultiCastActionBar") then
 				return
