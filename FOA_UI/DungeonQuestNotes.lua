@@ -127,6 +127,9 @@ ns.DUNGEON_QUEST_PRE = {
 	[95646] = { 276, 277, 275 },
 	-- 발굴 현장: 저습지 · 고원 가죽 (제임스 할로란): 같은 NPC 의 Young Crocolisk Skins 를 먼저
 	[98815] = { 484 },
+	-- 로데론의 폐허 · The Wrath of Rath'mael: Rear Guard Patrol(99156) 다음 / The New Plague: A Recipe for Death(451) 다음
+	[92422] = { 99156 },
+	[95216] = { 451 },
 }
 for _, list in pairs(ns.DUNGEON_QUESTS or {}) do
 	for _, q in ipairs(list) do

@@ -2863,6 +2863,10 @@ local function Chain(id, out, seen, depth)
 	end
 end
 
+-- 연결 퀘스트: 다른 NPC 에게 안내만 하는 퀘스트 (선택 · 안 해도 다음 퀘스트를 받을 수 있다)
+local function IsCrumb(id) return ns.DUNGEON_BREADCRUMB and ns.DUNGEON_BREADCRUMB[id] end
+M.IsCrumb = IsCrumb
+
 -- 내가 받을 수 있는 퀘스트 목록 + 상태
 function M:DungeonQuestList(key)
 	local inst = DQ_INST[key or ""]
@@ -2879,14 +2883,35 @@ function M:DungeonQuestList(key)
 		if (q[3] == 0 or q[3] == facN) and okCls and q[12] ~= 1 then
 			local e = { q = q, id = q[1], lvl = q[2] }
 			local miss = 0
-			for _, p in ipairs(q[8]) do if not QDone(p) then miss = miss + 1 end end
+			-- 연결 퀘스트(선택)는 선행으로 세지 않는다
+			for _, p in ipairs(q[8]) do if not QDone(p) and not IsCrumb(p) then miss = miss + 1 end end
+			local crumb = IsCrumb(q[1])
 			if QDone(q[1]) then e.state, e.order = "done", 5
 			elseif QInLog(q[1]) then e.state, e.order = "log", 1
+			elseif crumb then e.state, e.order = "crumb", 3.5
 			elseif miss > 0 then e.state, e.order, e.miss = "pre", 4, miss
 			elseif q[2] > lvl then e.state, e.order = "soon", 3
 			else e.state, e.order = "ok", 2 end
+			e.crumb = crumb
 			out[#out + 1] = e
 		end
+	end
+	-- 연결 퀘스트: 다음 퀘스트를 찾아 두고, 이미 끝냈거나 다음 퀘스트를 받았으면 목록에서 뺀다
+	do
+		local keep = {}
+		for _, e in ipairs(out) do
+			if e.crumb then
+				for _, q2 in ipairs(list) do
+					for _, p in ipairs(q2[8]) do if p == e.id then e.nextQ = q2[1] end end
+				end
+				local nx = e.nextQ
+				local gone = e.state == "done" or (nx and (QDone(nx) or QInLog(nx)))
+				if not gone then keep[#keep + 1] = e end
+			else
+				keep[#keep + 1] = e
+			end
+		end
+		out = keep
 	end
 	-- 같은 퀘스트 묶기: 이름이 같은 것(단계 · 아이템별로 나뉜 것)과 직접 묶은 것(DUNGEON_QUEST_GROUP)은 한 줄로
 	--  보여 줄 대표: 진행 중 > 받을 수 있음 > 곧 > 선행 필요 > 완료 순, 같으면 번호가 작은 것
@@ -2942,7 +2967,7 @@ function M:QuestsNearBoss(key)
 end
 
 local DQ_STATE = {
-	log = { "진행 중", C.accent }, ok = { "받을 수 있음", C.green }, soon = { "", C.orange },
+	log = { "진행 중", C.accent }, ok = { "받을 수 있음", C.green }, crumb = { "선택", C.soft }, soon = { "", C.orange },
 	pre = { "", C.muted }, done = { "완료", C.dim },
 }
 
@@ -3164,6 +3189,7 @@ function M:QuestTip(r)
 				local npc = dq and NpcOf(dq[7]) or (qr and NpcOf(qr[14]))
 				local z = ZoneName(dq and dq[4] or (qr and qr[2] and qr[2][1]))
 				if npc or z then where = "  |cff8E939B" .. (npc or "") .. ((npc and z) and " · " or "") .. (z or "") .. "|r" end
+				if IsCrumb(pid) then where = where .. "  |cff8E939B(연결 · 선택)|r" end
 			end
 			tt:AddLine(mark .. (QTitle(pid) or ("#" .. pid)) .. where, done and 0.6 or 0.92, done and 0.62 or 0.92, done and 0.65 or 0.9)
 		end
@@ -3243,8 +3269,8 @@ function M:PaintQuests()
 	local LC = Ink.modules.Quest and Ink.modules.Quest.LevelColor
 	local y = 0
 	-- 상태별 묶음 제목: 진행 중 · 받을 수 있음 · 아직 못 받음 · 완료
-	local GROUP = { log = "진행 중", ok = "받을 수 있음", soon = "아직 못 받음", pre = "아직 못 받음", done = "완료" }
-	local GCOL = { log = C.accent, ok = C.green, soon = C.muted, pre = C.muted, done = C.dim }
+	local GROUP = { log = "진행 중", ok = "받을 수 있음", crumb = "연결 퀘스트 · 선택 (던전 밖 전달)", soon = "아직 못 받음", pre = "아직 못 받음", done = "완료" }
+	local GCOL = { log = C.accent, ok = C.green, crumb = C.soft, soon = C.muted, pre = C.muted, done = C.dim }
 	local gcount = {}
 	for _, e in ipairs(list) do gcount[GROUP[e.state]] = (gcount[GROUP[e.state]] or 0) + 1 end
 	p.heads = p.heads or {}
@@ -3310,7 +3336,14 @@ function M:PaintQuests()
 				if bb.npc == nt[1] then sub = sub .. "  ·  " .. (BossName(bb) or bb.name) .. " 근처" break end
 			end
 		end
-		if #q[8] > 0 then sub = sub .. "  ·  선행 " .. #q[8] end
+		local nPre = 0
+		for _, pid in ipairs(q[8]) do if not IsCrumb(pid) then nPre = nPre + 1 end end
+		if nPre > 0 then sub = sub .. "  ·  선행 " .. nPre end
+		if e.crumb and e.nextQ then
+			-- 연결 퀘스트: 어느 던전 퀘스트로 안내하는지
+			local nt = QTitle(e.nextQ)
+			sub = sub .. "  ·  → " .. (nt or "다음 퀘스트") .. " 안내"
+		end
 		if (e.variants or 1) > 1 then sub = sub .. "  ·  " .. e.variants .. "개 묶음" end
 		r.sub:SetText(sub)
 		local st = DQ_STATE[e.state]

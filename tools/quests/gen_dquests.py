@@ -218,4 +218,8 @@ with open(sys.argv[3], "w", encoding="utf-8") as f:
                     ",".join(map(str, r[7])), ",".join(map(str, r[8])), ",".join(map(str, r[9])), r[10], r[11], r[12], r[13], r[14]))
         f.write("\t},\n")
     f.write("}\n")
+    # 다른 퀘스트로 안내만 하는 연결 퀘스트 (선택: 안 해도 다음 퀘스트를 받을 수 있다)
+    crumbs = sorted(q for q, rs in all_q.items() if any(b.get("isBreadcrumb") for _, b in rs) and any(q in v for v in [set(r[0] for r in out[i].values()) for i in out]))
+    f.write("-- 연결 퀘스트 (다른 NPC 에게 안내만 함 · 선택): 선행 목록에 있어도 안 해도 된다\n")
+    f.write("ns.DUNGEON_BREADCRUMB = {%s}\n" % ",".join("[%d]=true" % q for q in crumbs))
 print(len(out), "instances", n, "quests", stats)
