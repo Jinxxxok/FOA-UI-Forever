@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.58.2"
+Ink.version = "0.58.3"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -878,6 +878,76 @@ function Ink:Anchor(w, h)
 end
 
 -- 블리자드 프레임을 앵커에 맞춘다 (스케일 차이를 보정해서 크기도 맞춤)
+-- 확인 창 (FOA 모양): 블리자드 StaticPopup 을 애드온 코드로 띄우면 그 창이 오염돼서
+--  나중에 같은 창을 쓰는 블리자드 확인(은행 칸 사기 등)이 "FOA_UI 가 차단되었습니다"로 막힌다 → 우리 창을 따로 쓴다
+function Ink:Confirm(title, sub, okText, onOK, danger)
+	local a = self.confirmBox
+	if not a then
+		a = CreateFrame("Frame", "FOAConfirm", Ink.root)
+		a:SetSize(340, 96)
+		a:SetFrameStrata("DIALOG")
+		a:EnableMouse(true)
+		a:Hide()
+		a.bg = Ink:Round(a, "BACKGROUND", false, false)
+		a.bg:SetAllPoints()
+		a.bg:SetVertexColor(0.04, 0.045, 0.06, 0.97)
+		a.bd = Ink:Round(a, "BORDER", false, true)
+		a.bd:SetAllPoints()
+		a.title = Ink:Text(a, Ink.font.semi, 13, Ink.c.text, "LEFT")
+		a.title:SetPoint("TOPLEFT", 16, -14)
+		a.title:SetWidth(308)
+		a.sub = Ink:Text(a, Ink.font.sans, 11, Ink.c.muted, "LEFT")
+		a.sub:SetPoint("TOPLEFT", a.title, "BOTTOMLEFT", 0, -5)
+		a.sub:SetWidth(308)
+		local function btn(primary)
+			local b = CreateFrame("Button", nil, a)
+			b:SetSize(96, 26)
+			b.bg = Ink:Round(b, "BACKGROUND", true, false)
+			b.bg:SetAllPoints()
+			b.t = Ink:Text(b, Ink.font.semi, 12, Ink.c.soft, "CENTER")
+			b.t:SetPoint("CENTER")
+			b.primary = primary
+			b.paint = function(hot)
+				if b.primary then
+					local c = a.danger and Ink.c.red or Ink.c.accent
+					b.bg:SetVertexColor(c[1], c[2], c[3], hot and 1 or 0.88)
+					b.t:SetTextColor(0.067, 0.075, 0.094)
+				else
+					b.bg:SetVertexColor(1, 1, 1, hot and 0.1 or 0.05)
+				end
+			end
+			b:SetScript("OnEnter", function() b.paint(true) end)
+			b:SetScript("OnLeave", function() b.paint(false) end)
+			return b
+		end
+		a.yes = btn(true)
+		a.yes:SetPoint("BOTTOMRIGHT", -12, 12)
+		a.yes:SetScript("OnClick", function() a:Hide(); if a.onOK then pcall(a.onOK) end end)
+		a.no = btn(false)
+		a.no:SetPoint("RIGHT", a.yes, "LEFT", -6, 0)
+		a.no.t:SetText("취소")
+		a.no:SetScript("OnClick", function() a:Hide() end)
+		-- 30초 동안 답이 없으면 닫는다 (키보드는 잡지 않는다: 전투 중 이동 키를 먹지 않게)
+		a:SetScript("OnShow", function(self)
+			if self.timer then self.timer:Cancel() end
+			self.timer = C_Timer.NewTimer and C_Timer.NewTimer(30, function() self:Hide() end)
+		end)
+		self.confirmBox = a
+	end
+	a.danger, a.onOK = danger, onOK
+	a.title:SetText(title or "")
+	a.sub:SetText(sub or "")
+	a.yes.t:SetText(okText or "확인")
+	local c = danger and Ink.c.red or Ink.c.accent
+	a.bd:SetVertexColor(c[1], c[2], c[3], 0.5)
+	a.yes.paint(false); a.no.paint(false)
+	a:SetHeight(math.max(96, 70 + (a.sub:GetStringHeight() or 14)))
+	a:ClearAllPoints()
+	a:SetPoint("TOP", Ink.root, "TOP", 0, -180)
+	a:Show()
+	return a
+end
+
 -- 세계 지도 열기 (원하는 지역으로)
 --  애드온 코드에서 WorldMapFrame:SetMapID · OpenWorldMap · 퀘스트 상세 열기를 바로 부르면 그때 만들어지는
 --  지도 표시(핀)가 전부 FOA 로 오염돼서, 나중에 전투 중 지도가 핀을 다시 쓸 때

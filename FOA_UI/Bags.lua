@@ -714,8 +714,6 @@ function M:Build()
 	f:SetScript("OnHide", function()
 		if PlaySound and SOUNDKIT then PlaySound(SOUNDKIT.IG_BACKPACK_CLOSE) end
 		f.search:ClearFocus()
-		-- 블리자드 쪽 "열림" 상태도 같이 닫아서 다음 B 키가 한 번에 열리게
-		if M:BlizzardOpen() then CloseAllBags() end
 		if C_NewItems and C_NewItems.ClearAll then pcall(C_NewItems.ClearAll) end
 	end)
 
@@ -1056,28 +1054,31 @@ function M:BlizzardOpen()
 	return false
 end
 
--- user = B 키 / 가방 버튼처럼 사람이 직접 연 / 닫은 것 (Toggle·Open)
--- 그 밖의 "모든 가방 닫기"(초보자 튜토리얼이 장비 착용 직후 부르는 것 등)는
--- 장비를 입거나 아이템을 옮긴 직후 1초 동안은 무시한다.
-function M:Sync(user)
-	if user then self.syncUser = true end
+-- 블리자드 가방 함수가 불린 뜻대로 FOA 가방을 열고 닫는다 (블리자드 가방 창 상태는 따라가지 않음)
+--  toggle = B 키 · 가방 버튼 / open = 상점 · 은행 · 우편함이 여는 것 / close = 그 창들이 닫을 때
+--  한 프레임에 여러 개가 불리면(ToggleAllBags 안에서 OpenAllBags 를 부르는 등) toggle > open > close 로 하나만.
+--  예전엔 블리자드 쪽 상태를 맞추려고 FOA 코드에서 OpenAllBags · CloseAllBags 를 불렀는데,
+--  그러면 블리자드 가방 · 은행 코드가 FOA 로 오염돼서 은행 칸 사기(PurchaseBankTab)가 막혔다.
+local INTENT = { close = 1, open = 2, toggle = 3 }
+function M:Sync(kind)
+	kind = kind or "close"
+	if not self.intent or INTENT[kind] > INTENT[self.intent] then self.intent = kind end
 	if self.syncing then return end
 	self.syncing = true
 	C_Timer.After(0, function()
 		self.syncing = nil
-		local byUser = self.syncUser
-		self.syncUser = nil
-		local want = self:BlizzardOpen()
+		local k = self.intent
+		self.intent = nil
 		local shown = self.frame:IsShown()
-		if want == shown then return end
-		if not want and shown and not byUser and GetTime() < (self.equipGuard or 0) then
-			-- 가방은 그대로 두고, 블리자드 쪽 "열림" 상태도 되돌려 다음 B 키가 맞게 동작하게
-			self.restoring = true
-			pcall(OpenAllBags)
-			self.restoring = nil
-			return
+		if k == "toggle" then
+			self.frame:SetShown(not shown)
+		elseif k == "open" then
+			if not shown then self.frame:Show() end
+		elseif shown then
+			-- 장비를 입거나 아이템을 옮긴 직후 1초 동안의 "모든 가방 닫기"(초보자 튜토리얼 등)는 무시
+			if GetTime() < (self.equipGuard or 0) then return end
+			self.frame:Hide()
 		end
-		self.frame:SetShown(want)
 	end)
 end
 
@@ -1113,11 +1114,14 @@ function M:Init()
 	for i = 1, 13 do
 		if _G["ContainerFrame" .. i] then Ink:Disable(_G["ContainerFrame" .. i], true) end
 	end
-	for _, fn in ipairs({ "ToggleAllBags", "ToggleBackpack", "ToggleBag", "OpenAllBags", "OpenBackpack", "OpenBag" }) do
-		if _G[fn] then hooksecurefunc(fn, function() if not M.restoring then M:Sync(true) end end) end
+	for _, fn in ipairs({ "ToggleAllBags", "ToggleBackpack", "ToggleBag" }) do
+		if _G[fn] then hooksecurefunc(fn, function() M:Sync("toggle") end) end
+	end
+	for _, fn in ipairs({ "OpenAllBags", "OpenBackpack", "OpenBag" }) do
+		if _G[fn] then hooksecurefunc(fn, function() M:Sync("open") end) end
 	end
 	for _, fn in ipairs({ "CloseAllBags", "CloseBackpack", "CloseBag" }) do
-		if _G[fn] then hooksecurefunc(fn, function() M:Sync() end) end
+		if _G[fn] then hooksecurefunc(fn, function() M:Sync("close") end) end
 	end
 
 	local e = CreateFrame("Frame")

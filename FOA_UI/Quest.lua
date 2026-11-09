@@ -159,28 +159,31 @@ function M:ShowQuest(id)
 	if idx and QuestLogPopupDetailFrame_Show then pcall(QuestLogPopupDetailFrame_Show, idx) end
 end
 
+-- 퀘스트 포기: FOA 확인 창으로 (블리자드 확인 창을 애드온이 띄우면 그 창이 오염돼서
+--  은행 칸 사기 같은 다른 블리자드 확인이 "FOA_UI 가 차단되었습니다"로 막혔다)
 function M:AbandonQuest(id)
 	if type(id) ~= "number" then return end
-	if QuestMapQuestOptions_AbandonQuest and pcall(QuestMapQuestOptions_AbandonQuest, id) then return end
 	local title = C_QuestLog.GetTitleForQuestID(id) or ""
+	local sub = "포기하면 진행 상황이 사라져요."
 	if C_QuestLog.SetSelectedQuest and C_QuestLog.SetAbandonQuest then
 		C_QuestLog.SetSelectedQuest(id)
 		C_QuestLog.SetAbandonQuest()
 		local items = C_QuestLog.GetAbandonQuestItems and C_QuestLog.GetAbandonQuestItems()
-		if items and StaticPopupDialogs and StaticPopupDialogs["ABANDON_QUEST_WITH_ITEMS"] then
-			StaticPopup_Hide("ABANDON_QUEST")
-			StaticPopup_Show("ABANDON_QUEST_WITH_ITEMS", title, items)
-		else
-			if StaticPopup_Hide then StaticPopup_Hide("ABANDON_QUEST_WITH_ITEMS") end
-			StaticPopup_Show("ABANDON_QUEST", title)
-		end
-	elseif SelectQuestLogEntry and SetAbandonQuest then
-		local idx = C_QuestLog.GetLogIndexForQuestID(id)
-		if not idx then return end
-		SelectQuestLogEntry(idx)
-		SetAbandonQuest()
-		StaticPopup_Show("ABANDON_QUEST", (GetAbandonQuestName and GetAbandonQuestName()) or title)
+		if type(items) == "string" and items ~= "" then sub = "퀘스트 아이템도 함께 사라져요: " .. items end
 	end
+	Ink:Confirm("'" .. title .. "' 퀘스트를 포기할까요?", sub, "포기하기", function()
+		if C_QuestLog.SetSelectedQuest and C_QuestLog.SetAbandonQuest and C_QuestLog.AbandonQuest then
+			C_QuestLog.SetSelectedQuest(id)
+			C_QuestLog.SetAbandonQuest()
+			C_QuestLog.AbandonQuest()
+		elseif SelectQuestLogEntry and SetAbandonQuest and AbandonQuest then
+			local idx = C_QuestLog.GetLogIndexForQuestID(id)
+			if not idx then return end
+			SelectQuestLogEntry(idx)
+			SetAbandonQuest()
+			AbandonQuest()
+		end
+	end, true)
 end
 
 -- 퀘스트 레벨 색 (이름표 레벨과 같은 색): 빨강 +5 · 주황 +3 · 노랑 ±2 · 초록 · 회색
