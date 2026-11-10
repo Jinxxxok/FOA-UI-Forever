@@ -9,12 +9,17 @@
 
 ## 설치
 
-1. [Releases](https://github.com/Jinxxxok/foa-ui-forever/releases) 에서 최신 `FOA_UI_Forever-vX.X.X.zip` 을 받습니다.
+### WowUp으로 설치 (자동 업데이트 · 추천)
+1. WowUp 위쪽에서 게임 버전을 **World of Warcraft Forever** 로 고릅니다.
+2. **Get Addons(애드온 받기)** 에서 `FOA` 를 검색해 설치합니다.
+   (검색에 아직 안 나오면 **Install from URL** 에 `https://github.com/Jinxxxok/FOA-UI-Forever` 를 넣어도 똑같이 설치됩니다.)
+3. 새 버전이 올라오면 WowUp 에 업데이트가 뜹니다. **업데이트 → 게임 접속** 하면 끝입니다.
+
+### 직접 설치
+1. [Releases](https://github.com/Jinxxxok/FOA-UI-Forever/releases) 에서 최신 `FOA_UI-forever-vX.X.X.zip` 을 받습니다.
 2. 압축을 풀어 나온 `FOA_UI` 폴더를 `World of Warcraft/_forever_/Interface/AddOns/` 에 넣습니다.
    (본섭의 `_retail_` 폴더가 아니라 **`_forever_`** 폴더입니다.)
 3. 캐릭터 선택 화면의 **애드온** 목록에서 드롭다운을 **모든 캐릭터** 로 두고 FOA UI 를 켭니다.
-
-WowUp 이 포에버 클라이언트를 지원하면 **Install from URL** 에 `https://github.com/Jinxxxok/foa-ui-forever` 를 넣어 설치할 수 있습니다.
 
 이미지(아이콘 / 글꼴)가 바뀐 버전으로 업데이트한 뒤에는 **게임을 완전히 껐다 켜야** 합니다.
 

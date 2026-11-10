@@ -36,8 +36,15 @@ jobs:
       - name: Build zip
         if: steps.ver.outputs.skip == 'false'
         run: |
-          FILE="FOA_UI_Forever-${TAG}.zip"
-          zip -rq "$FILE" FOA_UI -x "*.DS_Store" "*.bak"
+          # WowUp Hub 이 포에버용으로 알아보게: 인터페이스 16001 만 + 포에버 TOC(_Forever) + release.json(flavor forever)
+          FILE="FOA_UI-forever-${TAG}.zip"
+          rm -rf build && mkdir build && cp -r FOA_UI build/
+          sed -i 's/^## Interface:.*/## Interface: 16001/' build/FOA_UI/FOA_UI.toc
+          cp build/FOA_UI/FOA_UI.toc build/FOA_UI/FOA_UI_Forever.toc
+          (cd build && zip -rq "../$FILE" FOA_UI -x "*.DS_Store" "*.bak")
+          cat > release.json <<EOF2
+          {"releases":[{"name":"FOA UI (Forever)","version":"${TAG}","filename":"${FILE}","nolib":false,"metadata":[{"flavor":"forever","interface":16001}]}]}
+          EOF2
           echo "FILE=$FILE" >> "$GITHUB_ENV"
 
       - name: Publish release
@@ -49,3 +56,4 @@ jobs:
           name: FOA UI (Forever) ${{ env.TAG }}
           files: |
             ${{ env.FILE }}
+            release.json
