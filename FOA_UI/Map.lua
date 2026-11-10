@@ -454,6 +454,7 @@ function M:Refresh()
 	local cv = Canvas()
 	if not (wm and cv and wm:IsShown() and self.layer) then return end
 	local mapID = wm:GetMapID()
+	if self.zoneLv then self.zoneLv.hoverID = nil; pcall(self.PaintZoneLevel, self) end
 	local W, H = cv:GetWidth(), cv:GetHeight()
 	local scale = (wm.GetCanvasScale and wm:GetCanvasScale()) or 1
 	local pinScale = math.max(0.45, math.min(1.4, 1 / scale))
@@ -1634,6 +1635,129 @@ function M:ApplyScale()
 	if math.abs((wm:GetScale() or 1) - want) > 0.001 then wm:SetScale(want) end
 end
 
+-------------------------------------------------------------------------------
+-- 지역 적정 레벨 (지도 왼쪽 위 작은 표)
+--  지역 지도: 그 지역 레벨 · 대륙 지도: 마우스를 올린 지역 이름과 레벨
+--  레벨은 게임 자료(C_Map.GetMapLevels)가 있으면 그것, 없으면 클래식 지역 레벨 표 (포에버도 같은 시작 레벨)
+--  내 레벨과 비교해서 색: 높으면 주황 · 빨강, 알맞으면 노랑, 낮으면 초록 · 회색 (퀘스트 난이도 색과 같음)
+-------------------------------------------------------------------------------
+local ZONE_LV = {
+	[1411] = { 1, 10 }, [1412] = { 1, 10 }, [1413] = { 10, 25 }, [1416] = { 30, 40 }, [1417] = { 30, 40 },
+	[1418] = { 35, 45 }, [1419] = { 45, 55 }, [1420] = { 1, 10 }, [1421] = { 10, 20 }, [1422] = { 51, 58 },
+	[1423] = { 53, 60 }, [1424] = { 20, 30 }, [1425] = { 40, 50 }, [1426] = { 1, 10 }, [1427] = { 43, 50 },
+	[1428] = { 50, 58 }, [1429] = { 1, 10 }, [1430] = { 55, 60 }, [1431] = { 18, 30 }, [1432] = { 10, 20 },
+	[1433] = { 15, 25 }, [1434] = { 30, 45 }, [1435] = { 35, 45 }, [1436] = { 10, 20 }, [1437] = { 20, 30 },
+	[1438] = { 1, 10 }, [1439] = { 10, 20 }, [1440] = { 18, 30 }, [1441] = { 25, 35 }, [1442] = { 15, 27 },
+	[1443] = { 30, 40 }, [1444] = { 40, 50 }, [1445] = { 35, 45 }, [1446] = { 40, 50 }, [1447] = { 45, 55 },
+	[1448] = { 48, 55 }, [1449] = { 48, 55 }, [1451] = { 55, 60 }, [1452] = { 55, 60 },
+}
+-- 포에버 새 지역 (영문 이름으로 · 게임 자료가 있으면 그게 우선)
+local ZONE_LV_NAME = {
+	["Zephras Isle"] = { 1, 12 }, ["The Riverglades"] = { 35, 45 }, ["Riverglades"] = { 35, 45 },
+	["Shen'dralas"] = { 40, 50 }, ["Mount Hyjal"] = { 60, 60 },
+}
+local function ZoneLevels(mapID)
+	if not mapID then return end
+	if C_Map.GetMapLevels then
+		local ok, lo, hi = pcall(C_Map.GetMapLevels, mapID)
+		lo, hi = ok and plain(lo), ok and plain(hi)
+		if type(lo) == "number" and type(hi) == "number" and lo > 0 and hi > 0 then return lo, hi end
+	end
+	local z = ZONE_LV[mapID]
+	if z then return z[1], z[2] end
+	local info = C_Map.GetMapInfo and C_Map.GetMapInfo(mapID)
+	z = info and ZONE_LV_NAME[info.name or ""]
+	if z then return z[1], z[2] end
+end
+M.ZoneLevels = ZoneLevels
+
+local function LevelLook(lo, hi)
+	local me = UnitLevel("player") or 1
+	local function qc(l)
+		local c = GetQuestDifficultyColor and GetQuestDifficultyColor(l)
+		return c and { c.r, c.g, c.b } or { 1, 1, 1 }
+	end
+	if me < lo then return qc(lo), (lo - me >= 5) and "아직 위험해요" or "조금 높아요" end
+	if me > hi then return qc(hi), "낮은 지역" end
+	return { 1, 0.82, 0.3 }, "지금 알맞아요"
+end
+
+function M:BuildZoneLevel()
+	local wm = WorldMapFrame
+	local sc = wm and wm.ScrollContainer
+	if not sc or self.zoneLv then return end
+	local f = CreateFrame("Frame", nil, sc)
+	f:SetHeight(26)
+	f:SetPoint("TOPLEFT", sc, "TOPLEFT", 8, -8)
+	f:SetFrameLevel(sc:GetFrameLevel() + 3000)
+	f.bg = Ink:Round(f, "BACKGROUND", true, false)
+	f.bg:SetAllPoints()
+	f.bg:SetVertexColor(0.035, 0.04, 0.052, 0.88)
+	f.bd = Ink:Round(f, "BORDER", true, true)
+	f.bd:SetAllPoints()
+	f.bd:SetVertexColor(1, 1, 1, 0.1)
+	f.bar = f:CreateTexture(nil, "ARTWORK")
+	f.bar:SetSize(3, 14)
+	f.bar:SetPoint("LEFT", 8, 0)
+	f.zone = Ink:Text(f, F.semi, 11, C.text, "LEFT")
+	f.zone:SetPoint("LEFT", f.bar, "RIGHT", 7, 0)
+	f.lbl = Ink:Text(f, F.sans, 10, C.muted, "LEFT")
+	f.num = Ink:Text(f, F.latinB or F.bold, 12, C.text, "LEFT")
+	f.note = Ink:Text(f, F.sans, 10, C.muted, "LEFT")
+	f:Hide()
+	-- 대륙 지도: 마우스 아래 지역 (0.1초마다)
+	local t = 0
+	f.hover = CreateFrame("Frame", nil, sc)
+	f.hover:SetScript("OnUpdate", function(_, el)
+		t = t + el
+		if t < 0.1 then return end
+		t = 0
+		if not f.continent then return end
+		local x, y
+		if sc.GetNormalizedCursorPosition then x, y = sc:GetNormalizedCursorPosition() end
+		local id
+		if x and y and x >= 0 and x <= 1 and y >= 0 and y <= 1 and C_Map.GetMapInfoAtPosition then
+			local ok, info = pcall(C_Map.GetMapInfoAtPosition, wm:GetMapID(), x, y)
+			id = ok and info and info.mapID or nil
+		end
+		if id ~= f.hoverID then f.hoverID = id; M:PaintZoneLevel(id) end
+	end)
+	self.zoneLv = f
+end
+
+-- id: 보여 줄 지역 (없으면 지금 지도)
+function M:PaintZoneLevel(id)
+	local f = self.zoneLv
+	local wm = WorldMapFrame
+	if not (f and wm and wm:IsShown()) then return end
+	if Ink.db.mapZoneLevel == false then f:Hide() return end
+	local mapID = wm:GetMapID()
+	local info = C_Map.GetMapInfo and C_Map.GetMapInfo(mapID)
+	local mt = info and info.mapType
+	f.continent = mt and Enum.UIMapType and (mt == Enum.UIMapType.Continent or mt == Enum.UIMapType.World) or false
+	local show = id or (not f.continent and mapID)
+	local lo, hi = ZoneLevels(show)
+	if not lo then f:Hide() return end
+	local col, note = LevelLook(lo, hi)
+	f.bar:SetColorTexture(col[1], col[2], col[3], 1)
+	local zi = f.continent and C_Map.GetMapInfo(show)
+	f.zone:SetText(zi and zi.name or "")
+	f.zone:SetShown(zi and true or false)
+	f.lbl:ClearAllPoints()
+	if zi then f.lbl:SetPoint("LEFT", f.zone, "RIGHT", 8, 0) else f.lbl:SetPoint("LEFT", f.bar, "RIGHT", 7, 0) end
+	f.lbl:SetText("적정 레벨")
+	f.num:ClearAllPoints()
+	f.num:SetPoint("LEFT", f.lbl, "RIGHT", 6, 0)
+	f.num:SetText(lo == hi and tostring(lo) or (lo .. " – " .. hi))
+	f.num:SetTextColor(col[1], col[2], col[3])
+	f.note:ClearAllPoints()
+	f.note:SetPoint("LEFT", f.num, "RIGHT", 8, 0)
+	f.note:SetText(note)
+	local w = 8 + 3 + 7 + (zi and (f.zone:GetStringWidth() + 8) or 0) + f.lbl:GetStringWidth() + 6 + f.num:GetStringWidth() + 8 + f.note:GetStringWidth() + 12
+	f:SetWidth(math.floor(w + 0.5))
+	f:Show()
+end
+
 function M:Hook()
 	local wm = WorldMapFrame
 	if not wm or self.hooked or not Canvas() then return end
@@ -1644,6 +1768,7 @@ function M:Hook()
 	self.layer:SetAllPoints()
 	self.layer:SetFrameLevel(Canvas():GetFrameLevel() + 2500)
 	self:BuildBooks()
+	pcall(self.BuildZoneLevel, self)
 	wm:HookScript("OnShow", function() C_Timer.After(0, function() M:Refresh() end) end)
 	if wm.OnMapChanged then hooksecurefunc(wm, "OnMapChanged", function() M:Refresh() end) end
 	if wm.OnCanvasScaleChanged then hooksecurefunc(wm, "OnCanvasScaleChanged", function() M:Refresh() end) end
