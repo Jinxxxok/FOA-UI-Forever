@@ -1184,11 +1184,29 @@ function M:WorldSourceText(it)
 	return t
 end
 
+-- 이름을 아직 못 받은 퀘스트: 받는 중이면 "불러오는 중", 서버에 자료가 없으면 번호
+M.questFail = {}
+function M.QuestFallback(qid)
+	return M.questFail[qid] and ("퀘스트 #" .. qid) or "퀘스트 이름 불러오는 중…"
+end
+
+-- 퀘스트 이름: 게임에 물어보고(처음엔 서버에서 늦게 옴) 받은 이름은 저장해 둔다 (다음 접속부터 바로)
 local function QuestTitleOf(qid)
+	if not qid then return end
+	local db = Ink.db
+	local loc = GetLocale and GetLocale() or "?"
+	if db then
+		db.questTitles = db.questTitles or {}
+		if db.questTitles.loc ~= loc then db.questTitles = { loc = loc } end
+	end
 	local Q = Ink.modules.QuestMap
 	local t = (Q and Q.QuestTitle and Q:QuestTitle(qid)) or (C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(qid))
-	if not t and C_QuestLog.RequestLoadQuestByID then pcall(C_QuestLog.RequestLoadQuestByID, qid) end
-	return t
+	if type(t) == "string" and t ~= "" then
+		if db then db.questTitles[qid] = t end
+		return t
+	end
+	if C_QuestLog.RequestLoadQuestByID then pcall(C_QuestLog.RequestLoadQuestByID, qid) end
+	return db and db.questTitles[qid] or nil
 end
 
 -- 던전 퀘스트 → 던전 이름 (날개가 여러 개인 곳은 공통 이름)
@@ -1209,7 +1227,7 @@ function M:QuestSourceText(it)
 	local info = it.qmap and it.qmap > 0 and C_Map.GetMapInfo and C_Map.GetMapInfo(it.qmap)
 	local inLog = C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(it.quest)
 	local dn = it.dq and self:DQName(it.dq)
-	return (it.dq and (dn and ("|cff" .. DQ_ORANGE .. dn .. "|r 던전 퀘스트 · ") or "던전 퀘스트 · ") or "퀘스트 · ") .. (QuestTitleOf(it.quest) or "보상") .. (inLog and " (진행 중)" or "") .. (info and ("  ·  " .. info.name) or "")
+	return (it.dq and (dn and ("|cff" .. DQ_ORANGE .. dn .. "|r 던전 퀘스트 · ") or "던전 퀘스트 · ") or "퀘스트 · ") .. (QuestTitleOf(it.quest) or M.QuestFallback(it.quest)) .. (inLog and " (진행 중)" or "") .. (info and ("  ·  " .. info.name) or "")
 end
 
 -- BIS 툴팁에 붙이는 퀘스트 정보
@@ -1222,7 +1240,7 @@ function M:QuestRewardTooltip(it, tt)
 		local dn = self:DQName(it.dq) or "던전"
 		tt:AddLine((M.TipIcon and M.TipIcon("Door", { 1, 0.70, 0.28 }) .. " " or "") .. "|cff" .. DQ_ORANGE .. dn .. "|r  |cffD9DBE0던전 퀘스트|r", 1, 1, 1)
 	end
-	Ink.TipLine(tt, (QuestTitleOf(it.quest) or ("퀘스트 #" .. it.quest)) .. (it.qlvl and it.qlvl > 0 and ("  ·  " .. it.qlvl .. "레벨부터") or ""), 0.96, 0.95, 0.9)
+	Ink.TipLine(tt, (QuestTitleOf(it.quest) or M.QuestFallback(it.quest)) .. (it.qlvl and it.qlvl > 0 and ("  ·  " .. it.qlvl .. "레벨부터") or ""), 0.96, 0.95, 0.9)
 	local Q = Ink.modules.QuestMap
 	local giver = it.qnpc and it.qnpc > 0 and Q and Q.GiverName and Q:GiverName(it.qnpc)
 	local info = it.qmap and it.qmap > 0 and C_Map.GetMapInfo and C_Map.GetMapInfo(it.qmap)
@@ -1784,7 +1802,7 @@ function M:BossTooltip(owner, bi)
 		for _, e in ipairs(nq) do
 			local t = C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(e.id)
 			local nt = DQNote(e.id)
-			GameTooltip:AddLine((e.state == "log" and (M.TipIcon("Wait", { 1, 0.96, 0.41 }) .. " ") or "|cffE3C07A!|r ") .. (t and t ~= "" and t or ("퀘스트 #" .. e.id)), 0.92, 0.92, 0.9)
+			GameTooltip:AddLine((e.state == "log" and (M.TipIcon("Wait", { 1, 0.96, 0.41 }) .. " ") or "|cffE3C07A!|r ") .. (t and t ~= "" and t or M.QuestFallback(e.id)), 0.92, 0.92, 0.9)
 			if nt and nt[2] then Ink.TipLine(GameTooltip, "   " .. nt[2], 0.56, 0.58, 0.61) end
 		end
 	end
@@ -2933,11 +2951,7 @@ local function PreOf(id)
 	return {}
 end
 
-local function QTitle(id)
-	local t = C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(id)
-	if t and t ~= "" then return t end
-	if C_QuestLog.RequestLoadQuestByID then pcall(C_QuestLog.RequestLoadQuestByID, id) end
-end
+local function QTitle(id) return QuestTitleOf(id) end
 local function QDone(id) return C_QuestLog.IsQuestFlaggedCompleted and C_QuestLog.IsQuestFlaggedCompleted(id) end
 local function QInLog(id)
 	if C_QuestLog.IsOnQuest then return C_QuestLog.IsOnQuest(id) end
@@ -3239,7 +3253,7 @@ function M:QuestTip(r)
 	local q = e.q
 	local tt = GameTooltip
 	tt:SetOwner(r, "ANCHOR_RIGHT")
-	tt:AddLine(QTitle(e.id) or ("퀘스트 #" .. e.id), 1, 1, 1)
+	tt:AddLine(QTitle(e.id) or M.QuestFallback(e.id), 1, 1, 1)
 	local LC = Ink.modules.Quest and Ink.modules.Quest.LevelColor
 	local lc = (LC and q[2] > 0) and LC(q[2]) or C.soft
 	tt:AddDoubleLine(q[2] > 0 and (q[2] .. "레벨부터") or "레벨 제한 없음", q[3] == 1 and "호드" or (q[3] == 2 and "얼라이언스" or "공통"), lc[1], lc[2], lc[3], 0.7, 0.72, 0.75)
@@ -4502,7 +4516,7 @@ function M:Init()
 		if ns.FOREVER_LOOT then self:HookMap() end
 		local e = CreateFrame("Frame")
 		for _, ev in ipairs({ "ADDON_LOADED", "PLAYER_EQUIPMENT_CHANGED", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT",
-			"CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE", "PLAYER_LEVEL_UP" }) do pcall(e.RegisterEvent, e, ev) end
+			"CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE", "PLAYER_LEVEL_UP", "QUEST_DATA_LOAD_RESULT" }) do pcall(e.RegisterEvent, e, ev) end
 		-- 던전 입장 · 보스 처치 (진행 경로)
 		local w = CreateFrame("Frame")
 		for _, ev in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ENCOUNTER_END", "BOSS_KILL", "PLAYER_TARGET_CHANGED",
@@ -4529,10 +4543,23 @@ function M:Init()
 			end
 		end)
 		local pending
-		e:SetScript("OnEvent", function(_, event)
+		e:SetScript("OnEvent", function(_, event, a1, a2)
+			if event == "QUEST_DATA_LOAD_RESULT" and a2 == false and a1 then M.questFail[plain(a1) or a1] = true end
 			if event == "ADDON_LOADED" then
 				if not M.bisTab then M:AttachBisTab() end
 				if not M.mapHooked and ns.FOREVER_LOOT then M:HookMap() end
+				return
+			end
+			if event == "QUEST_DATA_LOAD_RESULT" then
+				-- 퀘스트 이름이 도착: 순위는 그대로, 글자와 열린 툴팁만 다시
+				if M.questNamePend then return end
+				M.questNamePend = true
+				C_Timer.After(0.3, function()
+					M.questNamePend = nil
+					if M.bisPanel and M.bisPanel:IsShown() then pcall(M.PaintBis, M) end
+					local owner = GameTooltip:IsShown() and GameTooltip:GetOwner()
+					if owner and owner.it and owner.it.quest and owner:GetScript("OnEnter") then pcall(owner:GetScript("OnEnter"), owner) end
+				end)
 				return
 			end
 			if event == "CHARACTER_POINTS_CHANGED" or event == "PLAYER_TALENT_UPDATE" then M.dirty = true end
