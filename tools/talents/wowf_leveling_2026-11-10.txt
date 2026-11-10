@@ -1,0 +1,459 @@
+PALADIN:prot
+spell_frost_windwalkon|5|5|10|14|Benediction
+ability_paladin_judgementblue|3|3|15|17|Sanctified Judgement
+spell_holy_righteousfury|2|2|18|19|Improved Judgement
+spell_holy_persuitofjustice|2|2|20|21|Pursuit of Justice
+ability_defend|5|5|22|26|Redoubt
+ability_rogue_ambush|3|3|27|29|Precision
+spell_holy_divineintervention|2|2|30|31|Sacred Duty
+inv_shield_06|2|2|32|33|Shield Specialization
+ability_paladin_shieldofthetemplar|1|1|34|34|Templar's Bulwark
+spell_holy_sealofprotection|2|2|35|36|Guardian's Favor
+ability_paladin_judgementred|1|1|37|37|Swift Judgement
+spell_holy_sealoffury|3|3|38|40|Improved Righteous Fury
+spell_holy_devotion|1|5|41|41|Toughness
+spell_holy_blessingofprotection|1|1|42|42|Holy Shield
+spell_holy_blessingofstrength|5|5|43|47|Reckoning
+spell_holy_improvedresistanceauras|3|3|48|50|Iron Creed
+spell_holy_devotion|3|5|51|52|Toughness
+spell_holy_greaterblessingofsanctuary|1|1|53|53|Shieldsworn
+spell_holy_vindication|3|3|54|56|Vindication
+inv_sword_08|1|1|57|57|Sacred Arbiter
+spell_holy_retributionaura|3|3|58|60|Conviction
+##
+PALADIN:ret
+spell_frost_windwalkon|5|5|10|14|Benediction
+spell_holy_righteousfury|2|2|15|16|Improved Judgement
+spell_holy_retributionaura|3|3|17|19|Conviction
+ability_warrior_innerrage|1|1|20|20|Seal of Command
+spell_holy_persuitofjustice|2|2|21|22|Pursuit of Justice
+ability_paladin_judgementblue|2|3|23|24|Sanctified Judgement
+inv_sword_08|1|1|25|25|Sacred Arbiter
+ability_paladin_judgementblue|3|3|26|26|Sanctified Judgement
+spell_holy_vindication|3|3|27|29|Vindication
+spell_holy_prayerofhealing|1|1|30|30|Repentance
+ability_racial_avatar|3|3|31|33|Vengeance
+inv_hammer_04|3|3|34|36|Two-Handed Weapon Specialization
+ability_paladin_enlightenedjudgements|3|5|37|39|Champion of the Light
+spell_holy_blessedresillience|1|1|40|40|Unsealed Wrath
+ability_paladin_enlightenedjudgements|5|5|41|42|Champion of the Light
+spell_nature_sleep|5|5|43|47|Divine Intellect
+ability_golemthunderclap|5|5|48|52|Divine Strength
+ability_thunderbolt|4|5|53|56|Improved Seals
+spell_holy_divineillumination|2|2|57|58|Reverence
+spell_holy_unyieldingfaith|2|2|59|60|Unyielding Faith
+##
+HUNTER:sv
+inv_misc_head_dragon_black|5|5|10|14|Improved Tracking
+ability_racial_bloodrage|2|2|15|16|Savage Strikes
+spell_shadow_twilight|3|5|17|19|Survivalist
+ability_whirlwind|1|1|20|20|Deterrence
+ability_kick|3|3|21|23|Surefooted
+spell_nature_timestop|1|2|24|24|Clever Traps
+ability_warrior_challange|1|1|25|25|Counterattack
+ability_dualwield|4|5|26|29|Predator's Edge
+ability_hunter_pet_tallstrider|1|1|30|30|Strider Kick
+ability_hunter_resourcefulness|2|2|31|32|Resourcefulness
+ability_dualwield|5|5|33|33|Predator's Edge
+ability_hunter_swiftstrike|2|2|34|35|Expose Prey
+spell_nature_ravenform|5|5|36|40|Deadly Aspects
+inv_weapon_crossbow_10|2|2|41|42|Focused Fire
+spell_nature_reincarnation|3|5|43|45|Endurance Training
+ability_druid_dash|1|1|46|46|Bestial Swiftness
+ability_bullrush|4|5|47|50|Unleashed Fury
+ability_hunter_animalhandler|1|1|51|51|Summon Hawk
+ability_searingarrow|5|5|52|56|Lethal Attacks
+ability_hunter_zenarchery|4|5|57|60|Careful Aim
+##
+ROGUE:subtlety
+ability_warrior_warcry|2|5|10|11|Opportunity
+spell_nature_mirrorimage|3|3|12|14|Setup
+ability_stealth|3|3|15|17|Camouflage
+ability_rogue_ambush|2|3|18|19|Improved Ambush
+spell_shadow_fumble|3|3|20|22|Initiative
+ability_rogue_ambush|3|3|23|23|Improved Ambush
+spell_shadow_possession|1|1|24|24|Premeditation
+spell_shadow_curse|1|1|25|25|Ghostly Strike
+inv_sword_17|3|3|26|28|Serrated Blades
+ability_warrior_warcry|3|5|29|29|Opportunity
+spell_shadow_lifedrain|1|1|30|30|Hemorrhage
+ability_racial_bloodrage|5|5|31|35|Malice
+ability_fiegndead|2|2|36|37|Remorseless Attacks
+ability_druid_disembowel|3|3|38|40|Ruthlessness
+ability_rogue_eviscerate|3|3|41|43|Coup de Grace
+ability_criticalstrike|2|2|44|45|Lethality
+spell_nature_earthbindtotem|2|2|46|47|Vigor
+ability_rogue_rupture|1|1|48|48|Blood Splatter
+spell_nature_invisibilty|2|5|49|50|Lightning Reflexes
+ability_marksmanship|3|3|51|53|Precision
+spell_nature_invisibilty|5|5|54|56|Lightning Reflexes
+spell_ice_lament|1|1|57|57|Cold Blood
+spell_shadow_antishadow|1|1|58|58|Preparation
+ability_warrior_warcry|5|5|59|60|Opportunity
+##
+MAGE:arcane
+inv_wand_01|2|2|10|11|Wand Specialization
+spell_ice_magicdamage|1|3|12|12|Precision
+spell_nature_starfall|3|5|13|15|Improved Channeling
+ability_mage_missilebarrage|2|2|16|17|Missile Barrage
+spell_holy_dispelmagic|2|2|18|19|Arcane Subtlety
+spell_nature_starfall|4|5|20|20|Improved Channeling
+spell_arcane_blast|1|1|21|21|Arcane Blast
+spell_shadow_manaburn|2|5|22|23|Arcane Concentration
+spell_nature_starfall|5|5|24|24|Improved Channeling
+spell_shadow_manaburn|3|5|25|25|Arcane Concentration
+ability_mage_netherwindpresence|1|1|26|26|Arcane Wrath
+spell_shadow_manaburn|5|5|27|28|Arcane Concentration
+spell_shadow_siphonmana|3|3|29|31|Arcane Meditation
+spell_ice_magicdamage|2|3|32|32|Precision
+spell_shadow_charm|5|5|33|37|Arcane Mind
+spell_nature_enchantarmor|1|1|38|38|Presence of Mind
+spell_nature_wispsplode|3|3|39|41|Arcane Impact
+spell_shadow_teleport|3|3|42|44|Arcane Instability
+spell_fire_flamebolt|5|5|45|49|Accelerant
+spell_fire_flameshock|5|5|50|54|Incineration
+spell_nature_lightning|1|1|55|55|Arcane Power
+spell_ice_magicdamage|3|3|56|56|Precision
+inv_ability_mage_radiantspark|2|2|57|58|Arcane Geometry
+spell_fire_lavaspawn|2|2|59|60|Improved Fire Blast
+##
+MAGE:fire
+spell_fire_flamebolt|5|5|10|14|Accelerant
+spell_ice_magicdamage|2|3|15|16|Precision
+spell_fire_flameshock|5|5|17|21|Incineration
+spell_fire_fireball02|1|1|22|22|Pyroblast
+spell_fire_lavaspawn|2|2|23|24|Improved Fire Blast
+spell_fire_incinerate|2|5|25|26|Ignite
+spell_fire_firebolt|1|1|27|27|Heating Up
+spell_fire_incinerate|5|5|28|30|Ignite
+spell_nature_starfall|5|5|31|35|Improved Channeling
+ability_mage_missilebarrage|2|2|36|37|Missile Barrage
+spell_holy_dispelmagic|2|2|38|39|Arcane Subtlety
+spell_fire_fire|1|3|40|40|Burning Soul
+spell_nature_wispheal|3|3|41|43|Critical Mass
+spell_fire_fire|3|3|44|45|Burning Soul
+spell_fire_immolation|3|3|46|48|Fire Power
+spell_fire_flare|2|2|49|50|Flame Throwing
+spell_fire_sealoffire|1|1|51|51|Combustion
+spell_shadow_manaburn|5|5|52|56|Arcane Concentration
+spell_arcane_blast|1|1|57|57|Arcane Blast
+spell_shadow_siphonmana|3|3|58|60|Arcane Meditation
+##
+WARLOCK:destro
+spell_shadow_deathpact|5|5|10|14|Bane
+spell_fire_fire|5|5|15|19|Aftermath
+spell_shadow_scourgebuild|1|1|20|20|Shadowburn
+spell_fire_windsofwoe|3|3|21|23|Cataclysm
+ability_mage_moltenarmor|1|5|24|24|Molten Skin
+spell_fire_fireball|1|1|25|25|Conflagrate
+spell_shadow_shadowworddominate|5|5|26|30|Unholy Power
+spell_shadow_felmending|1|2|31|31|Demonic Energies
+spell_shadow_burningspirit|2|2|32|33|Improved Life Tap
+spell_shadow_unsummonbuilding|3|5|34|36|Suppression
+spell_shadow_haunting|3|3|37|39|Improved Drains
+spell_shadow_unsummonbuilding|5|5|40|41|Suppression
+spell_shadow_contagion|1|1|42|42|Amplify Curse
+spell_fire_soulburn|3|3|43|45|Agonizing Flames
+spell_shadow_unstableaffliction_2|3|3|46|48|Pandemic
+ability_mage_moltenarmor|2|5|49|49|Molten Skin
+spell_fire_meteorstorm|3|3|50|52|Fire and Brimstone
+spell_shadow_curseofsargeras|2|2|53|54|Improved Bane of Agony
+spell_shadow_focusedpower|4|5|55|58|Malevolence
+spell_shadow_lifedrain02|2|3|59|60|Soul Siphon
+##
+DRUID:balance
+spell_nature_abolishmagic|5|5|10|14|Improved Wrath
+spell_nature_sentinal|3|3|15|17|Moonglow
+spell_nature_naturetouchgrow|2|2|18|19|Nature's Reach
+inv_staff_01|2|2|20|21|Nature's Majesty
+spell_nature_starfall|2|2|22|23|Improved Moonfire
+spell_nature_natureresistancetotem|1|1|24|24|Nature's Splendor
+spell_nature_insectswarm|1|1|25|25|Insect Swarm
+spell_arcane_starfire|4|5|26|29|Improved Starfire
+ability_druid_eclipse|3|3|30|32|Eclipse
+spell_arcane_starfire|5|5|33|33|Improved Starfire
+spell_nature_naturesblessing|1|1|34|34|Nature's Grace
+spell_nature_moonglow|5|5|35|39|Moonfury
+spell_nature_forceofnature|1|1|40|40|Moonkin Form
+spell_nature_healingwavegreater|5|5|41|45|Nature's Focus
+spell_frost_windwalkon|3|3|46|48|Reflection
+spell_nature_healingtouch|5|5|49|53|Naturalist
+spell_arcane_arcane03|2|5|54|55|Genesis
+spell_nature_purge|5|5|56|60|Vengeance
+##
+DRUID:feral
+ability_hunter_pet_hyena|5|5|10|14|Ferocity
+spell_holy_blessingofstamina|3|5|15|17|Furor
+spell_nature_spiritwolf|2|2|18|19|Feral Swiftness
+ability_hunter_pet_bear|1|1|20|20|Feral Charge
+ability_druid_ravage|2|2|21|22|Savage Fury
+inv_misc_monsterclaw_04|2|2|23|24|Sharpened Claws
+spell_druid_savagery|1|1|25|25|Predatory Discipline
+ability_ghoulfrenzy|2|2|26|27|Blood Frenzy
+ability_druid_lacerate|1|1|28|28|Lacerate
+ability_hunter_pet_cat|1|3|29|29|Predatory Strikes
+spell_nature_unyeildingstamina|1|1|30|30|Leader of the Pack
+ability_druid_predatoryinstincts|2|2|31|32|Natural Instinct
+ability_hunter_pet_cat|3|3|33|34|Predatory Strikes
+ability_druid_primalagression|5|5|35|39|Rend and Tear
+spell_druid_displacement|1|1|40|40|Shifting Power
+ability_racial_cannibalize|1|1|41|41|Primal Bite
+spell_holy_blessingofagility|5|5|42|46|Heart of the Wild
+spell_nature_healingtouch|5|5|47|51|Naturalist
+spell_arcane_arcane03|5|5|52|56|Genesis
+spell_nature_naturetouchgrow|2|2|57|58|Nature's Reach
+inv_staff_01|2|2|59|60|Nature's Majesty
+##
+WARRIOR:fury
+ability_rogue_eviscerate|5|5|10|14|Cruelty
+spell_nature_stoneclawtotem|5|5|15|19|Unbridled Wrath
+ability_warrior_incite|3|3|20|22|Furious Precision
+spell_shadow_unholyfrenzy|2|5|23|24|Enrage
+ability_warrior_bloodfrenzy|1|1|25|25|Reckless Swings
+spell_shadow_unholyfrenzy|3|5|26|26|Enrage
+spell_shadow_summonimp|3|3|27|29|Blood Craze
+racial_troll_berserk|2|2|30|31|Gore Drinker
+spell_shadow_deathpact|1|1|32|32|Death Wish
+ability_dualwield|2|5|33|34|Dual Wield Specialization
+ability_ghoulfrenzy|1|3|35|35|Flurry
+ability_whirlwind|2|2|36|37|Improved Whirlwind
+ability_ghoulfrenzy|3|3|38|39|Flurry
+spell_nature_bloodlust|1|1|40|40|Bloodthirst
+ability_parry|5|5|41|45|Deflection
+ability_dualwield|5|5|46|48|Dual Wield Specialization
+spell_shadow_unholyfrenzy|5|5|49|50|Enrage
+spell_nature_enchantarmor|3|3|51|53|Improved Tactical Mastery
+ability_rogue_ambush|2|3|54|55|Improved Heroic Strike
+spell_holy_blessingofstamina|1|1|56|56|Anger Management
+spell_nature_ancestralguardian|2|2|57|58|Improved Berserker Rage
+ability_warrior_secondwind|2|5|59|60|Lingering Rage
+##
+WARRIOR:prot
+inv_shield_06|5|5|10|14|Shield Specialization
+ability_warrior_revenge|3|3|15|17|Improved Revenge
+ability_thunderclap|2|3|18|19|Improved Thunder Clap
+ability_warrior_shieldguard|2|2|20|21|Master of Defense
+ability_thunderclap|3|3|22|22|Improved Thunder Clap
+ability_warrior_innerrage|2|3|23|24|Defiance
+ability_warrior_shieldcharge|1|1|25|25|Vanguard
+ability_warrior_innerrage|3|3|26|26|Defiance
+spell_holy_ashestoashes|1|1|27|27|Last Stand
+spell_nature_mirrorimage|2|5|28|29|Anticipation
+ability_thunderbolt|1|1|30|30|Concussion Blow
+ability_warrior_focusedrage|3|3|31|33|Focused Rage
+ability_warrior_shieldwall|1|2|34|34|Improved Shield Wall
+inv_shield_04|5|5|35|39|Bastion
+inv_shield_05|1|1|40|40|Shield Slam
+ability_warrior_shieldwall|2|2|41|41|Improved Shield Wall
+ability_rogue_eviscerate|5|5|42|46|Cruelty
+spell_nature_stoneclawtotem|5|5|47|51|Unbridled Wrath
+spell_shadow_unholyfrenzy|5|5|52|56|Enrage
+ability_parry|4|5|57|60|Deflection
+##
+PALADIN:holy
+spell_frost_windwalkon|5|5|10|14|Benediction
+spell_holy_retributionaura|3|3|15|17|Conviction
+spell_holy_righteousfury|2|2|18|19|Improved Judgement
+spell_holy_persuitofjustice|2|2|20|21|Pursuit of Justice
+spell_arcane_blink|5|5|22|26|Spiritual Focus
+spell_holy_divineillumination|2|2|27|28|Reverence
+spell_holy_holybolt|3|3|29|31|Healing Light
+spell_holy_greaterheal|5|5|32|36|Illumination
+ability_paladin_infusionoflight|2|2|37|38|Infusion of Light
+spell_holy_greaterblessingoflight|1|1|39|39|Oath of Light
+spell_holy_heal|1|1|40|40|Divine Favor
+spell_holy_mindsooth|1|2|41|41|Divine Precision
+spell_holy_searinglight|1|1|42|42|Holy Shock
+ability_paladin_sacredcleansing|2|2|43|44|Boundless Light
+spell_holy_mindsooth|2|2|45|45|Divine Precision
+spell_holy_innerfire|1|2|46|46|Consecrated Ground
+spell_holy_power|5|5|47|51|Holy Power
+ability_paladin_judgementofthepure|1|1|52|52|Light's Vigil
+spell_nature_sleep|5|5|53|57|Divine Intellect
+spell_holy_innerfire|2|2|58|58|Consecrated Ground
+spell_holy_devineaegis|2|2|59|60|Holy Conduit
+##
+HUNTER:bm
+spell_nature_ravenform|5|5|10|14|Deadly Aspects
+inv_weapon_crossbow_10|2|2|15|16|Focused Fire
+spell_nature_reincarnation|3|5|17|19|Endurance Training
+ability_druid_dash|1|1|20|20|Bestial Swiftness
+ability_bullrush|4|5|21|24|Unleashed Fury
+ability_hunter_animalhandler|1|1|25|25|Summon Hawk
+ability_bullrush|5|5|26|26|Unleashed Fury
+inv_misc_monsterclaw_04|3|5|27|29|Ferocity
+ability_devour|1|1|30|30|Intimidation
+spell_nature_abolishmagic|2|2|31|32|Bestial Discipline
+inv_misc_monsterclaw_04|5|5|33|34|Ferocity
+inv_misc_monsterclaw_03|5|5|35|39|Frenzy
+ability_druid_ferociousbite|1|1|40|40|Bestial Wrath
+ability_searingarrow|5|5|41|45|Lethal Attacks
+ability_hunter_zenarchery|5|5|46|50|Careful Aim
+ability_hunter_quickshot|3|3|51|53|Improved Stings
+ability_hunter_rapidkilling|2|2|54|55|Rapid Killing
+ability_trueshot|1|1|56|56|Trueshot Aura
+inv_misc_head_dragon_black|4|5|57|60|Improved Tracking
+##
+PRIEST:disc
+inv_wand_01|2|2|10|11|Wand Specialization
+spell_holy_searinglight|3|5|12|14|Power in Light
+spell_holy_divineillumination|1|3|15|15|Holy Precision
+spell_nature_enchantarmor|4|5|16|19|Mental Strength
+spell_nature_sleep|3|3|20|22|Meditation
+spell_frost_windwalkon|1|1|23|23|Inner Focus
+spell_holy_powerwordshield|1|3|24|24|Improved Power Word: Shield
+spell_holy_innerfire|3|3|25|27|Improved Inner Fire
+spell_holy_powerwordshield|3|3|28|29|Improved Power Word: Shield
+spell_holy_penance|1|1|30|30|Penance
+spell_holy_pureofheart|1|1|31|31|Soul Warding
+spell_holy_healingfocus|3|3|32|34|Twilight Focus
+spell_holy_sealofsalvation|2|5|35|36|Holy Specialization
+spell_holy_sealofwrath|5|5|37|41|Divine Fury
+spell_holy_holynova|1|1|42|42|Holy Nova
+spell_shadow_requiem|5|5|43|47|Spirit Tap
+ability_hibernation|3|3|48|50|Mental Agility
+spell_holy_searinglight|5|5|51|52|Power in Light
+spell_holy_sealofsalvation|5|5|53|55|Holy Specialization
+spell_holy_blessedrecovery|1|3|56|56|Blessed Recovery
+spell_holy_searinglightpriest|2|2|57|58|Searing Light
+spell_nature_enchantarmor|5|5|59|59|Mental Strength
+spell_holy_purify|1|2|60|60|Holy Reach
+##
+PRIEST:holy
+inv_wand_01|2|2|10|11|Wand Specialization
+spell_holy_renew|3|3|12|14|Improved Renew
+spell_holy_sealofsalvation|2|5|15|16|Holy Specialization
+spell_holy_sealofwrath|5|5|17|21|Divine Fury
+spell_holy_holynova|1|1|22|22|Holy Nova
+spell_holy_layonhands|3|3|23|25|Inspiration
+spell_holy_sealofsalvation|3|5|26|26|Holy Specialization
+spell_holy_blindingheal|1|1|27|27|Holy Binding
+spell_holy_purify|2|2|28|29|Holy Reach
+spell_holy_heal02|2|3|30|31|Improved Healing
+inv_enchant_essenceeternallarge|1|1|32|32|Spirit of Redemption
+inv_scroll_07|2|2|33|34|Litany of Light
+spell_holy_spiritualguidence|2|5|35|36|Spiritual Guidance
+spell_nature_moonglow|3|3|37|39|Spiritual Healing
+spell_holy_spiritualguidence|4|5|40|41|Spiritual Guidance
+spell_holy_prayerofmendingtga|1|1|42|42|Prayer of Mending
+spell_holy_sealofvengeance|3|5|43|45|Twin Disciplines
+spell_nature_enchantarmor|5|5|46|50|Mental Strength
+spell_nature_sleep|3|3|51|53|Meditation
+spell_frost_windwalkon|1|1|54|54|Inner Focus
+spell_holy_heal02|3|3|55|55|Improved Healing
+spell_holy_spiritualguidence|5|5|56|56|Spiritual Guidance
+spell_holy_sealofsalvation|5|5|57|58|Holy Specialization
+spell_holy_sealofvengeance|5|5|59|60|Twin Disciplines
+##
+PRIEST:shadow
+inv_wand_01|2|2|10|11|Wand Specialization
+spell_shadow_requiem|5|5|12|16|Spirit Tap
+spell_shadow_shadowwordpain|2|2|17|18|Improved Shadow Word: Pain
+spell_shadow_chilltouch|2|2|19|20|Shadow Reach
+spell_shadow_burningspirit|1|5|21|21|Shadow Focus
+spell_shadow_siphonmana|1|1|22|22|Mind Flay
+spell_shadow_soulleech_2|2|2|23|24|Improved Mind Flay
+spell_shadow_burningspirit|3|5|25|26|Shadow Focus
+spell_shadow_blackplague|3|3|27|29|Shadow Weaving
+spell_shadow_unsummonbuilding|1|1|30|30|Vampiric Embrace
+spell_shadow_unholyfrenzy|1|5|31|31|Improved Mind Blast
+spell_shadow_devouringplague|2|2|32|33|Devouring Contagion
+spell_shadow_unholyfrenzy|4|5|34|36|Improved Mind Blast
+spell_shadow_twilight|5|5|37|41|Darkness
+spell_shadow_shadowform|1|1|42|42|Shadowform
+spell_holy_sealofvengeance|3|5|43|45|Twin Disciplines
+spell_nature_manaregentotem|3|3|46|48|Silent Resolve
+spell_nature_enchantarmor|2|5|49|50|Mental Strength
+spell_nature_sleep|3|3|51|53|Meditation
+spell_holy_healingfocus|3|3|54|56|Twilight Focus
+spell_shadow_impphaseshift|1|1|57|57|Silence
+spell_nature_enchantarmor|5|5|58|60|Mental Strength
+##
+SHAMAN:ele
+spell_nature_wispsplode|5|5|10|14|Convection
+spell_lightning_lightningbolt01|3|3|15|17|Elemental Alacrity
+spell_nature_earthshock|2|5|18|19|Concussion
+spell_shadow_manaburn|1|1|20|20|Elemental Focus
+spell_nature_earthshock|5|5|21|23|Concussion
+spell_fire_immolation|1|3|24|24|Call of Flame
+spell_nature_eyeofthestorm|3|3|25|27|Eye of the Storm
+spell_fire_immolation|3|3|28|29|Call of Flame
+spell_nature_callstorm|1|1|30|30|Call of Thunder
+spell_nature_lightningoverload|3|3|31|33|Lightning Overload
+spell_nature_stormreach|1|2|34|34|Elemental Reach
+spell_fire_volcano|5|5|35|39|Elemental Fury
+spell_nature_unrelentingstorm|1|1|40|40|Lightning Mastery
+spell_nature_stormreach|2|2|41|41|Elemental Reach
+spell_frost_manarecharge|5|5|42|46|Tidal Focus
+spell_nature_sleep|3|3|47|49|Mindfulness
+spell_nature_magicimmunity|2|5|50|51|Improved Healing Wave
+ability_shaman_watershield|1|1|52|52|Water Shield
+ability_thunderbolt|5|5|53|57|Thundering Strikes
+spell_fire_sealoffire|2|2|58|59|Trial by Fire
+spell_shadow_grimward|1|5|60|60|Ancestral Knowledge
+##
+SHAMAN:resto
+spell_frost_manarecharge|5|5|10|14|Tidal Focus
+spell_nature_sleep|3|3|15|17|Mindfulness
+spell_nature_magicimmunity|2|5|18|19|Improved Healing Wave
+ability_shaman_watershield|1|1|20|20|Water Shield
+spell_nature_healingwavelesser|3|3|21|23|Healing Focus
+spell_nature_magicimmunity|3|5|24|24|Improved Healing Wave
+spell_frost_summonwaterelemental|1|1|25|25|Mana Tide Totem
+spell_nature_tranquility|4|5|26|29|Tidal Mastery
+spell_nature_ravenform|1|1|30|30|Nature's Swiftness
+spell_nature_healingway|3|3|31|33|Healing Way
+spell_nature_tranquility|5|5|34|34|Tidal Mastery
+spell_frost_wizardmark|5|5|35|39|Purification
+spell_nature_riptide|1|1|40|40|Riptide
+ability_thunderbolt|5|5|41|45|Thundering Strikes
+spell_shadow_grimward|2|5|46|47|Ancestral Knowledge
+spell_nature_magicimmunity|5|5|48|49|Improved Healing Wave
+spell_nature_manaregentotem|5|5|50|54|Restorative Totems
+spell_nature_undyingstrength|3|3|55|57|Ancestral Healing
+spell_nature_healingtouch|3|3|58|60|Natural Grace
+##
+WARLOCK:demo
+spell_shadow_shadowworddominate|5|5|10|14|Unholy Power
+spell_shadow_felmending|2|2|15|16|Demonic Energies
+spell_shadow_demonictactics|3|3|17|19|Fel Vitality
+spell_shadow_impphaseshift|2|2|20|21|Master Summoner
+ability_warlock_randomizesuccubusincubus|3|3|22|24|Improved Sayaad
+ability_demonhunter_chaoticimprint_fire|3|3|25|27|Demonic Brand
+spell_nature_removecurse|1|1|28|28|Fel Domination
+spell_shadow_psychicscream|1|1|29|29|Demonic Sacrifice
+spell_shadow_gathershadows|1|1|30|30|Soul Link
+spell_shadow_improvedvampiricembrace|3|3|31|33|Demonic Knowledge
+spell_shadow_metamorphosis|1|5|34|34|Demonic Embrace
+spell_shadow_shadowpact|5|5|35|39|Master Demonologist
+inv_ability_soulharvesterwarlock_demonicsoul|1|1|40|40|Demonic Pact
+spell_shadow_abominationexplosion|5|5|41|45|Improved Corruption
+spell_shadow_burningspirit|2|2|46|47|Improved Life Tap
+spell_shadow_haunting|3|3|48|50|Improved Drains
+spell_shadow_unsummonbuilding|4|5|51|54|Suppression
+spell_shadow_unstableaffliction_2|3|3|55|57|Pandemic
+spell_shadow_focusedpower|2|5|58|59|Malevolence
+spell_shadow_unsummonbuilding|5|5|60|60|Suppression
+##
+DRUID:guardian
+ability_hunter_pet_hyena|5|5|10|14|Ferocity
+spell_holy_blessingofstamina|3|5|15|17|Furor
+spell_nature_spiritwolf|2|2|18|19|Feral Swiftness
+ability_hunter_pet_bear|1|1|20|20|Feral Charge
+ability_druid_ravage|2|2|21|22|Savage Fury
+inv_misc_monsterclaw_04|2|2|23|24|Sharpened Claws
+ability_druid_lacerate|1|1|25|25|Lacerate
+spell_druid_savagery|1|1|26|26|Predatory Discipline
+ability_hunter_pet_cat|3|3|27|29|Predatory Strikes
+spell_nature_unyeildingstamina|1|1|30|30|Leader of the Pack
+ability_ghoulfrenzy|2|2|31|32|Blood Frenzy
+ability_druid_predatoryinstincts|2|2|33|34|Natural Instinct
+ability_druid_primalagression|5|5|35|39|Rend and Tear
+ability_racial_cannibalize|1|1|40|40|Primal Bite
+spell_druid_displacement|1|1|41|41|Shifting Power
+spell_holy_blessingofagility|5|5|42|46|Heart of the Wild
+spell_nature_healingtouch|5|5|47|51|Naturalist
+spell_frost_windwalkon|3|3|52|54|Reflection
+spell_nature_wispsplode|3|3|55|57|Natural Shapeshifter
+spell_holy_blessingofstamina|5|5|58|59|Furor
+inv_misc_herb_felblossom|1|1|60|60|Bloom
