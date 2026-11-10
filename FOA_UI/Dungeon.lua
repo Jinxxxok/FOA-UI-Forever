@@ -433,7 +433,7 @@ function M:SourceText(it)
 	if FOREVER and it.inst then
 		local d = FLoot(it.inst)
 		local bn = M.BossName and M.BossName({ npc = it.npc, name = it.bossName }) or it.bossName
-		return (d and (d.ko or d.en) or "던전") .. " · " .. (bn or "") .. (it.rare and " (희귀몹)" or "")
+		return (d and (d.ko or d.en) or "던전") .. " · " .. (bn or "") .. (it.kind == 1 and " (희귀몹)" or (it.kind == 2 and " (특수 몹 · 상자)" or ""))
 	end
 	local inst = self.cache[it.inst]
 	return (inst and inst.name or "던전") .. " · " .. (it.boss or "?") .. "넴 " .. (it.bossName or "")
@@ -500,7 +500,7 @@ ForeverScan = function(key, quiet)
 	if not d then return end
 	local data = { id = key, name = d.ko or d.en, lo = d.lo, hi = d.hi, bosses = {}, missing = 0, d = d }
 	for bi, b in ipairs(d.bosses) do
-		local boss = { index = bi, name = b[1], npc = b[3], rare = b[4] == 1, en = b[5], items = {} }
+		local boss = { index = bi, name = b[1], npc = b[3], rare = (b[4] or 0) >= 1, kind = b[4], en = b[5], items = {} }
 		for _, id in ipairs(b[2]) do
 			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
 			-- 게임 자료에 없는 아이템(패치로 바뀐 번호)은 건너뛴다. 안 그러면 영원히 "불러오는 중"
@@ -518,7 +518,7 @@ ForeverScan = function(key, quiet)
 				local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
 				table.insert(boss.items, {
 					id = id, name = name, link = link, icon = icon, slot = loc and EQUIP_EJ[loc], quality = q or 2,
-					inst = key, boss = bi, bossName = b[1], npc = b[3], rare = b[4] == 1,
+					inst = key, boss = bi, bossName = b[1], npc = b[3], rare = (b[4] or 0) >= 1, kind = b[4],
 				})
 			end
 		end
@@ -1692,7 +1692,7 @@ function M:BossTooltip(owner, bi)
 		if ForMyClass(it) then nCls = nCls + 1 end
 	end
 	GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
-	GameTooltip:AddLine((b.rare and "희귀 · " or (b.order and (b.order .. ". ") or "")) .. BossName(b), 1, 1, 1)
+	GameTooltip:AddLine((b.rare and (b.kind == 2 and "선택 · " or "희귀 · ") or (b.order and (b.order .. ". ") or "")) .. BossName(b), 1, 1, 1)
 	if b.killed then GameTooltip:AddLine("처치함", DOWN_C[1], DOWN_C[2], DOWN_C[3]) end
 	GameTooltip:AddDoubleLine("전리품", nAll .. "개", 0.7, 0.72, 0.75, 1, 1, 1)
 	GameTooltip:AddDoubleLine("내 직업", nCls .. "개", 0.7, 0.72, 0.75, 1, 1, 1)
@@ -2145,7 +2145,7 @@ function M:PaintList(f, data, mode)
 			h.name:SetText(FOREVER and BossName(b) or b.name)
 			local sum = (nb > 0 and ("BIS " .. nb) or "") .. ((nb > 0 and na > 0) and " · " or "") .. (na > 0 and ("대체 " .. na) or "")
 			if sum == "" and FOREVER then sum = (#list > 0) and (#list .. "개") or (mode == "class" and "내 직업 없음" or "") end
-			if b.rare and FOREVER then sum = "희귀" .. (sum ~= "" and (" · " .. sum) or "") end
+			if b.rare and FOREVER then sum = (b.kind == 2 and "선택" or "희귀") .. (sum ~= "" and (" · " .. sum) or "") end
 			h.sum:SetText(done and "처치함" or sum)
 			h:SetAlpha((done or (FOREVER and #list == 0)) and 0.55 or 1)
 			h:Show()
