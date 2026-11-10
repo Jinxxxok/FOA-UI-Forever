@@ -41,39 +41,70 @@ local K = {
 	exp = "ITEM_MOD_EXPERTISE_RATING_SHORT", haste = "ITEM_MOD_HASTE_RATING_SHORT", spen = "ITEM_MOD_SPELL_PENETRATION_SHORT",
 }
 
-local MELEE = { str = 2.0, agi = 1.2, ap = 1, crit = 20, hit = 18, exp = 4, haste = 12, sta = 0.3, armor = 0.01, dps = 14 }
+-- 직업 · 특성별 가중치 (포에버 레벨 60 PvE)
+--  출처: Icy Veins 포에버 능력치 우선순위 (2026-11 갱신) · Warcraft Tavern 포에버 직업 공략
+--  우선순위(같은 아이템 예산일 때 어느 능력치가 나은가)를 클래식 환산(힘 → 공격력, 민첩 → 치명 등)으로 숫자로 옮겼다.
+--  포에버는 적중 · 치명타가 물리 · 주문 공통이라 시전자도 hit / crit 를 shit / scrit 과 같은 값으로 친다.
+--  상한: 근접 · 원거리 적중 8% · 주문 적중 17% · 숙련 6.5% → 이미 채웠으면 적중 가치를 낮춘다 (CapAdjust).
+local function Caster(t) t.hit = t.hit or t.shit; t.crit = t.crit or t.scrit; return t end
 local W = {
-	["WARRIOR:arms"] = MELEE,
-	["WARRIOR:fury"] = MELEE,
-	["WARRIOR:prot"] = { sta = 1.5, def = 1.5, armor = 0.1, dodge = 12, parry = 12, block = 6, bv = 0.5, str = 1, agi = 1, ap = 0.4, hit = 8, dps = 6, exp = 3 },
-	["ROGUE:assassination"] = { agi = 2.0, str = 1, ap = 1, crit = 20, hit = 22, sta = 0.3, armor = 0.01, dps = 14, exp = 4, haste = 12 },
-	["ROGUE:combat"] = { agi = 2.0, str = 1, ap = 1, crit = 20, hit = 22, sta = 0.3, armor = 0.01, dps = 14, exp = 4, haste = 12 },
-	["ROGUE:subtlety"] = { agi = 2.0, str = 1, ap = 1, crit = 22, hit = 20, sta = 0.3, armor = 0.01, dps = 14, exp = 4, haste = 12 },
-	["HUNTER:bm"] = { agi = 2.2, rap = 1, ap = 0.3, int = 0.4, crit = 20, hit = 20, sta = 0.3, armor = 0.01, rdps = 12, dps = 1, haste = 10 },
-	["HUNTER:mm"] = { agi = 2.2, rap = 1, ap = 0.3, int = 0.4, crit = 22, hit = 20, sta = 0.3, armor = 0.01, rdps = 14, dps = 1, haste = 10 },
-	["HUNTER:sv"] = { agi = 2.4, rap = 1, ap = 0.5, int = 0.4, crit = 20, hit = 20, sta = 0.3, armor = 0.01, rdps = 12, dps = 3, haste = 10 },
-	["MAGE:arcane"] = { sp = 1, sdmg = 1, int = 0.6, spi = 0.3, scrit = 10, shit = 12, mp5 = 1.2, sta = 0.4, haste = 10, spen = 0.6 },
-	["MAGE:fire"] = { sp = 1, sdmg = 1, int = 0.5, spi = 0.2, scrit = 14, shit = 14, mp5 = 1, sta = 0.4, haste = 10, spen = 0.6 },
-	["MAGE:frost"] = { sp = 1, sdmg = 1, int = 0.5, spi = 0.25, scrit = 10, shit = 14, mp5 = 1, sta = 0.4, haste = 10, spen = 0.6 },
-	["WARLOCK:aff"] = { sp = 1, sdmg = 1, int = 0.4, spi = 0.3, scrit = 6, shit = 14, mp5 = 0.8, sta = 0.6, haste = 10, spen = 0.8 },
-	["WARLOCK:demo"] = { sp = 1, sdmg = 1, int = 0.4, spi = 0.25, scrit = 8, shit = 14, mp5 = 0.8, sta = 0.6, haste = 10, spen = 0.8 },
-	["WARLOCK:destro"] = { sp = 1, sdmg = 1, int = 0.4, spi = 0.2, scrit = 12, shit = 14, mp5 = 0.8, sta = 0.5, haste = 10, spen = 0.8 },
-	["PRIEST:disc"] = { heal = 1, sp = 1, int = 0.7, spi = 0.6, mp5 = 2, scrit = 8, sta = 0.3, haste = 6 },
-	["PRIEST:holy"] = { heal = 1, sp = 1, int = 0.6, spi = 0.8, mp5 = 2, scrit = 8, sta = 0.2, haste = 6 },
-	["PRIEST:shadow"] = { sp = 1, sdmg = 1, int = 0.4, spi = 0.5, shit = 12, scrit = 4, mp5 = 0.8, sta = 0.4, haste = 10, spen = 0.6 },
-	["DRUID:balance"] = { sp = 1, sdmg = 1, int = 0.6, spi = 0.3, scrit = 10, shit = 12, mp5 = 1.2, sta = 0.3, haste = 10, spen = 0.6 },
-	["DRUID:feral"] = { agi = 2.0, str = 2.0, ap = 1, fap = 1, crit = 20, hit = 18, sta = 0.4, armor = 0.02, exp = 4, haste = 12 },
-	["DRUID:guardian"] = { sta = 1.5, armor = 0.15, agi = 1.2, def = 1, dodge = 12, str = 1, ap = 0.4, fap = 0.4, hit = 6, exp = 3 },
-	["DRUID:resto"] = { heal = 1, sp = 1, int = 0.6, spi = 0.7, mp5 = 1.8, scrit = 6, sta = 0.2, haste = 6 },
-	["PALADIN:holy"] = { heal = 1, sp = 1, int = 0.8, mp5 = 1.5, scrit = 10, spi = 0.2, sta = 0.2, haste = 6 },
-	["PALADIN:prot"] = { sta = 1.5, def = 1.5, armor = 0.1, bv = 0.6, block = 6, sp = 0.5, int = 0.3, str = 0.6, dps = 4, exp = 3 },
-	["PALADIN:ret"] = { str = 2.0, agi = 1.0, ap = 1, crit = 20, hit = 18, int = 0.3, sp = 0.3, sta = 0.3, armor = 0.01, dps = 14, exp = 4, haste = 12 },
-	["SHAMAN:ele"] = { sp = 1, sdmg = 1, int = 0.6, mp5 = 1.2, scrit = 12, shit = 12, spi = 0.1, sta = 0.3, haste = 10, spen = 0.6 },
-	["SHAMAN:enh"] = { str = 2.0, agi = 1.2, ap = 1, crit = 20, hit = 18, int = 0.3, sta = 0.3, armor = 0.01, dps = 14, exp = 4, haste = 12 },
-	["SHAMAN:resto"] = { heal = 1, sp = 1, int = 0.7, mp5 = 1.8, spi = 0.3, scrit = 6, sta = 0.2, haste = 6 },
+	-- 전사: 무기 공격력 > 적중(8%) > 숙련(6.5%) > 치명타 > 힘 · 힘 1 = 공격력 2, 민첩 20 = 치명 1%
+	["WARRIOR:arms"] = { dps = 16, hit = 26, exp = 24, crit = 22, str = 2.0, agi = 1.15, ap = 1, haste = 13, sta = 0.2, armor = 0.01 },
+	["WARRIOR:fury"] = { dps = 15, hit = 26, exp = 24, crit = 23, str = 2.0, agi = 1.2, ap = 1, haste = 14, sta = 0.2, armor = 0.01 },
+	-- 방어 전사: (공격) 숙련 > 적중 > 민첩 > 힘 > 체력 · (방어) 체력 > 방어도 > 민첩 > 회피 · 무기 막기 > 방어 숙련
+	["WARRIOR:prot"] = { sta = 1.6, armor = 0.12, agi = 1.5, dodge = 12, parry = 11, def = 1.0, block = 4, bv = 0.3,
+		exp = 16, hit = 14, str = 1.0, ap = 0.4, crit = 8, dps = 5, haste = 4 },
+	-- 도적(암살 · 전투): 숙련(6.5%) > 적중(8%) > 민첩 > 무기 공격력 > 치명타 · 민첩 1 = 공격력 1 + 치명
+	["ROGUE:assassination"] = { exp = 30, hit = 28, agi = 2.2, dps = 13, crit = 22, str = 1.0, ap = 1, haste = 15, sta = 0.2, armor = 0.01 },
+	["ROGUE:combat"] = { exp = 30, hit = 28, agi = 2.2, dps = 14, crit = 21, str = 1.0, ap = 1, haste = 15, sta = 0.2, armor = 0.01 },
+	-- 잠행: 무기 공격력 > 숙련 > 적중 > 민첩
+	["ROGUE:subtlety"] = { dps = 16, exp = 28, hit = 26, agi = 2.2, crit = 22, str = 1.0, ap = 1, haste = 13, sta = 0.2, armor = 0.01 },
+	-- 사냥꾼: 무기 공격력 > 적중(8%) > 치명타 > 민첩 > 전투력 · 민첩 1 = 원거리 전투력 2
+	["HUNTER:bm"] = { rdps = 15, hit = 26, crit = 24, agi = 2.4, rap = 1, ap = 0.8, int = 0.3, haste = 13, sta = 0.2, armor = 0.01, dps = 1 },
+	["HUNTER:mm"] = { rdps = 16, hit = 26, crit = 25, agi = 2.4, rap = 1, ap = 0.8, int = 0.3, haste = 12, sta = 0.2, armor = 0.01, dps = 1 },
+	-- 생존: 포에버에서 근접 특성 → 근접 무기가 중심
+	["HUNTER:sv"] = { dps = 15, rdps = 5, hit = 26, crit = 24, agi = 2.3, ap = 1, rap = 0.4, int = 0.3, haste = 13, sta = 0.2, armor = 0.01, exp = 18 },
+	-- 마법사: 적중(17%) > 주문력 > 치명타 > 지능 > 정신력 · 마나 회복
+	["MAGE:arcane"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 11, int = 0.55, spi = 0.25, mp5 = 0.6, haste = 9, sta = 0.1, spen = 0.4 }),
+	["MAGE:fire"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 12, int = 0.4, spi = 0.15, mp5 = 0.5, haste = 9, sta = 0.1, spen = 0.4 }),
+	["MAGE:frost"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 9, int = 0.4, mp5 = 0.55, spi = 0.15, haste = 9, sta = 0.1, spen = 0.4 }),
+	-- 흑마법사: 적중 > 주문력 > 치명타 > 가속 > 지능 (파괴는 가속 > 치명타)
+	["WARLOCK:aff"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 8, haste = 7, int = 0.3, spi = 0.15, sta = 0.3, mp5 = 0.4, spen = 0.5 }),
+	["WARLOCK:demo"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 8, haste = 7, int = 0.3, spi = 0.15, sta = 0.3, mp5 = 0.4, spen = 0.5 }),
+	["WARLOCK:destro"] = Caster({ shit = 14, sp = 1, sdmg = 1, haste = 9, scrit = 8, int = 0.3, spi = 0.1, sta = 0.3, mp5 = 0.4, spen = 0.5 }),
+	-- 사제(수양 · 신성): 치유량 > 마나 회복 > 정신력 > 지능 > 치명타
+	["PRIEST:disc"] = Caster({ heal = 1, sp = 1, mp5 = 2.0, spi = 0.75, int = 0.6, scrit = 6, haste = 5, sta = 0.1 }),
+	["PRIEST:holy"] = Caster({ heal = 1, sp = 1, mp5 = 2.0, spi = 0.8, int = 0.55, scrit = 6, haste = 5, sta = 0.1 }),
+	-- 암흑: 적중(17%) > 주문력 > 치명타 > 주문 관통 > 정신력
+	["PRIEST:shadow"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 8, spen = 0.7, spi = 0.25, int = 0.3, mp5 = 0.4, haste = 8, sta = 0.1 }),
+	-- 드루이드 조화: 적중(17%) > 치명타 > 주문력 > 지능
+	["DRUID:balance"] = Caster({ shit = 14, scrit = 11, sp = 1, sdmg = 1, int = 0.45, haste = 9, spi = 0.15, mp5 = 0.6, sta = 0.1, spen = 0.4 }),
+	-- 야성(표범): 무기 공격력(포에버는 폼에도 무기 dps 가 더해짐) > 숙련 > 적중 > 민첩 > 힘
+	["DRUID:feral"] = { dps = 14, exp = 25, hit = 24, agi = 2.25, str = 2.0, ap = 1, fap = 1, crit = 25, haste = 10, sta = 0.2, armor = 0.02 },
+	-- 야성(곰): 방어도 > 방어 숙련(440) > 체력 > 민첩 > 회피 · 위협은 표범과 같은 순서
+	["DRUID:guardian"] = { armor = 0.18, def = 1.3, sta = 1.4, agi = 1.6, dodge = 12, dps = 7, exp = 12, hit = 10, str = 0.8, ap = 0.4, fap = 0.4, crit = 6, haste = 3 },
+	["DRUID:resto"] = Caster({ heal = 1, sp = 1, int = 0.75, spi = 0.7, mp5 = 1.5, scrit = 6, haste = 5, sta = 0.1 }),
+	-- 성기사 신성: 치유량 > 지능 > 정신력 > 마나 회복 > 치명타
+	["PALADIN:holy"] = Caster({ heal = 1, sp = 1, int = 0.8, spi = 0.65, mp5 = 1.4, scrit = 7, haste = 5, sta = 0.1 }),
+	-- 보호: 체력 > 방어 숙련(440) > 주문력 > 지능 > 힘
+	["PALADIN:prot"] = { sta = 1.6, def = 1.4, sp = 0.8, int = 0.5, str = 0.4, armor = 0.08, bv = 0.3, block = 3, dodge = 8, parry = 8,
+		hit = 6, exp = 4, dps = 3, crit = 4, shit = 4 },
+	-- 징벌(봉인 해제 빌드): 무기 공격력 > 적중(8%) > 숙련(6.5%) > 힘 > 주문력
+	["PALADIN:ret"] = { dps = 16, hit = 26, exp = 22, str = 2.0, sp = 0.6, crit = 20, agi = 1.0, ap = 1, int = 0.3, haste = 12, sta = 0.2, armor = 0.01 },
+	-- 징벌(신성 충격 빌드): 무기 공격력 > 적중 > 주문력 > 치명타 > 숙련
+	["PALADIN:retshock"] = { dps = 12, hit = 24, sp = 1.3, sdmg = 1.3, crit = 18, exp = 14, str = 1.4, agi = 0.8, ap = 0.7, int = 0.4, haste = 10, sta = 0.2, armor = 0.01 },
+	-- 주술사 정기: 주문력 > 적중(17%) > 치명타 > 지능 > 마나 회복
+	["SHAMAN:ele"] = Caster({ sp = 1, sdmg = 1, shit = 12, scrit = 9, int = 0.4, mp5 = 0.8, haste = 9, spen = 0.5, spi = 0.1, sta = 0.1 }),
+	-- 고양: 무기 공격력 > 적중 > 숙련 > 지능(전투력 75%) > 힘 > 주문력
+	["SHAMAN:enh"] = { dps = 14, hit = 24, exp = 22, int = 2.1, str = 2.0, sp = 0.7, crit = 18, agi = 0.8, ap = 1, haste = 12, sta = 0.2, armor = 0.01 },
+	-- 복원: 치유량 > 치명타 > 지능 > 정신력 > 마나 회복
+	["SHAMAN:resto"] = Caster({ heal = 1, sp = 1, scrit = 10, int = 0.65, spi = 0.4, mp5 = 1.2, haste = 6, sta = 0.1 }),
 }
 M.W = W
 M.K = K
+
+-- 적중 상한 (%) · 근접 / 원거리 8, 주문 17
+local SPELL_HIT = { MAGE = true, WARLOCK = true, ["PRIEST:shadow"] = true, ["DRUID:balance"] = true, ["SHAMAN:ele"] = true }
 
 -- PvP: 체력을 크게, 적중 · 정신력 · 마나 회복은 덜 (탄력도가 없는 클래식 PvP 관례)
 local function PvP(w)
@@ -82,6 +113,7 @@ local function PvP(w)
 	p.sta = math.max(1.0, (w.sta or 0) * 3)
 	if p.hit then p.hit = p.hit * 0.5 end
 	if p.shit then p.shit = p.shit * 0.6 end
+	if p.exp then p.exp = p.exp * 0.6 end
 	if p.spi then p.spi = p.spi * 0.4 end
 	if p.mp5 then p.mp5 = p.mp5 * 0.6 end
 	if p.crit then p.crit = p.crit * 1.1 end
@@ -116,16 +148,156 @@ local SPEC_NAME = {
 
 M.SPEC_NAME = SPEC_NAME
 
+-------------------------------------------------------------------------------
+-- 포에버 특성 트리: 클래식식 GetTalentTabInfo 가 없어서, 찍은 특성 칸의 아이콘으로 어느 트리에 몇 점인지 센다.
+--  트리별 특성 아이콘 이름: wowf.io 특성 계산기 (2026-11-10 확인) · 두 트리에 같은 아이콘이 있으면 세지 않는다.
+-------------------------------------------------------------------------------
+local TREE_ICONS = {
+	WARRIOR = {
+		"ability_rogue_ambush,ability_parry,ability_gouge,ability_warrior_charge,spell_nature_enchantarmor,inv_sword_05,spell_holy_blessingofstamina,ability_backstab,inv_spear_01,inv_axe_09,ability_searingarrow,inv_sword_01,ability_rogue_slicedice,garrison_weaponupgrade,ability_warrior_decisivestrike,ability_shockwave,ability_warrior_savageblow",
+		"spell_nature_purge,ability_rogue_eviscerate,ability_warrior_secondwind,spell_nature_stoneclawtotem,ability_warrior_incite,spell_shadow_deathscream,spell_shadow_summonimp,spell_shadow_unholyfrenzy,ability_dualwield,ability_warrior_bloodfrenzy,inv_sword_48,spell_nature_ancestralguardian,spell_shadow_deathpact,racial_troll_berserk,ability_rogue_sprint,ability_whirlwind,ability_ghoulfrenzy,spell_nature_bloodlust",
+		"ability_racial_bloodrage,inv_shield_06,spell_magic_magearmor,spell_nature_mirrorimage,ability_warrior_revenge,ability_thunderclap,spell_holy_ashestoashes,ability_warrior_shieldguard,ability_warrior_disarm,ability_warrior_innerrage,ability_warrior_sunder,ability_warrior_shieldcharge,ability_warrior_shieldbash,ability_warrior_shieldwall,ability_thunderbolt,ability_warrior_focusedrage,inv_shield_04,inv_shield_05",
+	},
+	PALADIN = {
+		"spell_arcane_blink,ability_golemthunderclap,spell_holy_holybolt,spell_holy_divineillumination,ability_thunderbolt,spell_holy_purifyingpower,spell_holy_heal,spell_holy_greaterheal,spell_holy_devineaegis,spell_holy_mindsooth,ability_paladin_infusionoflight,spell_holy_greaterblessingoflight,spell_holy_innerfire,spell_holy_searinglight,ability_paladin_sacredcleansing,spell_holy_power,ability_paladin_judgementofthepure",
+		"spell_nature_sleep,ability_defend,ability_rogue_ambush,spell_holy_sealofprotection,spell_holy_divineintervention,ability_paladin_shieldofthetemplar,spell_holy_sealofmight,inv_shield_06,spell_holy_devotion,ability_paladin_judgementred,spell_holy_sealoffury,spell_magic_lesserinvisibilty,spell_holy_stoicism,spell_holy_blessingofprotection,spell_holy_blessingofstrength,spell_holy_improvedresistanceauras,spell_holy_greaterblessingofsanctuary",
+		"ability_parry,spell_frost_windwalkon,spell_holy_righteousfury,spell_holy_retributionaura,ability_paladin_judgementblue,spell_holy_vindication,spell_holy_unyieldingfaith,ability_warrior_innerrage,spell_holy_persuitofjustice,spell_holy_eyeforaneye,inv_sword_08,inv_hammer_04,spell_holy_turnundead,spell_holy_prayerofhealing,ability_racial_avatar,ability_paladin_enlightenedjudgements,spell_holy_blessedresillience",
+	},
+	HUNTER = {
+		"spell_nature_ravenform,spell_nature_reincarnation,inv_weapon_crossbow_10,ability_hunter_aspectofthemonkey,ability_hunter_beastsoothe,ability_mount_jungletiger,ability_druid_dash,ability_bullrush,ability_hunter_mendpet,inv_misc_monsterclaw_04,ability_hunter_animalhandler,ability_druid_demoralizingroar,ability_devour,spell_nature_abolishmagic,inv_misc_monsterclaw_03,ability_druid_ferociousbite",
+		"ability_townwatch,spell_frost_stun,ability_searingarrow,ability_hunter_quickshot,spell_frost_wizardmark,ability_hunter_zenarchery,ability_hunter_rapidkilling,ability_impalingbolt,ability_mount_whitedirewolf,ability_trueshot,ability_piercedamage,ability_hunter_rapidregeneration,ability_upgrademoonglaive,ability_golemstormbolt,inv_weapon_rifle_06,hunter_pvp_snipershot",
+		"inv_misc_head_dragon_black,ability_parry,spell_nature_stranglevines,ability_racial_bloodrage,spell_shadow_twilight,ability_rogue_trip,spell_nature_timestop,ability_kick,ability_whirlwind,ability_ensnare,ability_dualwield,ability_warrior_challange,ability_hunter_resourcefulness,ability_hunter_swiftstrike,ability_hunter_mastertactitian,ability_hunter_pet_tallstrider,spell_nature_invisibilty,ability_gouge",
+	},
+	ROGUE = {
+		"ability_gouge,ability_fiegndead,ability_racial_bloodrage,ability_druid_disembowel,ability_warrior_riposte,ability_rogue_slicedice,spell_nature_earthbindtotem,ability_rogue_rupture,ability_criticalstrike,ability_rogue_feigndeath,spell_ice_lament,ability_poisons,ability_warrior_decisivestrike,inv_sword_31,ability_rogue_kidneyshot,spell_shadow_chilltouch,ability_rogue_deadlybrew",
+		"ability_rogue_eviscerate,spell_shadow_ritualofsacrifice,spell_nature_invisibilty,ability_backstab,ability_parry,ability_marksmanship,ability_rogue_sprint,spell_shadow_shadowward,ability_warrior_challange,ability_rogue_fleetfooted,ability_kick,inv_sword_35,spell_holy_blessingofstrength,ability_racial_avatar,ability_dualwield,ability_warrior_punishingblow,inv_sword_27,ability_rogue_restlessblades,spell_shadow_shadowworddominate",
+		"spell_nature_mirrorimage,spell_shadow_charm,ability_warrior_warcry,spell_shadow_summonsuccubus,ability_stealth,ability_rogue_ambush,ability_sap,spell_shadow_fumble,spell_shadow_possession,inv_sword_17,spell_magic_lesserinvisibilty,spell_shadow_curse,ability_rogue_blackjack,ability_ambush,spell_shadow_antishadow,spell_shadow_lifedrain,inv_sword_32,ability_creature_cursed_02",
+	},
+	PRIEST = {
+		"spell_holy_searinglight,inv_wand_01,spell_holy_sealofvengeance,spell_nature_manaregentotem,spell_holy_divineillumination,spell_nature_enchantarmor,spell_nature_tranquility,ability_hibernation,spell_frost_windwalkon,spell_holy_powerwordshield,spell_nature_sleep,spell_holy_innerfire,spell_shadow_manaburn,spell_holy_pureofheart,spell_holy_penance,spell_holy_holyprotection,spell_holy_devineaegis,spell_holy_powerinfusion",
+		"spell_holy_healingfocus,spell_holy_renew,spell_holy_sealofsalvation,spell_holy_spellwarding,spell_holy_sealofwrath,spell_holy_holynova,spell_holy_blessedrecovery,spell_holy_layonhands,spell_holy_purify,spell_holy_heal02,spell_holy_searinglightpriest,spell_holy_blindingheal,inv_scroll_07,inv_enchant_essenceeternallarge,spell_holy_spiritualguidence,spell_nature_moonglow,spell_holy_prayerofmendingtga",
+		"spell_shadow_burningspirit,spell_shadow_gathershadows,spell_shadow_requiem,spell_shadow_unholyfrenzy,spell_shadow_shadowwordpain,spell_shadow_chilltouch,spell_shadow_psychicscream,spell_shadow_siphonmana,spell_shadow_soulleech_2,spell_warlock_demonsoul,spell_shadow_unsummonbuilding,spell_shadow_blackplague,spell_shadow_impphaseshift,spell_shadow_devouringplague,spell_shadow_demonicfortitude,spell_shadow_twilight,spell_shadow_shadowform",
+	},
+	SHAMAN = {
+		"spell_nature_wispsplode,spell_nature_earthshock,spell_fire_elementaldevastation,spell_frost_frostward,spell_lightning_lightningbolt01,spell_fire_immolation,spell_shadow_manaburn,spell_nature_spiritarmor,spell_fire_sealoffire,spell_nature_eyeofthestorm,spell_nature_stranglevines,spell_nature_stormreach,spell_nature_callstorm,spell_nature_lightningoverload,spell_fire_volcano,spell_nature_unrelentingstorm",
+		"spell_nature_stoneclawtotem,ability_thunderbolt,spell_shadow_grimward,spell_nature_stoneskintotem,spell_nature_mentalquickness,spell_nature_lightningshield,spell_fire_flametounge,spell_nature_elementalabsorption,spell_nature_mirrorimage,spell_holy_devotion,ability_ghoulfrenzy,ability_shaman_stormstrike,spell_nature_spiritwolf,ability_parry,spell_nature_sleep,spell_shaman_improvedstormstrike,spell_shaman_maelstromweapon,spell_nature_bloodlust",
+		"spell_nature_magicimmunity,spell_frost_manarecharge,spell_nature_sleep,spell_nature_healingtouch,spell_nature_moonglow,spell_nature_reincarnation,spell_nature_undyingstrength,spell_nature_healingwavelesser,ability_shaman_watershield,spell_nature_tranquility,spell_nature_manaregentotem,spell_frost_summonwaterelemental,spell_nature_healingway,spell_nature_ravenform,spell_frost_wizardmark,spell_nature_riptide",
+	},
+	MAGE = {
+		"inv_wand_01,spell_nature_starfall,spell_arcane_arcaneresilience,spell_holy_dispelmagic,spell_nature_astralrecalgroup,spell_shadow_manaburn,ability_mage_missilebarrage,inv_ability_mage_radiantspark,spell_nature_wispsplode,spell_arcane_blast,spell_shadow_detectlesserinvisibility,spell_frost_iceshock,spell_shadow_siphonmana,ability_mage_netherwindpresence,spell_nature_enchantarmor,spell_shadow_charm,spell_shadow_teleport,spell_nature_lightning",
+		"spell_fire_flameshock,spell_fire_flamebolt,spell_fire_incinerate,spell_fire_flare,spell_fire_meteorstorm,spell_fire_fire,spell_fire_selfdestruct,spell_fire_fireball02,spell_fire_lavaspawn,spell_fire_soulburn,spell_fire_firearmor,spell_fire_firebolt,spell_fire_masterofelements,spell_nature_wispheal,spell_holy_excorcism_02,spell_fire_immolation,spell_fire_sealoffire",
+		"spell_frost_frostward,spell_frost_frostbolt02,spell_ice_magicdamage,spell_frost_iceshard,spell_frost_frostarmor,spell_frost_freezingbreath,spell_frost_wisp,spell_frost_stun,spell_frost_icestorm,spell_frost_frostblast,spell_shadow_darkritual,spell_frost_frost,spell_frost_frostshock,spell_frost_glacier,spell_frost_wizardmark,ability_mage_wintersgrasp,spell_frost_chillingblast,spell_ice_lament",
+	},
+	WARLOCK = {
+		"spell_shadow_burningspirit,spell_shadow_unsummonbuilding,spell_shadow_abominationexplosion,spell_shadow_callofbone,inv_elemental_primal_shadow,spell_shadow_haunting,spell_shadow_curseofsargeras,spell_shadow_fingerofdeath,spell_shadow_contagion,spell_shadow_unstableaffliction_2,spell_shadow_focusedpower,spell_shadow_twilight,spell_shadow_grimward,spell_shadow_requiem,spell_shadow_lifedrain02,spell_shadow_shadetruesight,ability_deathknight_hemorrhagicfever",
+		"spell_shadow_lifedrain,spell_shadow_summonimp,spell_shadow_metamorphosis,spell_shadow_shadowworddominate,spell_shadow_ragingscream,spell_shadow_summonvoidwalker,spell_shadow_demonictactics,spell_shadow_felmending,ability_warlock_randomizesuccubusincubus,spell_shadow_psychicscream,spell_shadow_impphaseshift,spell_fire_fireball02,spell_nature_removecurse,ability_demonhunter_chaoticimprint_fire,spell_shadow_summonfelhunter,spell_shadow_gathershadows,spell_shadow_improvedvampiricembrace,spell_shadow_shadowpact,inv_ability_soulharvesterwarlock_demonicsoul",
+		"spell_shadow_corpseexplode,spell_shadow_shadowbolt,spell_shadow_deathpact,ability_mage_moltenarmor,spell_fire_windsofwoe,spell_fire_fire,spell_shadow_shadowwordpain,spell_shadow_scourgebuild,spell_fire_lavaspawn,spell_fire_soulburn,spell_fire_fireball,spell_fire_volcano,ability_warlock_baneofhavoc,spell_fire_meteorstorm,spell_fire_playingwithfire,spell_fire_burnout",
+	},
+	DRUID = {
+		"spell_nature_abolishmagic,spell_arcane_arcane03,spell_nature_sentinal,spell_nature_starfall,inv_staff_01,spell_nature_naturetouchgrow,spell_nature_stranglevines,spell_nature_natureresistancetotem,spell_nature_insectswarm,spell_nature_purge,spell_arcane_starfire,inv_misc_herb_15,spell_nature_naturesblessing,ability_druid_eclipse,spell_nature_moonglow,spell_nature_forceofnature",
+		"ability_hunter_pet_hyena,spell_holy_blessingofstamina,spell_nature_spiritwolf,ability_ambush,ability_druid_bash,inv_misc_pelt_bear_03,spell_shadow_vampiricaura,ability_druid_ravage,ability_hunter_pet_bear,inv_misc_monsterclaw_04,ability_hunter_pet_cat,ability_druid_lacerate,spell_druid_savagery,ability_ghoulfrenzy,spell_nature_unyeildingstamina,ability_druid_predatoryinstincts,ability_druid_primalagression,ability_bullrush,ability_racial_cannibalize,spell_druid_displacement",
+		"spell_nature_healingwavegreater,spell_holy_blessingofagility,spell_nature_healingtouch,spell_frost_windwalkon,spell_nature_wispsplode,ability_eyeoftheowl,spell_nature_protectionformnature,inv_misc_herb_felblossom,spell_holy_elunesgrace,spell_nature_rejuvenation,inv_relics_idolofrejuvenation,spell_nature_ravenform,spell_nature_giftofthewaterspirit,spell_nature_tranquility,spell_nature_resistnature,ability_druid_flourish",
+	},
+}
+-- 곰 탱커 특성 (두꺼운 가죽 · 야성의 본능 · 자연의 반응 · 야성의 충격): 합쳐서 3점 이상이면 수호(곰)
+local BEAR_TALENTS = { "inv_misc_pelt_bear_03", "ability_ambush", "ability_bullrush", "ability_druid_bash" }
+-- 신성 충격 (성기사 신성 트리)
+local HOLY_SHOCK = "spell_holy_searinglight"
+
+local iconProbe
+local function IconFileID(name)
+	local path = "Interface\\Icons\\" .. name
+	if GetFileIDFromPath then
+		local ok, id = pcall(GetFileIDFromPath, path)
+		if ok and type(id) == "number" and id > 0 then return id end
+	end
+	iconProbe = iconProbe or CreateFrame("Frame"):CreateTexture()
+	if iconProbe.GetTextureFileID then
+		iconProbe:SetTexture(path)
+		local id = iconProbe:GetTextureFileID()
+		if type(id) == "number" and id > 0 then return id end
+	end
+end
+M.IconFileID = IconFileID
+
+local treeMap = {}
+local function TreeMap(class)
+	if treeMap[class] then return treeMap[class] end
+	local src = TREE_ICONS[class]
+	if not src then return end
+	local map, n = {}, 0
+	for t, list in ipairs(src) do
+		for name in list:gmatch("[^,]+") do
+			local id = IconFileID(name)
+			for _, k in ipairs({ id or false, name }) do
+				if k then
+					if map[k] and map[k] ~= t then map[k] = false else map[k] = t end
+				end
+			end
+			if id then n = n + 1 end
+		end
+	end
+	if n > 0 then treeMap[class] = map end
+	return map
+end
+
+-- 찍은 특성 칸 아이콘 → 단계 합
+local function TraitRanks()
+	local T = ns.Talents
+	if not (T and T.TraitsMode and T.TraitsMode() and T.TraitNodes) then return end
+	local ranks, any = {}, false
+	for _, n in ipairs(T.TraitNodes()) do
+		if n.icon and (n.rank or 0) > 0 then
+			ranks[n.icon] = (ranks[n.icon] or 0) + n.rank
+			any = true
+		end
+	end
+	return any and ranks or nil
+end
+
+local function RankOf(ranks, name)
+	local id = IconFileID(name)
+	return (id and ranks[id]) or ranks[name] or 0
+end
+
+-- 포에버: { 트리별 점수 }, 가장 많은 트리 key, 곰 여부, 신성 충격 여부
+local function ForeverTree(class)
+	local ranks = TraitRanks()
+	if not ranks then return end
+	local map = TreeMap(class)
+	if not map then return end
+	local pts = { 0, 0, 0 }
+	for icon, r in pairs(ranks) do
+		local t = map[icon]
+		if t then pts[t] = pts[t] + r end
+	end
+	local best, bestN = nil, 0
+	for t = 1, 3 do if pts[t] > bestN then best, bestN = t, pts[t] end end
+	if not best then return end
+	local key = TABS[class][best]
+	if class == "DRUID" and key == "feral" then
+		local bear = 0
+		for _, nm in ipairs(BEAR_TALENTS) do bear = bear + RankOf(ranks, nm) end
+		if bear >= 3 then key = "guardian" end
+	end
+	local shock = class == "PALADIN" and RankOf(ranks, HOLY_SHOCK) > 0
+	return key, pts, shock
+end
+M.ForeverTree = ForeverTree
+
+local specCache = { at = -100 }
 function M:Spec()
 	local _, class = UnitClass("player")
 	local key = Ink.cdb and Ink.cdb.scoreSpec
 	if key and W[class .. ":" .. key] then return class, key end
-	if GetSpecialization and GetSpecializationInfo then
-		local i = GetSpecialization()
-		local id = i and GetSpecializationInfo(i)
-		if id and SPEC_ID[id] then return class, SPEC_ID[id] end
+	local now = GetTime()
+	if specCache.class == class and now - specCache.at < 10 then return class, specCache.spec end
+	local spec, shock
+	if FOREVER then
+		local ok, k, pts, sh = pcall(ForeverTree, class)
+		if ok and k then spec, shock = k, sh; specCache.pts = pts end
 	end
-	if GetTalentTabInfo and TABS[class] then
+	if not spec and GetTalentTabInfo and TABS[class] then
 		local best, bestN = nil, 0
 		for t = 1, 3 do
 			local a, b, c, d, e = GetTalentTabInfo(t)
@@ -133,30 +305,89 @@ function M:Spec()
 			local n = (type(c) == "number" and c) or (type(e) == "number" and e) or 0
 			if n > bestN then best, bestN = TABS[class][t], n end
 		end
-		if best then return class, best end
+		spec = best
 	end
-	return class, DEFAULT[class]
+	if not spec and FOREVER and ns.Talents and ns.Talents.GuessSpec then
+		local ok, g = pcall(ns.Talents.GuessSpec, ns.Talents)
+		if ok and g and W[class .. ":" .. g] then spec = g end
+	end
+	if not spec and GetSpecialization and GetSpecializationInfo then
+		local i = GetSpecialization()
+		local id = i and GetSpecializationInfo(i)
+		if id and SPEC_ID[id] then spec = SPEC_ID[id] end
+	end
+	spec = spec or DEFAULT[class]
+	specCache.class, specCache.spec, specCache.shock, specCache.at = class, spec, shock, now
+	return class, spec
 end
+
+function M:ResetSpec() specCache.at = -100 end
 
 function M:Mode()
 	return (Ink.cdb and Ink.cdb.scoreMode) or "pve"
 end
 
+-- 지금 적중 % (장비 등급 + 근접은 특성 · 효과 보정). 주문 적중은 장비분만 (클라이언트마다 보정 함수 단위가 달라서)
+local function CurHit(spell)
+	local v = 0
+	if GetCombatRatingBonus then
+		local best = 0
+		for _, cr in ipairs(spell and { CR_HIT_SPELL or 8, CR_HIT_MELEE or 6 } or { CR_HIT_MELEE or 6 }) do
+			local ok, p = pcall(GetCombatRatingBonus, cr)
+			p = ok and plain(p)
+			if type(p) == "number" and p > best then best = p end
+		end
+		v = v + best
+	end
+	if not spell and GetHitModifier then
+		local ok, p = pcall(GetHitModifier)
+		p = ok and plain(p)
+		if type(p) == "number" and p > 0 and p < 15 then v = v + p end
+	end
+	return v
+end
+
+-- 적중 상한을 이미 넘겼으면 적중 가치를 크게 낮춘다 (조금은 남겨서 같은 조건이면 적중 있는 쪽)
+local capCache = {}
+local function CapAdjust(w, class, spec)
+	local spell = SPELL_HIT[class] or SPELL_HIT[class .. ":" .. spec]
+	local cap = spell and 17 or 8
+	local over = CurHit(spell) >= cap
+	if not over then return w, "" end
+	capCache[w] = capCache[w] or (function()
+		local p = {}
+		for k, v in pairs(w) do p[k] = v end
+		if p.hit then p.hit = p.hit * 0.15 end
+		if p.shit then p.shit = p.shit * 0.15 end
+		return p
+	end)()
+	return capCache[w], "cap"
+end
+
+local weightSig = ""
 function M:Weights()
 	local class, spec = self:Spec()
-	local w = W[(class or "") .. ":" .. (spec or "")]
+	local wkey = (class or "") .. ":" .. (spec or "")
+	if class == "PALADIN" and spec == "ret" and specCache.shock and not (Ink.cdb and Ink.cdb.scoreSpec) then wkey = "PALADIN:retshock" end
+	local w = W[wkey]
 	if not w then return end
+	local sig
+	w, sig = CapAdjust(w, class, spec)
 	if self:Mode() == "pvp" then
 		self.pvpCache = self.pvpCache or {}
 		self.pvpCache[w] = self.pvpCache[w] or PvP(w)
-		return self.pvpCache[w], class, spec
+		w = self.pvpCache[w]
 	end
+	weightSig = wkey .. sig
 	return w, class, spec
 end
 
 function M:ProfileName()
 	local _, class, spec = self:Weights()
-	return (SPEC_NAME[spec or ""] or "") .. " " .. (UnitClass("player") or "") .. " · " .. (self:Mode() == "pvp" and "PvP" or "PvE")
+	local name = SPEC_NAME[spec or ""] or ""
+	if class == "PALADIN" and spec == "ret" and specCache.shock then name = name .. "(신성 충격)" end
+	if class == "DRUID" and spec == "guardian" then name = "야성(곰)" end
+	return name .. " " .. (UnitClass("player") or "") .. " · " .. (self:Mode() == "pvp" and "PvP" or "PvE")
 end
 
 -------------------------------------------------------------------------------
@@ -169,6 +400,31 @@ local function LevelPattern()
 	end
 	return LEVEL_PAT
 end
+
+-- 직업별로 무기 전문가에게 배워서 쓸 수 있는 무기 (아이템 무기 종류 번호) · 워크래프트 태번 포에버 표
+--  0 한손 도끼 · 1 양손 도끼 · 2 활 · 3 총 · 4 한손 둔기 · 5 양손 둔기 · 6 장창 · 7 한손 도검 · 8 양손 도검
+--  10 지팡이 · 13 장착 무기 · 15 단검 · 16 투척 무기 · 18 석궁 · 19 마법봉
+local function Set(...) local t = {} for _, v in ipairs({ ... }) do t[v] = true end return t end
+local WEAPON_OK = {
+	WARRIOR = Set(0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 13, 15, 16, 18),
+	PALADIN = Set(0, 1, 4, 5, 6, 7, 8),
+	HUNTER = Set(0, 1, 2, 3, 6, 7, 8, 10, 13, 15, 16, 18),
+	ROGUE = Set(0, 2, 3, 4, 7, 13, 15, 16, 18),
+	PRIEST = Set(4, 10, 15, 19),
+	SHAMAN = Set(0, 1, 4, 5, 10, 13, 15),
+	MAGE = Set(7, 10, 15, 19),
+	WARLOCK = Set(7, 10, 15, 19),
+	DRUID = Set(4, 5, 6, 10, 13, 15),
+}
+ns.WEAPON_OK = WEAPON_OK
+-- 이 무기 종류를 내 직업이 배워서 쓸 수 있나 (nil = 무기가 아님)
+local function CanLearnWeapon(link)
+	local _, _, _, _, _, classID, subID = GetItemInfoInstant(link)
+	if classID ~= 2 then return nil end
+	local _, cls = UnitClass("player")
+	return (WEAPON_OK[cls] or {})[subID] and true or false, subID
+end
+M.CanLearnWeapon = CanLearnWeapon
 
 local function IsRed(c)
 	return c and c.r and c.r > 0.95 and c.g < 0.2 and c.b < 0.2
@@ -222,18 +478,27 @@ local function ReadTooltip(link)
 	local complete = #data.lines >= 2 and GetItemInfo(link) ~= nil
 	local lp = LevelPattern()
 	local onEquip = ITEM_SPELL_TRIGGER_ONEQUIP
+	-- 아직 안 배운 무기 종류는 빨간 줄로 나오지만, 무기 전문가에게 배우면 쓸 수 있는 종류면 못 쓰는 걸로 치지 않는다
+	local learnable, subID = CanLearnWeapon(link)
+	local subName = subID and GetItemSubClassInfo and GetItemSubClassInfo(2, subID)
+	local function SkillLine(t)
+		return learnable and type(t) == "string" and subName and (t == subName or t:find(subName, 1, true))
+	end
 	for i, line in ipairs(data.lines) do
 		local t = plain(line.leftText)
 		if i > 1 and type(t) == "string" then
-			if IsRed(line.leftColor) or IsRed(line.rightColor) then
+			local rt = plain(line.rightText)
+			if IsRed(line.leftColor) then
 				local lv = lp and tonumber(t:match(lp))
 				if lv then r.level = lv
+				elseif SkillLine(t) then r.skill = true
 				elseif not (DURABILITY_TEMPLATE and t:find(DURABILITY_TEMPLATE:gsub("%%d", "%%d+"):gsub("%%s", ".-"))) then
 					r.no = true
 				end
 			end
-			local rt = plain(line.rightText)
-			if type(rt) == "string" and (IsRed(line.rightColor)) then r.no = true end
+			if type(rt) == "string" and IsRed(line.rightColor) then
+				if SkillLine(rt) then r.skill = true else r.no = true end
+			end
 			if onEquip and t:find(onEquip, 1, true) then ParseEffect(t, r.effects)
 			elseif t:find("%%") then
 				-- 포에버 능력치 줄의 % ("적중률 0.3%") → 등급을 % 로 바꿀 때 그대로 쓴다
@@ -256,6 +521,11 @@ end
 -- 내 캐릭터가 쓸 수 있는 장비인가 (빨간 줄 없음 · 레벨만 모자란 건 쓸 수 있다고 본다)
 function M:Usable(link)
 	return not ReadTooltip(link).no
+end
+
+-- 무기 전문가에게 무기 기술을 배워야 쓸 수 있는 장비인가
+function M:NeedsSkill(link)
+	return ReadTooltip(link).skill == true
 end
 
 -------------------------------------------------------------------------------
@@ -284,7 +554,7 @@ function M:Score(link, asOffhand)
 	if not link then return 0 end
 	local w = self:Weights()
 	if not w then return end
-	local key = link .. (asOffhand and "#oh" or "") .. self:Mode()
+	local key = link .. (asOffhand and "#oh" or "") .. self:Mode() .. weightSig
 	if scoreCache[key] then return scoreCache[key] end
 	local stats = GetItemStats(link)
 	if not stats then M.missed = true return end
@@ -557,6 +827,7 @@ end
 
 function M:Invalidate()
 	wipe(scoreCache)
+	specCache.at = -100
 	self.version = (self.version or 0) + 1
 	local bags = Ink.modules.Bags
 	if bags and bags.Schedule then pcall(bags.Schedule, bags) end
@@ -617,6 +888,10 @@ function M:OnTooltip(tt)
 		for s = 1, 19 do if Equipped(s) == link then return end end
 		local r = M:Compare(link)
 		if r then Line(tt, r) end
+		-- 아직 안 배운 무기 종류: 무기 전문가에게 배우면 쓸 수 있다
+		if ReadTooltip(link).skill then
+			tt:AddLine("|cffE3C07A무기 전문가에게 배우면 쓸 수 있어요|r |cff8E939B· P(주문책) 옆 목록에서 위치|r")
+		end
 	end
 end
 
@@ -665,7 +940,8 @@ function M:Init()
 	end
 	local ev = CreateFrame("Frame")
 	for _, e in ipairs({ "PLAYER_EQUIPMENT_CHANGED", "PLAYER_LEVEL_UP", "CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE",
-		"ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_SPECIALIZATION_CHANGED", "SKILL_LINES_CHANGED", "GET_ITEM_INFO_RECEIVED" }) do
+		"ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_SPECIALIZATION_CHANGED", "SKILL_LINES_CHANGED", "GET_ITEM_INFO_RECEIVED",
+		"TRAIT_CONFIG_UPDATED" }) do
 		pcall(ev.RegisterEvent, ev, e)
 	end
 	ev:SetScript("OnEvent", function(_, event)

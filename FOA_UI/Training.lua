@@ -211,6 +211,192 @@ local function SectionHead(body)
 	return h
 end
 
+-------------------------------------------------------------------------------
+-- 무기 기술 · 대도시 무기 전문가 (Warcraft Tavern 포에버 무기 기술 표)
+--  한 가지에 10실버 · 장창은 20레벨부터 1골드 · 마법봉은 처음부터 알고 있어서 배우지 않는다
+--  아이템 무기 종류 번호: 0 한손 도끼 · 1 양손 도끼 · 2 활 · 3 총 · 4 한손 둔기 · 5 양손 둔기 · 6 장창
+--  7 한손 도검 · 8 양손 도검 · 10 지팡이 · 13 장착 무기 · 15 단검 · 16 투척 무기 · 18 석궁
+-------------------------------------------------------------------------------
+local WMASTERS = {
+	{ fac = "Alliance", map = 1453, x = 63.8, y = 69.0, npc = 11867, en = "Woo Ping", s = { 15, 7, 8, 6, 10, 18 } },
+	{ fac = "Alliance", map = 1455, x = 62.2, y = 89.6, npc = 11865, en = "Buliwyf Stonehand", s = { 13, 3, 0, 1, 4, 5 } },
+	{ fac = "Alliance", map = 1455, x = 62.2, y = 89.6, npc = 13084, en = "Bixi Wobblebonk", s = { 15, 18, 16 } },
+	{ fac = "Alliance", map = 1457, x = 57.6, y = 46.7, npc = 11866, en = "Ilyenia Moonfire", s = { 2, 15, 13, 10, 16 } },
+	{ fac = "Horde", map = 1454, x = 81.5, y = 19.6, npc = 11868, en = "Sayoc", s = { 2, 15, 13, 0, 1, 10, 16 } },
+	{ fac = "Horde", map = 1454, x = 81.5, y = 19.6, npc = 2704, en = "Hanashi", s = { 2, 0, 1, 10, 16 } },
+	{ fac = "Horde", map = 1456, x = 40.9, y = 62.7, npc = 11869, en = "Ansekhwa", s = { 3, 4, 5, 10 } },
+	{ fac = "Horde", map = 1458, x = 57.3, y = 32.8, npc = 11870, en = "Archibald", s = { 15, 7, 8, 6, 18 } },
+}
+M.WMASTERS = WMASTERS
+-- 무기 기술 주문 번호 (배웠는지 확인)
+local WEAPON_SPELL = { [0] = 196, [1] = 197, [2] = 264, [3] = 266, [4] = 198, [5] = 199, [6] = 200, [7] = 201, [8] = 202,
+	[10] = 227, [13] = 15590, [15] = 1180, [16] = 2567, [18] = 5011, [19] = 5009 }
+local WEAPON_KO = { [0] = "한손 도끼", [1] = "양손 도끼", [2] = "활", [3] = "총", [4] = "한손 둔기", [5] = "양손 둔기", [6] = "장창",
+	[7] = "한손 도검", [8] = "양손 도검", [10] = "지팡이", [13] = "장착 무기", [15] = "단검", [16] = "투척 무기", [18] = "석궁", [19] = "마법봉" }
+local function WeaponName(sub)
+	local n = GetItemSubClassInfo and GetItemSubClassInfo(2, sub)
+	return (type(n) == "string" and n ~= "") and n or WEAPON_KO[sub] or tostring(sub)
+end
+
+-- 배운 무기 기술 { [종류] = true } · 하나도 못 읽으면 nil (확인 불가 → 표시만)
+local function KnownWeapons()
+	local skills = {}
+	if GetNumSkillLines and GetSkillLineInfo then
+		for i = 1, (GetNumSkillLines() or 0) do
+			local n = GetSkillLineInfo(i)
+			if type(n) == "string" then skills[n] = true end
+		end
+	end
+	local known, any = {}, false
+	for sub, id in pairs(WEAPON_SPELL) do
+		local k = (IsPlayerSpell and IsPlayerSpell(id)) or (IsSpellKnown and IsSpellKnown(id)) or skills[WeaponName(sub)]
+		if k then known[sub] = true; any = true end
+	end
+	return any and known or nil
+end
+M.KnownWeapons = KnownWeapons
+
+local function NpcName(e)
+	local Q = Ink.modules.QuestMap
+	local n = Q and Q.GiverName and Q:GiverName(e.npc)
+	return n or e.en
+end
+
+local WROW = 46
+local function WRow(body)
+	local r = CreateFrame("Button", nil, body)
+	r:SetSize(W - 20, WROW)
+	r.hl = Ink:Round(r, "BACKGROUND", true, false)
+	r.hl:SetAllPoints()
+	r.hl:SetVertexColor(1, 1, 1, 0)
+	r.icon = r:CreateTexture(nil, "ARTWORK")
+	r.icon:SetSize(14, 14)
+	r.icon:SetPoint("TOPLEFT", 8, -8)
+	r.icon:SetTexture(Ink.icon("MapPin"))
+	r.name = Ink:Text(r, F.semi, 11, C.text, "LEFT")
+	r.name:SetPoint("LEFT", r.icon, "RIGHT", 7, 0)
+	r.name:SetPoint("RIGHT", -56, 0)
+	r.right = Ink:Text(r, F.sans, 10, C.muted, "RIGHT")
+	r.right:SetPoint("RIGHT", r, "TOPRIGHT", -8, -15)
+	r.sub = Ink:Text(r, F.sans, 10, C.soft, "LEFT")
+	r.sub:SetPoint("TOPLEFT", r.icon, "BOTTOMLEFT", 0, -5)
+	r.sub:SetPoint("RIGHT", -8, 0)
+	r.sub:SetWordWrap(true)
+	r.sub:SetJustifyV("TOP")
+	r:SetScript("OnEnter", function(self)
+		self.hl:SetVertexColor(1, 1, 1, 0.05)
+		local e = self.e
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:AddLine(NpcName(e), 1, 1, 1)
+		local mi = C_Map.GetMapInfo and C_Map.GetMapInfo(e.map)
+		GameTooltip:AddLine(string.format("%s  %.1f, %.1f", mi and mi.name or "", e.x, e.y), 0.7, 0.72, 0.75)
+		GameTooltip:AddLine(" ")
+		for _, sub in ipairs(e.s) do
+			local st = self.state[sub]
+			local r2, g2, b2 = 0.45, 0.47, 0.5
+			local right = "내 직업은 못 씀"
+			if st == "learn" then r2, g2, b2, right = C.accent[1], C.accent[2], C.accent[3], (sub == 6 and "배울 수 있음 · 20레벨 · 1골드" or "배울 수 있음 · 10실버")
+			elseif st == "known" then r2, g2, b2, right = 0.44, 0.83, 0.6, "배움"
+			elseif st == "ok" then r2, g2, b2, right = 0.85, 0.86, 0.88, (sub == 6 and "20레벨 · 1골드" or "10실버") end
+			GameTooltip:AddDoubleLine(WeaponName(sub), right, r2, g2, b2, r2, g2, b2)
+		end
+		GameTooltip:AddLine(" ")
+		GameTooltip:AddLine("누르면 지도에 위치 표시", 0.55, 0.57, 0.6)
+		GameTooltip:Show()
+	end)
+	r:SetScript("OnLeave", function(self) self.hl:SetVertexColor(1, 1, 1, 0); GameTooltip:Hide() end)
+	r:SetScript("OnClick", function(self)
+		local e = self.e
+		local Q = Ink.modules.QuestMap
+		if Q and Q.Waypoint then Q:Waypoint({ mapID = e.map, wx = e.x / 100, wy = e.y / 100 }) end
+		local mi = C_Map.GetMapInfo and C_Map.GetMapInfo(e.map)
+		print(string.format("|cffFFF468FOA|r 무기 전문가 |cffFFF468%s|r · %s (%.1f, %.1f) 위치를 지도에 표시했어요", NpcName(e), mi and mi.name or "", e.x, e.y))
+	end)
+	return r
+end
+
+function M:PaintWeapons(p)
+	local _, cls = UnitClass("player")
+	local fac = UnitFactionGroup("player")
+	local ok = ns.WEAPON_OK and ns.WEAPON_OK[cls] or {}
+	local known = KnownWeapons()
+	local a = C.accent
+	local hexA = string.format("%02x%02x%02x", a[1] * 255, a[2] * 255, a[3] * 255)
+	-- 배울 수 있는데 아직 안 배운 무기
+	local todo, seen = {}, {}
+	for _, e in ipairs(WMASTERS) do
+		if e.fac == fac then
+			for _, sub in ipairs(e.s) do
+				if ok[sub] and known and not known[sub] and not seen[sub] then seen[sub] = true; todo[#todo + 1] = WeaponName(sub) end
+			end
+		end
+	end
+	p.card.n:SetText(known and #todo or "-")
+	local on = known and #todo > 0
+	p.card.n:SetTextColor(on and a[1] or C.muted[1], on and a[2] or C.muted[2], on and a[3] or C.muted[3])
+	p.card.l:SetText(not known and "무기 기술" or (#todo > 0 and "더 배울 수 있는 무기" or "배울 무기 기술 없음"))
+	p.card.s:SetText(#todo > 0 and table.concat(todo, " · ") or "대도시 무기 전문가에게서 배워요")
+	p.card.cost:SetText(#todo > 0 and "|cff8E939B한 가지 10실버|r" or "")
+	p.card.bd:SetVertexColor(a[1], a[2], a[3], on and 0.4 or 0.06)
+	for _, r in ipairs(p.rows) do r:Hide() end
+	for _, r in ipairs(p.wrows or {}) do r:Hide() end
+	for _, h in ipairs(p.heads) do h:Hide() end
+	p.wrows = p.wrows or {}
+	local y, nr, nh, lastMap = 0, 0, 0, nil
+	for _, e in ipairs(WMASTERS) do
+		if e.fac == fac then
+			if e.map ~= lastMap then
+				lastMap = e.map
+				nh = nh + 1
+				local h = p.heads[nh] or SectionHead(p.body)
+				p.heads[nh] = h
+				local mi = C_Map.GetMapInfo and C_Map.GetMapInfo(e.map)
+				h.t:SetText(mi and mi.name or "")
+				local cnt = 0
+				for _, e2 in ipairs(WMASTERS) do if e2.map == e.map then cnt = cnt + 1 end end
+				h.r:SetText(cnt .. "명")
+				h:ClearAllPoints()
+				h:SetPoint("TOPLEFT", 0, -y)
+				h:Show()
+				y = y + HEAD + 4
+			end
+			nr = nr + 1
+			local r = p.wrows[nr] or WRow(p.body)
+			p.wrows[nr] = r
+			r.e = e
+			r.state = {}
+			local parts, mine = {}, 0
+			for _, sub in ipairs(e.s) do
+				local st
+				if not ok[sub] then st = "no"
+				elseif known and known[sub] then st = "known"
+				elseif known then st = "learn"; mine = mine + 1
+				else st = "ok" end
+				r.state[sub] = st
+				local nm = WeaponName(sub)
+				if st == "learn" then parts[#parts + 1] = "|cff" .. hexA .. nm .. "|r"
+				elseif st == "known" then parts[#parts + 1] = "|cff6FD39A" .. nm .. "|r"
+				elseif st == "ok" then parts[#parts + 1] = "|cffD9DBE0" .. nm .. "|r"
+				else parts[#parts + 1] = "|cff5E636B" .. nm .. "|r" end
+			end
+			r.name:SetText(NpcName(e))
+			r.right:SetText(mine > 0 and ("|cff" .. hexA .. "+" .. mine .. "|r") or "")
+			r.icon:SetVertexColor(mine > 0 and a[1] or 0.6, mine > 0 and a[2] or 0.62, mine > 0 and a[3] or 0.66)
+			r.sub:SetText(table.concat(parts, " · "))
+			local hgt = math.max(WROW, 30 + math.ceil(r.sub:GetStringHeight() or 12))
+			r:SetHeight(hgt)
+			r:ClearAllPoints()
+			r:SetPoint("TOPLEFT", 0, -y)
+			r:Show()
+			y = y + hgt + 2
+		end
+	end
+	p.empty:SetShown(nr == 0)
+	p.empty:SetText("무기 전문가 정보가 없어요")
+	p.body:SetHeight(math.max(10, y))
+	p.foot:SetText((known and "|cffE3C07A노란색|r 배울 수 있음 · |cff6FD39A초록|r 배움 · 회색은 내 직업이 못 씀" or "회색은 내 직업이 못 씀") .. " · 누르면 위치")
+end
+
 function M:Build(host)
 	local p = CreateFrame("Frame", "FOATraining", host)
 	p:SetSize(W, 440)
@@ -228,9 +414,30 @@ function M:Build(host)
 	acc:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
 	acc:SetSize(22, 2)
 	acc:SetPoint("TOPLEFT", 14, -1)
-	p.title = Ink:Text(p, F.bold, 13, C.text, "LEFT")
-	p.title:SetPoint("TOPLEFT", 14, -13)
-	p.title:SetText("배울 기술")
+	p.acc = acc
+	-- 탭: 배울 기술 | 무기 기술
+	p.tabs = {}
+	local function Tab(key, text, prev)
+		local b = CreateFrame("Button", nil, p)
+		b.t = Ink:Text(b, F.bold, 13, C.text, "LEFT")
+		b.t:SetPoint("LEFT")
+		b.t:SetText(text)
+		b:SetSize(math.max(54, (b.t:GetStringWidth() or 0) + 2), 22)
+		if prev then b:SetPoint("LEFT", prev, "RIGHT", 14, 0) else b:SetPoint("TOPLEFT", 14, -9) end
+		b.key = key
+		b:SetScript("OnClick", function()
+			M.tab = key
+			Ink.db.trainingTab = key
+			if p.sf then p.sf:SetVerticalScroll(0) end
+			M:Paint()
+		end)
+		b:SetScript("OnEnter", function(self) if M.tab ~= self.key then self.t:SetTextColor(C.soft[1], C.soft[2], C.soft[3]) end end)
+		b:SetScript("OnLeave", function(self) if M.tab ~= self.key then self.t:SetTextColor(C.muted[1], C.muted[2], C.muted[3]) end end)
+		p.tabs[#p.tabs + 1] = b
+		return b
+	end
+	p.title = Tab("spells", "배울 기술").t
+	Tab("weapons", "무기 기술", p.tabs[1])
 	p.cls = Ink:Text(p, F.semi, 10, C.soft, "RIGHT")
 	p.cls:SetPoint("TOPRIGHT", -14, -15)
 	-- 요약 카드: 지금 배울 수 있는 수 · 비용
@@ -294,6 +501,15 @@ function M:Paint()
 	if ns.ClassTint then cr, cg, cb = ns.ClassTint(cls) end
 	p.cls:SetText((UnitClass("player") or "") .. " · Lv " .. plan.lvl)
 	p.cls:SetTextColor(cr, cg, cb)
+	self.tab = self.tab or Ink.db.trainingTab or "spells"
+	for _, b in ipairs(p.tabs or {}) do
+		local on = b.key == self.tab
+		local c = on and C.text or C.muted
+		b.t:SetTextColor(c[1], c[2], c[3])
+		if on and p.acc then p.acc:ClearAllPoints(); p.acc:SetPoint("BOTTOMLEFT", b, "TOPLEFT", 0, 6) end
+	end
+	if self.tab == "weapons" then return self:PaintWeapons(p) end
+	for _, r in ipairs(p.wrows or {}) do r:Hide() end
 	local n = #plan.now
 	local a = C.accent
 	p.card.n:SetText(n)

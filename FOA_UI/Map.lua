@@ -1454,7 +1454,7 @@ end
 
 -- 기억한 자리가 상급자인지: 훈련사 창을 연 자리거나, 직함이 상급자 · 수습/숙련/전문/대가 ○○ 인 경우
 local function RankedSub(sub)
-	return type(sub) == "string" and (sub:find("상급자") or sub:find("지도자") or sub:find("^수습 ") or sub:find("^숙련 ")
+	return type(sub) == "string" and (sub:find("상급자") or sub:find("지도자") or sub:find("^수습 ") or sub:find("^숙련 ") or sub:find("^상급 ")
 		or sub:find("^전문 ") or sub:find("^대가 ") or sub:find("^장인 ") or sub:find("Trainer") or sub:find("^Apprentice ")
 		or sub:find("^Journeyman ") or sub:find("^Expert ") or sub:find("^Artisan ") or sub:find("^Master "))
 end
