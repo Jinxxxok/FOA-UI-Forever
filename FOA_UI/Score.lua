@@ -199,6 +199,16 @@ local TREE_ICONS = {
 		"spell_nature_healingwavegreater,spell_holy_blessingofagility,spell_nature_healingtouch,spell_frost_windwalkon,spell_nature_wispsplode,ability_eyeoftheowl,spell_nature_protectionformnature,inv_misc_herb_felblossom,spell_holy_elunesgrace,spell_nature_rejuvenation,inv_relics_idolofrejuvenation,spell_nature_ravenform,spell_nature_giftofthewaterspirit,spell_nature_tranquility,spell_nature_resistnature,ability_druid_flourish",
 	},
 }
+-- 이 아이콘이 내 직업 특성 칸 아이콘인가 (배울 기술에서 특성으로 얻는 기술 거르기)
+function M.IsTalentIcon(class, icon)
+	local src = TREE_ICONS[class]
+	if not src or type(icon) ~= "string" then return false end
+	icon = icon:lower()
+	for _, list in ipairs(src) do
+		for name in list:gmatch("[^,]+") do if name == icon then return true end end
+	end
+	return false
+end
 -- 곰 탱커 특성 (두꺼운 가죽 · 야성의 본능 · 자연의 반응 · 야성의 충격): 합쳐서 3점 이상이면 수호(곰)
 local BEAR_TALENTS = { "inv_misc_pelt_bear_03", "ability_ambush", "ability_bullrush", "ability_druid_bash" }
 -- 신성 충격 (성기사 신성 트리)

@@ -62,12 +62,41 @@ function M:Plan()
 	local list, saved = self:List()
 	local now, later, total, costKnown = {}, {}, 0, true
 	local knownCache = {}
+	local _, cls = UnitClass("player")
+	local ids = ns.CLASS_SPELL_IDS and ns.CLASS_SPELL_IDS[cls] or {}
+	-- 특성으로 얻는 기술 (특성 칸 이름 → 찍은 단계). 안 찍었으면 빼고, 찍었으면 1단계는 이미 받은 것
+	local talent = {}
+	local T = ns.Talents
+	if T and T.TraitsMode and T.TraitsMode() and T.TraitNodes then
+		local ok, nodes = pcall(T.TraitNodes)
+		for _, n in ipairs(ok and nodes or {}) do
+			if type(n.name) == "string" then
+				local key = n.name:gsub("%s", "")
+				talent[key] = math.max(talent[key] or 0, n.rank or 0)
+			end
+		end
+	end
+	local function KnownID(id)
+		if not id then return nil end
+		return (IsPlayerSpell and IsPlayerSpell(id)) or (IsSpellKnown and IsSpellKnown(id)) or false
+	end
 	for _, e in ipairs(list) do
 		local L, name, rank, icon, flag, cost, state = e[1], e[2], e[3], e[4], e[5], e[6], e[7]
 		local k = knownCache[name]
 		if k == nil then k = KnownRank(name) or false; knownCache[name] = k end
 		local learned
-		if state then
+		local tr = talent[(name:gsub("%s", ""))]
+		-- 주문 번호로 정확히: 독 · 가루처럼 마법책에 이름으로 안 잡히는 것도
+		local exact = KnownID(ids[L .. ":" .. name])
+		-- 주문 번호가 없는(직업 상급자 기술 목록에 없는) 특성 아이콘 기술을 아직 모르면 특성 기술로 본다
+		if tr == nil and not ids[L .. ":" .. name] and k == false and ns.Score and ns.Score.IsTalentIcon and ns.Score.IsTalentIcon(cls, icon) then
+			tr = 0
+		end
+		if tr ~= nil and (tr == 0 or rank <= 1) then
+			learned = true                       -- 특성 기술: 안 찍었으면 못 배우고, 1단계는 특성으로 받음
+		elseif exact then
+			learned = true
+		elseif state then
 			learned = state == "used"
 		elseif k == false then
 			learned = false
