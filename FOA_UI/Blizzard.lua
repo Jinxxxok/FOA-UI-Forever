@@ -1064,10 +1064,78 @@ local function EditBoxes()
 	return t
 end
 
--- 화살표만으로 지난 글 (게임 기본은 Alt + 화살표). 입력창이 열릴 때 · 포커스를 얻을 때마다 다시 걸어 둔다
---  (한 번만 걸면 입력창이 다시 만들어지거나 블리자드가 되돌릴 때 풀렸다)
+-- 화살표만으로 지난 글
+--  포에버(12.x 클라이언트) 채팅 입력창은 ignoreArrows 라서 화살표가 입력창에 안 가고 이동 단축키로 넘어간다
+--  (SetAltArrowKeyMode 로는 못 바꿈). 그래서 FOA가 직접 처리한다:
+--   · 입력창이 열려 있는 동안만 위 / 아래 화살표를 FOA 버튼에 잠깐 묶고 (전투 중에는 묶을 수 없어서 게임 기본 Alt + 화살표)
+--   · 입력창의 키 입력으로 화살표가 오면 그것도 처리 (같은 키 두 번 안 넘기게 막음)
+--  기록은 FOA가 저장한 최근 40줄 (재접속해도 유지)
 local function ApplyArrows(eb)
 	if eb and eb.SetAltArrowKeyMode then pcall(eb.SetAltArrowKeyMode, eb, Ink.db.chatArrows == false) end
+end
+
+local histBox, histIdx, histDraft, lastStepAt = nil, 0, nil, -1
+local function ActiveBox()
+	local eb = (ChatFrameUtil and ChatFrameUtil.GetActiveWindow and ChatFrameUtil.GetActiveWindow())
+		or (ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()) or ACTIVE_CHAT_EDIT_BOX
+	if eb and eb.HasFocus and eb:HasFocus() then return eb end
+end
+local function HistStep(eb, d)
+	if not eb or Ink.db.chatArrows == false then return end
+	local now = GetTime()
+	if now == lastStepAt then return end -- 같은 키를 다른 길로 또 받음
+	lastStepAt = now
+	local h = Ink.db.chatHistory
+	if type(h) ~= "table" or #h == 0 then return end
+	if histBox ~= eb then histBox, histIdx, histDraft = eb, #h + 1, nil end
+	if histIdx == #h + 1 and d < 0 then histDraft = eb:GetText() end
+	histIdx = math.max(1, math.min(#h + 1, histIdx + d))
+	local t = h[histIdx] or histDraft or ""
+	eb:SetText(t)
+	if eb.SetCursorPosition then eb:SetCursorPosition(#t) end
+end
+
+-- 위 / 아래 화살표 묶기 (입력창이 열려 있는 동안만)
+local arrowOwner, arrowBound, arrowUnbindPending
+local function ArrowButtons()
+	if arrowOwner then return end
+	arrowOwner = CreateFrame("Frame", "FOAChatArrowOwner", UIParent)
+	local up = CreateFrame("Button", "FOAChatHistPrev", UIParent)
+	up:SetScript("OnClick", function() HistStep(ActiveBox(), -1) end)
+	local dn = CreateFrame("Button", "FOAChatHistNext", UIParent)
+	dn:SetScript("OnClick", function() HistStep(ActiveBox(), 1) end)
+	arrowOwner:SetScript("OnEvent", function()
+		if arrowUnbindPending and not InCombatLockdown() then
+			arrowUnbindPending = nil
+			if not ActiveBox() then ClearOverrideBindings(arrowOwner); arrowBound = nil end
+		end
+	end)
+	arrowOwner:RegisterEvent("PLAYER_REGEN_ENABLED")
+end
+local function BindArrows()
+	if Ink.db.chatArrows == false or InCombatLockdown() or not SetOverrideBindingClick then return end
+	ArrowButtons()
+	SetOverrideBindingClick(arrowOwner, true, "UP", "FOAChatHistPrev")
+	SetOverrideBindingClick(arrowOwner, true, "DOWN", "FOAChatHistNext")
+	arrowBound = true
+end
+local function UnbindArrows()
+	if not arrowBound or not arrowOwner then return end
+	if InCombatLockdown() then arrowUnbindPending = true return end
+	ClearOverrideBindings(arrowOwner)
+	arrowBound = nil
+end
+local function OnBoxFocus(eb)
+	ApplyArrows(eb)
+	histBox, histDraft = nil, nil
+	BindArrows()
+end
+local function OnBoxBlur()
+	histBox, histDraft = nil, nil
+	C_Timer.After(0, function() if not ActiveBox() then UnbindArrows() end end)
+end
+local function OnBoxKey(eb, key)
+	if key == "UP" then HistStep(eb, -1) elseif key == "DOWN" then HistStep(eb, 1) end
 end
 
 local histHooked = setmetatable({}, { __mode = "k" })
@@ -1087,7 +1155,10 @@ local function HookBox(eb)
 	if not eb or histHooked[eb] then return end
 	histHooked[eb] = true
 	eb:HookScript("OnShow", ApplyArrows)
-	eb:HookScript("OnEditFocusGained", ApplyArrows)
+	eb:HookScript("OnEditFocusGained", OnBoxFocus)
+	eb:HookScript("OnEditFocusLost", OnBoxBlur)
+	eb:HookScript("OnHide", OnBoxBlur)
+	pcall(eb.HookScript, eb, "OnKeyDown", OnBoxKey)
 	-- 보낸 글 저장 + 다른 채팅 창 입력창에도 같은 기록 (어느 탭에서 쳐도 화살표로 불러오게)
 	if eb.AddHistoryLine then
 		hooksecurefunc(eb, "AddHistoryLine", function(self, line)
