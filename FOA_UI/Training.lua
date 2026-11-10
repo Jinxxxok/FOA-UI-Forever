@@ -14,6 +14,7 @@ local FOREVER = (function() local b = select(4, GetBuildInfo()) or 0 return b >=
 local W, ROW, HEAD = 268, 30, 24
 local GOLD = { 1, 0.82, 0.38 }
 local NEW_C = { 0.44, 0.83, 0.6 }
+local IsWeaponList -- 아래 무기 기술 부분에서 채움 (무기 전문가 목록을 직업 기술로 기억하지 않게)
 
 local function Money(c)
 	if not c or c <= 0 then return "" end
@@ -46,6 +47,11 @@ end
 function M:List()
 	local _, cls = UnitClass("player")
 	local saved = Ink.db.classTrainer and Ink.db.classTrainer[cls]
+	-- 예전 버전이 무기 전문가 목록을 직업 기술로 기억했으면 버린다
+	if saved and saved.list and IsWeaponList and IsWeaponList(saved.list) then
+		Ink.db.classTrainer[cls] = nil
+		saved = nil
+	end
 	if saved and saved.list and #saved.list > 0 then return saved.list, saved end
 	return ns.CLASS_SPELLS and ns.CLASS_SPELLS[cls] or {}, nil
 end
@@ -117,6 +123,11 @@ function M:ReadTrainer()
 	reading = nil
 	if #list == 0 then return end
 	local isProf = IsTradeskillTrainer and IsTradeskillTrainer()
+	if not isProf and IsWeaponList and IsWeaponList(list, UnitGUID and UnitGUID("npc")) then
+		-- 무기 전문가: 직업 기술 목록을 덮어쓰지 않는다 (배운 무기는 무기 기술 탭이 따로 확인)
+		self:Paint()
+		return
+	end
 	if isProf then
 		-- 전문기술 훈련사: 기술 이름 = 창 제목
 		local title = (ClassTrainerFrame and ClassTrainerFrame.TitleText and ClassTrainerFrame.TitleText:GetText())
@@ -255,6 +266,25 @@ local function KnownWeapons()
 	return any and known or nil
 end
 M.KnownWeapons = KnownWeapons
+
+-- 무기 전문가 목록인가: 무기 전문가 NPC 이거나, 모든 줄이 무기 기술 이름
+IsWeaponList = function(list, guid)
+	if type(guid) == "string" then
+		local id = tonumber(select(6, strsplit("-", guid)) or "")
+		if id then for _, e in ipairs(WMASTERS) do if e.npc == id then return true end end end
+	end
+	if not list or #list == 0 or #list > 15 then return false end
+	local names = {}
+	for sub in pairs(WEAPON_KO) do
+		names[WeaponName(sub)] = true
+		names[WEAPON_KO[sub]] = true
+	end
+	for _, e in ipairs(list) do
+		if not names[e[2]] then return false end
+	end
+	return true
+end
+M.IsWeaponList = IsWeaponList
 
 local function NpcName(e)
 	local Q = Ink.modules.QuestMap
