@@ -433,7 +433,7 @@ function M:SourceText(it)
 	if FOREVER and it.inst then
 		local d = FLoot(it.inst)
 		local bn = M.BossName and M.BossName({ npc = it.npc, name = it.bossName }) or it.bossName
-		return (d and (d.ko or d.en) or "던전") .. " · " .. (bn or "")
+		return (d and (d.ko or d.en) or "던전") .. " · " .. (bn or "") .. (it.rare and " (희귀몹)" or "")
 	end
 	local inst = self.cache[it.inst]
 	return (inst and inst.name or "던전") .. " · " .. (it.boss or "?") .. "넴 " .. (it.bossName or "")
@@ -518,7 +518,7 @@ ForeverScan = function(key, quiet)
 				local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
 				table.insert(boss.items, {
 					id = id, name = name, link = link, icon = icon, slot = loc and EQUIP_EJ[loc], quality = q or 2,
-					inst = key, boss = bi, bossName = b[1], npc = b[3],
+					inst = key, boss = bi, bossName = b[1], npc = b[3], rare = b[4] == 1,
 				})
 			end
 		end
@@ -714,7 +714,7 @@ end
 -- 자료 출처 한 줄
 function M:SourceLabel()
 	if FOREVER and self.levelMode then
-		return (UnitLevel("player") or 1) .. "레벨 착용 가능\n던전 전리품" .. (Ink.db.bisCrafts ~= false and ns.FOREVER_CRAFTS and " + 제작템" or "") .. (Ink.db.bisQuests ~= false and ns.FOREVER_QREWARDS and " + 퀘스트 · 던전 퀘스트 보상" or "") .. " · 착용템보다 좋은 것만 FOA 점수 순"
+		return (UnitLevel("player") or 1) .. "레벨 착용 가능\n던전 전리품" .. (Ink.db.bisCrafts ~= false and ns.FOREVER_CRAFTS and " + 제작템" or "") .. (Ink.db.bisQuests ~= false and ns.FOREVER_QREWARDS and " + 퀘스트 · 던전 퀘스트 보상" or "") .. " · FOA 점수 순"
 	end
 	if FOREVER then
 		return self.spec and ("BIS · 대체: " .. self.spec.src .. " (레이드 전) + FOA 점수") or "대체: FOA 점수 (공략 BIS 준비 중)"
@@ -4134,27 +4134,6 @@ function M:PaintPrep()
 	end
 end
 
--- 만렙 전 목록: 지금 착용한 것보다 못한 후보는 빼고(착용 중인 건 남김) 순위를 다시 매긴다
-local function Worn(id)
-	for inv = 1, 19 do if GetInventoryItemID("player", inv) == id then return true end end
-end
-function M:Upgrades(l)
-	local sc = ns.Score
-	if not (sc and sc.Compare) or Ink.db.itemCompare == false then return l end
-	local out = {}
-	for _, r in ipairs(l) do
-		local id = r.it.id
-		local worn = Worn(id)
-		local keep = worn
-		if not keep then
-			local ok, c = pcall(sc.Compare, sc, r.it.link or ("item:" .. id))
-			keep = (not ok) or (not c) or c.empty or (c.pct or 0) > 0.5
-		end
-		if keep then out[#out + 1] = { rank = #out, slot = r.slot, it = r.it, lvlMode = true, score = r.score } end
-	end
-	return out
-end
-
 function M:PaintBis()
 	local p = self.bisPanel
 	if not p or not p:IsShown() then return end
@@ -4189,7 +4168,7 @@ function M:PaintBis()
 	-- 부위별 목록 (순위 순)
 	local bySlot = {}
 	if self.levelMode and self.levelRanks then
-		for slot, l in pairs(self.levelRanks) do bySlot[slot] = self:Upgrades(l) end
+		for slot, l in pairs(self.levelRanks) do bySlot[slot] = l end
 	else
 		for id, r in pairs(self.ranks) do
 			bySlot[r.slot] = bySlot[r.slot] or {}
@@ -4211,14 +4190,8 @@ function M:PaintBis()
 		local r = id and self.ranks[id]
 		local list = bySlot[b.ej]
 		local a = C.accent
-		local bestWorn = false
-		if self.levelMode then
-			r = nil
-			for _, x in ipairs(list or {}) do if x.it.id == id and x.rank == 0 then r = x end end
-			-- 착용한 것보다 나은 후보가 없으면 지금이 레벨 최고
-			if id and (not list or #list == 0) then bestWorn = true end
-		end
-		if (r and r.rank == 0) or bestWorn then
+		if self.levelMode then r = nil; for _, x in ipairs(list or {}) do if x.it.id == id and x.rank == 0 then r = x end end end
+		if r and r.rank == 0 then
 			wornBis = wornBis + 1
 			b.dot:SetVertexColor(C.green[1], C.green[2], C.green[3], 1)
 			b.dot:Show()
@@ -4273,11 +4246,7 @@ function M:PaintBis()
 		row.itemID, row.link, row.it = nil, nil, nil
 		row.badge:Hide(); row.rank:Hide(); row.state:SetText("")
 		row.icon:Set(nil, 0, "")
-		if self.levelMode and curID and not self.levelPending then
-			row.name:SetText("지금 착용한 게 가장 좋아요")
-			row.name:SetTextColor(C.green[1], C.green[2], C.green[3])
-			row.src:SetText("던전 전리품 · 제작템 · 퀘스트 · 던전 퀘스트 보상 중에 이보다 나은 게 없어요")
-		elseif self.levelMode then
+		if self.levelMode then
 			row.name:SetText(self.levelPending and "아이템 정보를 받아 오는 중…" or "지금 갈 수 있는 던전에 이 부위 템이 없어요")
 			row.name:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
 			row.src:SetText("내 레벨 + 4 까지의 던전 전리품 · 제작템 · 퀘스트 · 던전 퀘스트 보상에서 골라요")
