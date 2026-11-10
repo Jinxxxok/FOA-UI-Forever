@@ -404,6 +404,7 @@ function M:BuildRegistry()
 			{ t = "BIS 후보", rows = {
 				SW("bisCrafts", "제작템", "경매장 가격 · 제조법 상인까지"),
 				SW("bisQuests", "퀘스트 보상", "내 진영 · 직업 · 아직 안 깬 것만"),
+				SW("bisWorld", "월드 · 필드 · 상인 · 평판", "월드 드랍 · 필드 몹 · 필드 희귀몹 · 던전 일반 몹 · 상인 · 평판 보상"),
 			} },
 			{ t = "아이템 비교", rows = {
 				{ kind = "seg", id = "compare", label = "비교 기준", desc = "가방 · 보상 화살표 · 툴팁에 착용 대비 %",

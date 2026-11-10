@@ -394,7 +394,7 @@ local function LooseItem(id)
 	local data = ns.BIS
 	local src = (data and data.crafted[id]) and "전문기술 제작"
 		or (data and data.tier[id]) and "티어 세트 · 레이드 / 촉매"
-		or "기타 (평판 · 상점 · 월드 드랍 등)"
+		or (ns.ItemSourceText and ns.ItemSourceText(id)) or "기타 (평판 · 상점 · 월드 드랍 등)"
 	return { id = id, name = name, icon = icon, quality = q or 4, link = link, srcText = src }
 end
 
@@ -422,6 +422,7 @@ end
 function M:SourceText(it)
 	if it.srcText then return it.srcText end
 	if it.quest then return self:QuestSourceText(it) end
+	if it.wsrc then return self:WorldSourceText(it) end
 	if it.craft then
 		local t = "제작 · " .. (M.CRAFT_PROF and M.CRAFT_PROF[it.craft] or "전문기술")
 		if it.spell and M.RecipeFor and M:RecipeFor(it.spell) then t = t .. " · 제조법 상인" end
@@ -429,6 +430,9 @@ function M:SourceText(it)
 		local A = Ink.modules.AHPrice
 		if price and A and A.Money then t = t .. "  ·  경매장 " .. A.Money(price) end
 		return t
+	end
+	if FOREVER and it.inst and it.kind == 3 and ns.ItemSourceText and ns.ItemSourceText(it.id) then
+		return self:WorldSourceText(it)
 	end
 	if FOREVER and it.inst then
 		local d = FLoot(it.inst)
@@ -531,7 +535,7 @@ end
 function M:BuildRanksForever()
 	local lvl = UnitLevel("player") or 60
 	local skey = SpecKey()
-	local key = skey .. ":" .. lvl .. (Ink.db.bisCrafts == false and "" or ":c") .. (Ink.db.bisQuests == false and "" or ":q")
+	local key = skey .. ":" .. lvl .. (Ink.db.bisCrafts == false and "" or ":c") .. (Ink.db.bisQuests == false and "" or ":q") .. (Ink.db.bisWorld == false and "" or ":w")
 	if self.rankKey == key and not self.dirty then return end
 	self.rankKey, self.dirty = key, nil
 	wipe(self.ranks)
@@ -561,9 +565,11 @@ function M:BuildRanksForever()
 	if self.levelMode then
 		self:AddCrafts(pool, lvl)
 		self:AddQuestRewards(pool, lvl)
+		self:AddWorldSources(pool, lvl)
 		return self:BuildLevelRanks(pool, lvl)
 	end
 	self:AddQuestRewards(pool, lvl)
+	self:AddWorldSources(pool, lvl)
 	local function Fill()
 		-- 공략 대체가 3개 안 되는 칸은 던전 전리품 중 FOA 점수(직업 · 특성 가중치) 높은 순으로 채운다
 		local sc = ns.Score
@@ -714,7 +720,11 @@ end
 -- 자료 출처 한 줄
 function M:SourceLabel()
 	if FOREVER and self.levelMode then
-		return (UnitLevel("player") or 1) .. "레벨 착용 가능\n던전 전리품" .. (Ink.db.bisCrafts ~= false and ns.FOREVER_CRAFTS and " + 제작템" or "") .. (Ink.db.bisQuests ~= false and ns.FOREVER_QREWARDS and " + 퀘스트 · 던전 퀘스트 보상" or "") .. " · FOA 점수 순"
+		local srcs = { "던전" }
+		if Ink.db.bisCrafts ~= false and ns.FOREVER_CRAFTS then srcs[#srcs + 1] = "제작" end
+		if Ink.db.bisQuests ~= false and ns.FOREVER_QREWARDS then srcs[#srcs + 1] = "퀘스트" end
+		if Ink.db.bisWorld ~= false and ns.FOREVER_SOURCES then srcs[#srcs + 1] = "월드 · 필드 · 상인 · 평판" end
+		return (UnitLevel("player") or 1) .. "레벨 착용 가능\n" .. table.concat(srcs, " · ") .. " 중 FOA 점수 순"
 	end
 	if FOREVER then
 		return self.spec and ("BIS · 대체: " .. self.spec.src .. " (레이드 전) + FOA 점수") or "대체: FOA 점수 (공략 BIS 준비 중)"
@@ -1123,6 +1133,55 @@ function M:AddQuestRewards(pool, lvl)
 			end
 		end
 	end
+end
+
+-- 월드 드랍 · 필드 몹 · 필드 희귀몹 · 상인 · 평판 · 던전 일반 몹 장비도 후보로 (ForeverSources.lua · wowf.io)
+--  내 진영에서 얻을 수 있는 것만, 요구 레벨이 내 레벨 아래 15레벨 안 (요구 레벨이 없는 건 12레벨까지만)
+function M:AddWorldSources(pool, lvl)
+	if Ink.db.bisWorld == false or not ns.FOREVER_SOURCES then return end
+	self.worldById = self.worldById or {}
+	local have = {}
+	for _, list in pairs(pool) do for _, it in ipairs(list) do have[it.id] = true end end
+	for id, e in pairs(ns.FOREVER_SOURCES) do
+		local rl = e.rl or 0
+		local okLv = (rl == 0 and lvl <= 12) or (rl > 0 and rl <= lvl and rl >= lvl - 15)
+		if okLv and not have[id] and ns.ItemSourceForMe(id) then
+			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
+			local slot = iid and loc and EQUIP_EJ[loc]
+			if slot then
+				local it = self.worldById[id]
+				if not it then
+					it = { id = id, icon = icon, slot = slot, wsrc = true }
+					self.worldById[id] = it
+				end
+				if not it.name then
+					local cached = not C_Item.IsItemDataCachedByID or C_Item.IsItemDataCachedByID(id)
+					if cached then
+						local name, link, q = C_Item.GetItemInfo(id)
+						it.name, it.link, it.quality = name, link, q or 2
+					end
+				end
+				if ForMyClass(it) then
+					have[id] = true
+					pool[slot] = pool[slot] or {}
+					table.insert(pool[slot], it)
+				end
+			end
+		end
+	end
+end
+
+-- 월드 출처 글자 (착용 시 귀속이면 경매장 시세도)
+function M:WorldSourceText(it)
+	local t = ns.ItemSourceText and ns.ItemSourceText(it.id) or "기타"
+	local bind = select(14, C_Item.GetItemInfo(it.id))
+	if bind == 2 then
+		t = t .. "  ·  착용 시 귀속"
+		local price = ns.AHPrice and ns.AHPrice(it.id)
+		local A = Ink.modules.AHPrice
+		if price and A and A.Money then t = t .. " · 경매장 " .. A.Money(price) end
+	end
+	return t
 end
 
 local function QuestTitleOf(qid)
@@ -1692,7 +1751,7 @@ function M:BossTooltip(owner, bi)
 		if ForMyClass(it) then nCls = nCls + 1 end
 	end
 	GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
-	GameTooltip:AddLine((b.rare and (b.kind == 2 and "선택 · " or "희귀 · ") or (b.order and (b.order .. ". ") or "")) .. BossName(b), 1, 1, 1)
+	GameTooltip:AddLine((b.rare and ((b.kind or 1) >= 2 and "선택 · " or "희귀 · ") or (b.order and (b.order .. ". ") or "")) .. BossName(b), 1, 1, 1)
 	if b.killed then GameTooltip:AddLine("처치함", DOWN_C[1], DOWN_C[2], DOWN_C[3]) end
 	GameTooltip:AddDoubleLine("전리품", nAll .. "개", 0.7, 0.72, 0.75, 1, 1, 1)
 	GameTooltip:AddDoubleLine("내 직업", nCls .. "개", 0.7, 0.72, 0.75, 1, 1, 1)
@@ -2145,7 +2204,7 @@ function M:PaintList(f, data, mode)
 			h.name:SetText(FOREVER and BossName(b) or b.name)
 			local sum = (nb > 0 and ("BIS " .. nb) or "") .. ((nb > 0 and na > 0) and " · " or "") .. (na > 0 and ("대체 " .. na) or "")
 			if sum == "" and FOREVER then sum = (#list > 0) and (#list .. "개") or (mode == "class" and "내 직업 없음" or "") end
-			if b.rare and FOREVER then sum = (b.kind == 2 and "선택" or "희귀") .. (sum ~= "" and (" · " .. sum) or "") end
+			if b.rare and FOREVER then sum = ((b.kind or 1) >= 2 and "선택" or "희귀") .. (sum ~= "" and (" · " .. sum) or "") end
 			h.sum:SetText(done and "처치함" or sum)
 			h:SetAlpha((done or (FOREVER and #list == 0)) and 0.55 or 1)
 			h:Show()
@@ -3717,7 +3776,11 @@ function M:HookTooltip()
 		if not r then
 			-- 포에버: 순위가 없어도 던전 드랍템이면 어디서 나오는지 한 줄
 			local src = FOREVER and id and M:DropSource(id)
-			if src then tt:AddDoubleLine("|cff9EA3AB드랍|r", src, 1, 1, 1, 0.85, 0.87, 0.9) end
+			if src then tt:AddDoubleLine("|cff9EA3AB드랍|r", src, 1, 1, 1, 0.85, 0.87, 0.9)
+			elseif FOREVER and id and ns.ItemSourceText then
+				local w = ns.ItemSourceText(id)
+				if w then Ink.TipLine(tt, "|cff9EA3AB획득|r  " .. w, 0.85, 0.87, 0.9) end
+			end
 			return
 		end
 		local _, _, _, specName = SpecKey()

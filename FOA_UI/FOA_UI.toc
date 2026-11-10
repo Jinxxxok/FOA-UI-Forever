@@ -2,7 +2,7 @@
 ## Title: |cffFFF468FOA|r UI
 ## Notes: FOA (First of All) 통합 UI
 ## Author: hyeokjiny
-## Version: 0.60.0
+## Version: 0.61.0
 ## SavedVariables: InkUIDB
 ## SavedVariablesPerCharacter: InkUICharDB
 ## IconTexture: Interface\AddOns\FOA_UI\Media\Textures\Logo
@@ -44,6 +44,7 @@ ForeverLoot.lua
 ForeverLootExtra.lua
 ForeverCrafts.lua
 ForeverQuestRewards.lua
+ForeverSources.lua
 DungeonMaps.lua
 DungeonSketch.lua
 DungeonRoutes.lua
