@@ -1191,10 +1191,25 @@ local function QuestTitleOf(qid)
 	return t
 end
 
+-- 던전 퀘스트 → 던전 이름 (날개가 여러 개인 곳은 공통 이름)
+local DQ_COMMON = { [316] = "붉은십자군 수도원", [229] = "검은바위 첨탑", [230] = "혈투의 전장", [236] = "스트라솔름" }
+local DQ_ORANGE = "FFB347"
+function M:DQName(inst)
+	if not inst then return end
+	if DQ_COMMON[inst] then return DQ_COMMON[inst] end
+	for key, v in pairs(M.DQ_INST or {}) do
+		if v == inst then
+			local d = FLoot(key)
+			if d then return d.ko or d.en end
+		end
+	end
+end
+
 function M:QuestSourceText(it)
 	local info = it.qmap and it.qmap > 0 and C_Map.GetMapInfo and C_Map.GetMapInfo(it.qmap)
 	local inLog = C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(it.quest)
-	return (it.dq and "던전 퀘스트 · " or "퀘스트 · ") .. (QuestTitleOf(it.quest) or "보상") .. (inLog and " (진행 중)" or "") .. (info and ("  ·  " .. info.name) or "")
+	local dn = it.dq and self:DQName(it.dq)
+	return (it.dq and (dn and ("|cff" .. DQ_ORANGE .. dn .. "|r 던전 퀘스트 · ") or "던전 퀘스트 · ") or "퀘스트 · ") .. (QuestTitleOf(it.quest) or "보상") .. (inLog and " (진행 중)" or "") .. (info and ("  ·  " .. info.name) or "")
 end
 
 -- BIS 툴팁에 붙이는 퀘스트 정보
@@ -1202,6 +1217,11 @@ function M:QuestRewardTooltip(it, tt)
 	tt = tt or GameTooltip
 	tt:AddLine(" ")
 	tt:AddLine("|cffFFF468FOA|r  " .. (it.dq and "던전 퀘스트 보상" or "퀘스트 보상"), 1, 1, 1)
+	if it.dq then
+		-- 어느 던전 퀘스트인지 한눈에 (주황 · 문 아이콘)
+		local dn = self:DQName(it.dq) or "던전"
+		tt:AddLine((M.TipIcon and M.TipIcon("Door", { 1, 0.70, 0.28 }) .. " " or "") .. "|cff" .. DQ_ORANGE .. dn .. "|r  |cffD9DBE0던전 퀘스트|r", 1, 1, 1)
+	end
 	Ink.TipLine(tt, (QuestTitleOf(it.quest) or ("퀘스트 #" .. it.quest)) .. (it.qlvl and it.qlvl > 0 and ("  ·  " .. it.qlvl .. "레벨부터") or ""), 0.96, 0.95, 0.9)
 	local Q = Ink.modules.QuestMap
 	local giver = it.qnpc and it.qnpc > 0 and Q and Q.GiverName and Q:GiverName(it.qnpc)
