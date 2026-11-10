@@ -3796,7 +3796,7 @@ function M:HookTooltip()
 		if not r then
 			-- 포에버: 순위가 없어도 던전 드랍템이면 어디서 나오는지 한 줄
 			local src = FOREVER and id and M:DropSource(id)
-			if src then tt:AddDoubleLine("|cff9EA3AB드랍|r", src, 1, 1, 1, 0.85, 0.87, 0.9)
+			if src then Ink.TipLine(tt, "|cff9EA3AB드랍|r  " .. src, 0.85, 0.87, 0.9)
 			elseif FOREVER and id and ns.ItemSourceText then
 				local w = ns.ItemSourceText(id)
 				if w then Ink.TipLine(tt, "|cff9EA3AB획득|r  " .. w, 0.85, 0.87, 0.9) end
@@ -3808,7 +3808,7 @@ function M:HookTooltip()
 		tt:AddLine("|cffFFF468—|r  |cff8E939BFOA · " .. (UnitClass("player") or "") .. " " .. (specName or "") .. (M.isExample and " · 예시 순위" or "") .. "|r")
 		local label = "|cffFFF468" .. RankText(r) .. "|r"
 		tt:AddDoubleLine(label .. "  " .. (SLOT_NAME[r.slot] or "") .. " " .. (r.rank + 1) .. "순위", " ", 1, 1, 1)
-		tt:AddDoubleLine("|cff9EA3AB획득|r", M:SourceText(r.it), 1, 1, 1, 1, 1, 1)
+		Ink.TipLine(tt, "|cff9EA3AB획득|r  " .. (M:SourceText(r.it) or ""), 1, 1, 1)
 	end)
 end
 

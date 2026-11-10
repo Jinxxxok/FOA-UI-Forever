@@ -876,7 +876,8 @@ local function Line(tt, r)
 		if r.old and r.old > 0 and not r.empty then sc = sc .. string.format(" |cff5E636B(지금 %d)|r", math.floor(r.old + 0.5)) end
 		sc = sc .. "  "
 	end
-	tt:AddDoubleLine(txt, sc .. string.format("|cff5E636B%s|r", right or ""))
+	-- 한 줄로 붙여서 (오른쪽 정렬이면 툴팁이 넓을 때 가운데가 크게 빈다)
+	tt:AddLine(txt .. "   " .. sc .. string.format("|cff5E636B%s|r", right or ""))
 end
 
 function M:HookTooltip()
