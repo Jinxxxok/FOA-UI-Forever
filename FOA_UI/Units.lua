@@ -1051,11 +1051,11 @@ end
 -- 공격대 징표: 있으면 이름 왼쪽에 아이콘을 두고 이름을 그만큼 민다
 function M:UpdateRaidMark(f)
 	if not (f and f.raid) then return end
+	-- 징표 번호는 비밀 값으로 올 수 있다(파티 · 던전): 숫자로 읽지 않고 그림 칸 지정에 그대로 넘긴다
 	local ok, idx = pcall(GetRaidTargetIndex, f.unit)
-	idx = ok and plain(idx) or nil
+	if not ok then idx = nil end
 	if self.testing and f == self.target then idx = 8 end   -- 테스트: 해골 징표 예시
-	if type(idx) == "number" and idx >= 1 and idx <= 8 and UnitExists(f.unit) then
-		SetRaidTargetIconTexture(f.raid, idx)
+	if idx ~= nil and UnitExists(f.unit) and pcall(SetRaidTargetIconTexture, f.raid, idx) then
 		f.raid:Show()
 		f.name:SetPoint("TOPLEFT", f.nameX + 19, -2)
 		f.name:SetWidth(f.nameW - 19)

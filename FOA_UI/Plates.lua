@@ -38,12 +38,8 @@ local function HideBlizzard(plate, unit)
 	uf:SetAlpha(0)
 	if uf.castBar then uf.castBar:UnregisterAllEvents() end
 	if uf.AurasFrame then pcall(KillMouse, uf.AurasFrame) end
-	-- 징표는 블리자드 것을 그대로 보이게 한다 (파티 · 던전에서도 블리자드는 값을 읽을 수 있다)
-	local rt = uf.RaidTargetFrame
-	if rt and rt.SetIgnoreParentAlpha then
-		pcall(rt.SetIgnoreParentAlpha, rt, true)
-		if plate.ink then plate.ink.blizzRaid = rt; plate.ink.raid:Hide() end
-	end
+	-- 징표: FOA 아이콘을 쓰고(이름 왼쪽), 값을 못 읽는 경우에만 블리자드 것을 대신 보인다 (UpdateInfo)
+	if plate.ink then plate.ink.blizzRT = uf.RaidTargetFrame end
 	if not hookedUF[uf] then
 		hookedUF[uf] = true
 		local busy
@@ -185,8 +181,8 @@ local function Build(plate)
 	f.pct = Ink:Text(f, F.numR, 11, C.soft, "RIGHT")
 	f.pct:SetPoint("BOTTOMRIGHT", f.back, "TOPRIGHT", -2, 3)
 	f.raid = f:CreateTexture(nil, "OVERLAY")
-	f.raid:SetSize(16, 16)
-	f.raid:SetPoint("RIGHT", f.back, "LEFT", -12, 0)
+	f.raid:SetSize(15, 15)
+	f.raid:SetPoint("RIGHT", f.back, "TOPLEFT", -12, 9)   -- 레벨 · 이름 줄 왼쪽 바깥
 	f.raid:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
 	f.raid:Hide()
 	f.elite = f:CreateTexture(nil, "OVERLAY")
@@ -771,16 +767,17 @@ function M:UpdateInfo(f)
 		f.elite:Hide()
 		SetRank(f, nil)
 	end
+	-- 징표 번호가 비밀 값(파티 · 던전)이어도 그림 칸 지정(SetSpriteSheetCell)에는 그대로 넘길 수 있다
 	local okI, idx = pcall(GetRaidTargetIndex, u)
-	idx = okI and plain(idx) or nil
-	if f.blizzRaid then
-		f.raid:Hide()         -- 블리자드 징표가 대신 보인다
-	elseif idx then
-		SetRaidTargetIconTexture(f.raid, idx)
-		f.raid:Show()
-	else
-		f.raid:Hide()
+	local shown = false
+	if okI and idx ~= nil then
+		shown = pcall(SetRaidTargetIconTexture, f.raid, idx)
+		if not shown and f.blizzRT and f.blizzRT.SetIgnoreParentAlpha then
+			-- 그래도 안 되면 블리자드 징표를 보이게 (자리는 블리자드 기본)
+			pcall(f.blizzRT.SetIgnoreParentAlpha, f.blizzRT, true)
+		end
 	end
+	f.raid:SetShown(shown)
 	self:ApplyQuest(f)
 end
 
@@ -979,8 +976,8 @@ function M:SetFriendly(f, friendly)
 		f.nameAlpha = nil
 		f.sub:Hide()
 		f.raid:ClearAllPoints()
-		f.raid:SetPoint("RIGHT", f.back, "LEFT", -12, 0)
-		f.raid:SetSize(16, 16)
+		f.raid:SetPoint("RIGHT", f.back, "TOPLEFT", -12, 9)   -- 레벨 · 이름 줄 왼쪽 바깥
+		f.raid:SetSize(15, 15)
 	end
 end
 
