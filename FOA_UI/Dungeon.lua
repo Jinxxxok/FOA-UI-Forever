@@ -126,6 +126,12 @@ local function SpecKey()
 	return class .. ":" .. specID, classID, specID, specName, class
 end
 
+-- 포에버: 보고 있는 특성 키 ("arcane" 등) · 점수를 그 특성 기준으로
+local function ViewKey()
+	local v = ViewSpecID()
+	return type(v) == "string" and v ~= "" and v or nil
+end
+
 function M:SetViewSpec(id)
 	if Ink.cdb then Ink.cdb.bisSpec = (id ~= CurrentSpecID()) and id or nil end
 	self.dirty = true
@@ -579,7 +585,7 @@ function M:BuildRanksForever()
 			for _, it in ipairs(list) do
 				if not self.ranks[it.id] then
 					local l = "item:" .. it.id
-					local v = sc:Score(l)
+					local v = sc:Score(l, nil, FOREVER and ViewKey() or nil)
 					if v and v > 0 and sc:Usable(l) then it.score = v; cand[#cand + 1] = it end
 				end
 			end
@@ -1271,7 +1277,7 @@ function M:BuildLevelRanks(pool, lvl)
 					self.levelPending = true
 					RequestItem(it.id)
 				elseif (minLv or 0) <= lvl and ForMyClass(it) then
-					local v = sc:Score(link or ("item:" .. it.id), off)
+					local v = sc:Score(link or ("item:" .. it.id), off, FOREVER and ViewKey() or nil)
 					if v == nil then self.levelPending = true end
 					if v and v > 0 then out[#out + 1] = { it = it, score = v, minLv = minLv } end
 				end

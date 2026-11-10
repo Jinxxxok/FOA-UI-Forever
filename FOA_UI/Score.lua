@@ -392,6 +392,25 @@ function M:Weights()
 	return w, class, spec
 end
 
+-- 고른 특성의 가중치 (지금 내 특성이면 Weights 와 같음)
+function M:WeightsFor(spec)
+	local class, cur = self:Spec()
+	if not spec or spec == cur then
+		local w = self:Weights()
+		return w, weightSig
+	end
+	local w = W[(class or "") .. ":" .. spec]
+	if not w then return end
+	local sig
+	w, sig = CapAdjust(w, class, spec)
+	if self:Mode() == "pvp" then
+		self.pvpCache = self.pvpCache or {}
+		self.pvpCache[w] = self.pvpCache[w] or PvP(w)
+		w = self.pvpCache[w]
+	end
+	return w, (class or "") .. ":" .. spec .. sig
+end
+
 function M:ProfileName()
 	local _, class, spec = self:Weights()
 	local name = SPEC_NAME[spec or ""] or ""
@@ -560,11 +579,13 @@ RatingPct = function(cr, v)
 	return v > 5 and v / 14 or v
 end
 
-function M:Score(link, asOffhand)
+-- spec: 다른 특성 기준으로 점수 (BIS · 던전 전리품에서 특성 아이콘을 눌렀을 때). 없으면 지금 내 특성
+function M:Score(link, asOffhand, spec)
 	if not link then return 0 end
-	local w = self:Weights()
+	local w, sig
+	if spec then w, sig = self:WeightsFor(spec) else w = self:Weights(); sig = weightSig end
 	if not w then return end
-	local key = link .. (asOffhand and "#oh" or "") .. self:Mode() .. weightSig
+	local key = link .. (asOffhand and "#oh" or "") .. self:Mode() .. sig
 	if scoreCache[key] then return scoreCache[key] end
 	local stats = GetItemStats(link)
 	if not stats then M.missed = true return end

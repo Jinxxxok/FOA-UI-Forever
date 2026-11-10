@@ -132,16 +132,43 @@ local function RouteFor(name)
 	end
 end
 
+-- 가방(+은행) 개수. 재료 안내는 이름만 알고 있는 경우가 많아서:
+--  이름 → 아이템 번호(캐시) → 개수, 안 되면 이름으로 묻고, 그래도 0이면 가방을 직접 훑어 이름이 같은 걸 센다
+--  (포에버는 옛 GetItemCount 가 없어서 이름만으로는 늘 0 이 나왔다)
+local function BagCountByName(name)
+	if not (C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerItemInfo) then return 0 end
+	local n = 0
+	for bag = 0, (NUM_TOTAL_EQUIPPED_BAG_SLOTS or 5) do
+		for slot = 1, (C_Container.GetContainerNumSlots(bag) or 0) do
+			local ok, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
+			if ok and info then
+				local nm = info.itemName
+				if not nm and info.itemID and C_Item.GetItemNameByID then nm = C_Item.GetItemNameByID(info.itemID) end
+				if nm == name then n = n + (info.stackCount or 1) end
+			end
+		end
+	end
+	return n
+end
+
 local function Count(name, itemID)
+	if not itemID and name and C_Item and C_Item.GetItemInfoInstant then
+		local ok, id = pcall(C_Item.GetItemInfoInstant, name)
+		if ok and type(id) == "number" then itemID = id end
+	end
 	if itemID and C_Item and C_Item.GetItemCount then
 		local ok, n = pcall(C_Item.GetItemCount, itemID, true)
-		if ok and n then return n end
+		if ok and n and n > 0 then return n end
+	end
+	if name and C_Item and C_Item.GetItemCount then
+		local ok, n = pcall(C_Item.GetItemCount, name, true)
+		if ok and type(n) == "number" and n > 0 then return n end
 	end
 	if name and GetItemCount then
 		local ok, n = pcall(GetItemCount, name, true)
-		if ok and n then return n end
+		if ok and type(n) == "number" and n > 0 then return n end
 	end
-	return 0
+	return name and BagCountByName(name) or 0
 end
 
 local function Price(name, itemID)
