@@ -738,6 +738,13 @@ function M:BuildTarget()
 	f.name = Ink:Text(f, F.bold, 14, C.text, "LEFT")
 	f.name:SetPoint("TOPLEFT", T_COL, -2)
 	f.name:SetWidth(cw - 90)
+	-- 공격대 징표 (해골 · 엑스 …): 이름 왼쪽에 작게
+	f.raid = f:CreateTexture(nil, "OVERLAY")
+	f.raid:SetSize(15, 15)
+	f.raid:SetPoint("TOPLEFT", f, "TOPLEFT", T_COL, -1)
+	f.raid:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+	f.raid:Hide()
+	f.nameX, f.nameW = T_COL, cw - 90
 	f.badge = f:CreateTexture(nil, "OVERLAY")
 	f.badge:SetSize(18, 18)
 	f.badge:SetPoint("RIGHT", f, "TOPRIGHT", 0, -10)
@@ -1041,10 +1048,29 @@ function M:UpdatePower(f)
 	f.powerText:SetTextColor(col[1], col[2], col[3])
 end
 
+-- 공격대 징표: 있으면 이름 왼쪽에 아이콘을 두고 이름을 그만큼 민다
+function M:UpdateRaidMark(f)
+	if not (f and f.raid) then return end
+	local ok, idx = pcall(GetRaidTargetIndex, f.unit)
+	idx = ok and plain(idx) or nil
+	if self.testing and f == self.target then idx = 8 end   -- 테스트: 해골 징표 예시
+	if type(idx) == "number" and idx >= 1 and idx <= 8 and UnitExists(f.unit) then
+		SetRaidTargetIconTexture(f.raid, idx)
+		f.raid:Show()
+		f.name:SetPoint("TOPLEFT", f.nameX + 19, -2)
+		f.name:SetWidth(f.nameW - 19)
+	else
+		f.raid:Hide()
+		f.name:SetPoint("TOPLEFT", f.nameX, -2)
+		f.name:SetWidth(f.nameW)
+	end
+end
+
 function M:UpdateInfo(f)
 	local u = f.unit
 	if not UnitExists(u) then return end
 	f.name:SetText((UnitName(u)))
+	if f.raid then self:UpdateRaidMark(f) end
 	if f == self.tot then f.name:SetTextColor(ClassColor(u)) end
 	if f.level then
 		local lvl = plain(UnitLevel(u))
@@ -1304,6 +1330,7 @@ function M:Init()
 		"UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
 		"UNIT_SPELLCAST_CHANNEL_UPDATE", "UNIT_SPELLCAST_INTERRUPTIBLE", "UNIT_SPELLCAST_NOT_INTERRUPTIBLE",
 		"UNIT_PET", "PET_UI_UPDATE", "UNIT_HAPPINESS", "PET_BAR_UPDATE", "UNIT_SPELLCAST_SUCCEEDED",
+		"RAID_TARGET_UPDATE",
 	}) do
 		pcall(e.RegisterEvent, e, ev) -- 클라이언트마다 없는 이벤트가 있다 (기분은 포에버만)
 	end
@@ -1327,6 +1354,9 @@ function M:Init()
 			return
 		elseif event == "UNIT_TARGET" then
 			if unit == "target" then M:UpdateUnit(M.tot) end
+			return
+		elseif event == "RAID_TARGET_UPDATE" then
+			M:UpdateRaidMark(M.target)
 			return
 		elseif event == "UNIT_PET" or event == "PET_UI_UPDATE" or event == "UNIT_HAPPINESS" or event == "PET_BAR_UPDATE" then
 			if ns.FX and event == "UNIT_PET" then ns.FX.TrailSnap(M.pet.hp, "pet") end
@@ -1352,6 +1382,7 @@ function M:Init()
 			M:UpdateInfo(f)
 		end
 	end)
+	Ink.ProfFrame(e, "유닛 프레임")
 end
 
 function M:Refresh()

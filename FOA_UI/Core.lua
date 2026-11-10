@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.59.1"
+Ink.version = "0.59.2"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -878,6 +878,36 @@ function Ink:Anchor(w, h)
 end
 
 -- 블리자드 프레임을 앵커에 맞춘다 (스케일 차이를 보정해서 크기도 맞춤)
+-- 성능 측정: 무거울 수 있는 처리마다 걸린 시간을 모아 둔다 (/foa perf)
+--  debugprofilestop 는 밀리초 단위 타이머라 거의 공짜. 측정 결과는 /foa perf 로 보고 지운다
+Ink.perf = {}
+function Ink.Prof(name, fn, ...)
+	local t0 = debugprofilestop and debugprofilestop()
+	local ok, a, b, c = pcall(fn, ...)
+	if t0 then
+		local dt = debugprofilestop() - t0
+		local p = Ink.perf[name]
+		if not p then p = { n = 0, total = 0, max = 0, combat = 0 }; Ink.perf[name] = p end
+		p.n, p.total = p.n + 1, p.total + dt
+		if dt > p.max then p.max = dt end
+		if InCombatLockdown() then p.combat = p.combat + dt end
+	end
+	if not ok and Ink.LogError then Ink:LogError(name .. ": " .. tostring(a)) end
+	return a, b, c
+end
+
+-- 틀의 이벤트 · 매 프레임 처리를 측정으로 감싼다 (이미 걸린 스크립트를 감싸므로 SetScript 뒤에 부른다)
+function Ink.ProfFrame(f, name)
+	if not f then return end
+	for _, kind in ipairs({ "OnEvent", "OnUpdate" }) do
+		local h = f:GetScript(kind)
+		if h then
+			local label = name .. (kind == "OnUpdate" and " (반복)" or "")
+			f:SetScript(kind, function(...) Ink.Prof(label, h, ...) end)
+		end
+	end
+end
+
 -- 확인 창 (FOA 모양): 블리자드 StaticPopup 을 애드온 코드로 띄우면 그 창이 오염돼서
 --  나중에 같은 창을 쓰는 블리자드 확인(은행 칸 사기 등)이 "FOA_UI 가 차단되었습니다"로 막힌다 → 우리 창을 따로 쓴다
 function Ink:Confirm(title, sub, okText, onOK, danger)

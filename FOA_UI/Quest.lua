@@ -301,8 +301,27 @@ function M:PaintClass(y)
 		list = { { id = 0, lvl = 16, map = 1453, x = 0.78, y = 0.7, test = "도적의 시험" }, { id = 0, lvl = 20, map = 1453, x = 0.78, y = 0.7, soon = true, test = "데피아즈 밀서" } }
 	end
 	if not f.chead then
-		local h = CreateFrame("Frame", nil, f)
+		-- 머리줄을 누르면 접기 · 펴기 (직업 퀘스트는 늘 떠 있어서 자리를 차지하니까)
+		local h = CreateFrame("Button", nil, f)
 		h:SetSize(W, 14)
+		h:RegisterForClicks("LeftButtonUp")
+		h.chev = h:CreateTexture(nil, "ARTWORK")
+		h.chev:SetTexture(Ink.icon("Chevron"))
+		h.chev:SetSize(10, 10)
+		h.chev:SetPoint("RIGHT", 0, 0)
+		h.n = Ink:Text(h, F.latin, 10, C.muted, "RIGHT")
+		h.n:SetPoint("RIGHT", h.chev, "LEFT", -4, 0)
+		h:SetScript("OnClick", function()
+			Ink.db.questClassFold = not Ink.db.questClassFold
+			M:Update()
+		end)
+		h:SetScript("OnEnter", function(self)
+			self.t:SetAlpha(0.8)
+			GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+			GameTooltip:AddLine(Ink.db.questClassFold and "눌러서 직업 퀘스트 펴기" or "눌러서 직업 퀘스트 접기", 1, 1, 1)
+			GameTooltip:Show()
+		end)
+		h:SetScript("OnLeave", function(self) self.t:SetAlpha(1); GameTooltip:Hide() end)
 		h.dot = h:CreateTexture(nil, "ARTWORK")
 		h.dot:SetSize(5, 5)
 		h.dot:SetPoint("LEFT", 1, 0)
@@ -313,7 +332,7 @@ function M:PaintClass(y)
 		h.line = h:CreateTexture(nil, "ARTWORK")
 		h.line:SetHeight(1)
 		h.line:SetPoint("LEFT", h.t, "RIGHT", 8, 0)
-		h.line:SetPoint("RIGHT", 0, 0)
+		h.line:SetPoint("RIGHT", h.n, "LEFT", -6, 0)
 		f.chead = h
 	end
 	local h = f.chead
@@ -326,7 +345,12 @@ function M:PaintClass(y)
 	h.dot:SetVertexColor(rgb[1], rgb[2], rgb[3], 1)
 	h.t:SetText("직업 퀘스트  |cff" .. string.format("%02x%02x%02x", math.floor(rgb[1] * 255), math.floor(rgb[2] * 255), math.floor(rgb[3] * 255)) .. cname .. "|r")
 	h.line:SetColorTexture(rgb[1], rgb[2], rgb[3], 0.18)
+	local fold = Ink.db.questClassFold
+	h.n:SetText(tostring(#list))
+	h.chev:SetRotation(fold and math.rad(90) or 0)
+	h.chev:SetVertexColor(C.muted[1], C.muted[2], C.muted[3])
 	h:Show()
+	if fold then return 22 end
 	local cy = y - 20
 	for i, e in ipairs(list) do
 		local r = ClassRow(i)
@@ -413,7 +437,8 @@ function M:Update()
 	if combat and #quests ~= (self.lastCount or 0) then self.dirty = true end
 
 	local y = -32
-	if not combat then self.classH = self:PaintClass(y) end
+	-- 직업 퀘스트 칸도 보호 프레임이 아니라 전투 중에도 다시 그린다 (접기 · 펴기가 바로 보이게)
+	self.classH = self:PaintClass(y)
 	y = y - (self.classH or 0)
 	local shown = 0
 	local total = #quests
@@ -845,11 +870,12 @@ function M:Init()
 		end
 		if pending then return end
 		pending = true
-		C_Timer.After(0.1, function()
+		C_Timer.After(InCombatLockdown() and 0.3 or 0.1, function()
 			pending = nil
 			M:Update()
 		end)
 	end)
+	Ink.ProfFrame(e, "퀘스트 목록 이벤트")
 end
 
 function M:PostLayout()

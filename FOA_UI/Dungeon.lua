@@ -4477,4 +4477,5 @@ function M:Init()
 			end)
 		end
 	end)
+	Ink.ProfFrame(e, "던전")
 end

@@ -910,6 +910,7 @@ function M:Init()
 			end
 		end
 	end)
+	Ink.ProfFrame(e, "파티 · 공격대")
 
 	-- 사거리는 이벤트가 드물어서 주기적으로 갱신
 	local t = 0

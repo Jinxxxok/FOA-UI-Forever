@@ -1286,7 +1286,8 @@ function M:Init()
 			-- 퀘스트 진행이 바뀌면 (한 번에 여러 번 와서) 잠깐 모아서 다시 그린다
 			if not M.questPending then
 				M.questPending = true
-				C_Timer.After(0.3, function()
+				-- 전투 중엔 퀘스트 로그 갱신이 잦아서 1초에 한 번만 (이름표마다 툴팁을 읽는 일이라 무겁다)
+				C_Timer.After(InCombatLockdown() and 1 or 0.3, function()
 					M.questPending = nil
 					objCache = nil
 					objCacheStamp = objCacheStamp + 1
@@ -1369,6 +1370,7 @@ function M:Init()
 			end
 		end
 	end)
+	Ink.ProfFrame(e, "이름표")
 
 	-- 이미 떠 있는 플레이트 처리 (/reload 직후)
 	C_Timer.After(0.5, function()

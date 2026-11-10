@@ -209,4 +209,5 @@ function M:Init()
 		t = 0
 		if UnitExists("target") then M:Update() elseif M.frame:IsShown() and not M.testing then M.frame:Hide() end
 	end)
+	Ink.ProfFrame(e, "거리 표시")
 end

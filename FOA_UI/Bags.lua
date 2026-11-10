@@ -1166,6 +1166,7 @@ function M:Init()
 			M:Paint()
 		end
 	end)
+	Ink.ProfFrame(e, "가방")
 
 	-- 미리 칸을 만들어 둔다 (전투 중엔 만들 수 없어서)
 	C_Timer.After(2, function()

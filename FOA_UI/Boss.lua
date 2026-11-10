@@ -429,4 +429,5 @@ function M:Init()
 		end
 		M:TickWarnings()
 	end)
+	Ink.ProfFrame(e, "보스 경보")
 end

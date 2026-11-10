@@ -551,8 +551,9 @@ local function ZoneMaps()
 	return zoneMaps
 end
 function M:PoiQuests()
-	if self.poiSet and not self.poiDirty then return self.poiSet end
-	self.poiDirty = nil
+	-- 모든 지역 지도의 퀘스트 표시를 훑는 일이라 10초에 한 번까지만 (전투 중엔 있던 것 그대로)
+	if self.poiSet and (not self.poiDirty or InCombatLockdown() or GetTime() - (self.poiAt or 0) < 10) then return self.poiSet end
+	self.poiDirty, self.poiAt = nil, GetTime()
 	local set = {}
 	if C_QuestLog.GetQuestsOnMap then
 		for _, m in ipairs(ZoneMaps()) do
@@ -764,8 +765,16 @@ end
 function M:MiniPoints()
 	local mapID = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
 	if not mapID then return end
-	if self.miniFor ~= mapID or self.miniDirty then
-		self.miniFor, self.miniDirty = mapID, nil
+	-- 다시 계산(퀘스트 자료 전체 · 지역 지도들의 보고 위치)은 무거워서:
+	--  전투 중엔 지역이 바뀐 게 아니면 미루고(전투가 끝나면), 평소에도 2초에 한 번까지만
+	--  (전투 중 퀘스트 로그 갱신이 잦아서 기술을 누를 때마다 다시 계산 → "애드온이 성능을 떨어뜨린다" 경고가 떴다)
+	local now = GetTime()
+	local changed = self.miniFor ~= mapID
+	if self.miniDirty and not changed and (InCombatLockdown() or now - (self.miniAt or 0) < 2) then
+		return mapID, self.miniPts
+	end
+	if changed or self.miniDirty then
+		self.miniFor, self.miniDirty, self.miniAt = mapID, nil, now
 		local pts = {}
 		if not Ink.db.questMapHide then
 			for _, g in ipairs(self:Groups(mapID)) do
@@ -869,6 +878,7 @@ function M:InitMinimap()
 		acc = 0
 		pcall(M.MiniUpdate, M)
 	end)
+	Ink.ProfFrame(f, "퀘스트 미니맵")
 	self.miniTicker = f
 end
 

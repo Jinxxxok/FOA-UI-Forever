@@ -1656,7 +1656,7 @@ function M:Init()
 	for ev in pairs(EVENT_ROLE) do pcall(e.RegisterEvent, e, ev) end
 	for _, ev in ipairs({ "GOSSIP_SHOW", "ADDON_LOADED", "TAXI_NODE_STATUS_CHANGED", "BAG_UPDATE_DELAYED", "QUEST_TURNED_IN", "DYNAMIC_GOSSIP_POI_UPDATED",
 		"UI_INFO_MESSAGE", "CHAT_MSG_SYSTEM", "UPDATE_MOUSEOVER_UNIT", "PLAYER_TARGET_CHANGED", "SKILL_LINES_CHANGED" }) do pcall(e.RegisterEvent, e, ev) end
-	C_Timer.NewTicker(2, function() pcall(M.ScanPlates, M) end)
+	C_Timer.NewTicker(2, function() Ink.Prof("지도 상급자 배우기", M.ScanPlates, M) end)
 	C_Timer.After(5, function() pcall(M.ScanBagsForBooks, M, "bags") end)
 	e:SetScript("OnEvent", function(_, event, a1, a2)
 		-- "새 비행 경로를 발견했습니다!" → 서 있는 곳의 비행 지점을 가 본 곳으로

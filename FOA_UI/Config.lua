@@ -2489,6 +2489,24 @@ SlashCmdList.INKUI = function(msg)
 		if u and P and P.ObjDiag then print("|cffFFF468FOA|r " .. P:ObjDiag(u, "명령", nil)) end
 		local d = Ink.db.objDiag or {}
 		for i = math.max(1, #d - 4), #d do print("|cff8E939B" .. d[i] .. "|r") end
+	elseif msg == "perf" or msg == "성능" then
+		-- 게임 애드온 측정(있으면) + FOA 안쪽 처리별 시간 (지난번 /foa perf 이후)
+		local P = C_AddOnProfiler
+		if P and P.GetAddOnMetric and Enum.AddOnProfilerMetric then
+			local E = Enum.AddOnProfilerMetric
+			local function m(k) local ok, v = pcall(P.GetAddOnMetric, "FOA_UI", E[k]) return ok and v or nil end
+			print(string.format("|cffFFF468FOA|r 게임 측정 · 최근 평균 %.2fms · 전투 평균 %.2fms · 최고 %.1fms · 5ms 넘은 횟수 %s",
+				m("RecentAverageTime") or 0, m("EncounterAverageTime") or 0, m("PeakTime") or 0, tostring(m("CountTimeOver5Ms") or "?")))
+		end
+		local rows = {}
+		for k, v in pairs(Ink.perf or {}) do rows[#rows + 1] = { k = k, v = v } end
+		table.sort(rows, function(a, b) return a.v.total > b.v.total end)
+		if #rows == 0 then print("|cffFFF468FOA|r 아직 측정된 게 없어요. 전투를 조금 한 뒤 다시 입력해 주세요.") end
+		for i = 1, math.min(10, #rows) do
+			local r = rows[i]
+			print(string.format("  %d. %s · 합계 %.1fms (전투 %.1fms) · %d번 · 최대 %.2fms", i, r.k, r.v.total, r.v.combat, r.v.n, r.v.max))
+		end
+		Ink.perf = {}
 	elseif msg == "log" then
 		local bl = Ink.db.blockedLog
 		if not bl or #bl == 0 then

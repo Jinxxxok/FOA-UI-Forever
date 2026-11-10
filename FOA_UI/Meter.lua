@@ -791,6 +791,7 @@ function M:Init()
 			M:RefreshThreat()
 		end
 	end)
+	Ink.ProfFrame(e, "미터기")
 	self:Refresh()
 	self:RefreshThreat()
 end

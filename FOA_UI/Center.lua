@@ -615,6 +615,7 @@ function M:Init()
 			if not (ns.FX and ns.FX.CastEvent(M.cast, event, refresh)) then refresh() end
 		end
 	end)
+	Ink.ProfFrame(e, "가운데 자원 · 쿨다운")
 end
 
 function M:SetTest(on)
