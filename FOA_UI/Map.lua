@@ -764,25 +764,29 @@ function M:Declutter()
 				end
 			end
 		end
+		-- 자리는 계산으로만 구한다 (옮겼다가 다시 재면 바뀐 위치가 바로 안 잡혀서, 부를 때마다 올렸다 내렸다 요동쳤다)
 		for _, pool in ipairs({ Q.pins or {}, Q.tpins or {} }) do
 			for _, p in ipairs(pool) do
 				local b = p.foaBase
-				if p:IsShown() and b then
-					p:ClearAllPoints()
-					p:SetPoint("CENTER", b[1], "TOPLEFT", b[2], b[3])
-					local r = Rect(p)
-					if r then
-						for _, o in ipairs(icons) do
-							if Hit(r, o, -3) then
-								local s = p:GetEffectiveScale()
-								local up = (o[4] - r[2]) / s - 5   -- 핀 아래끝을 아이콘 윗끝 살짝 아래까지
-								if up > 0 then
-									p:ClearAllPoints()
-									p:SetPoint("CENTER", b[1], "TOPLEFT", b[2], b[3] + up)
-								end
-								break
-							end
+				local cv = b and b[1]
+				local cl, ct = cv and cv:GetLeft(), cv and cv:GetTop()
+				if p:IsShown() and cl and ct then
+					local cs, ps = cv:GetEffectiveScale(), p:GetEffectiveScale()
+					local cx, cy = cl * cs + b[2] * ps, ct * cs + b[3] * ps
+					local half = (p:GetWidth() or 24) / 2 * ps
+					local r = { cx - half, cy - half, cx + half, cy + half }
+					local up = 0
+					for _, o in ipairs(icons) do
+						if Hit(r, o, -3) then
+							up = math.max(0, (o[4] - r[2]) / ps - 5)   -- 핀 아래끝을 아이콘 윗끝 살짝 아래까지
+							break
 						end
+					end
+					up = math.floor(up + 0.5)
+					if p.foaUp ~= up or p.foaUpFor ~= b then
+						p.foaUp, p.foaUpFor = up, b
+						p:ClearAllPoints()
+						p:SetPoint("CENTER", cv, "TOPLEFT", b[2], b[3] + up)
 					end
 				end
 			end

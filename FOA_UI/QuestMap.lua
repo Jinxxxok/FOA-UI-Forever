@@ -375,6 +375,17 @@ local function NewPin(parent)
 	return p
 end
 
+-- 핀 자리: 같은 자리를 다시 그릴 땐 지도 정리(Map:Declutter)가 올려 둔 높이를 그대로 유지
+--  (매번 원래 자리로 내렸다가 다음 순간 다시 올리면 지도 위에서 위아래로 요동친다)
+function M.Place(p, cv, x, y)
+	local ob = p.foaBase
+	local same = ob and ob[1] == cv and math.abs(ob[2] - x) < 0.5 and math.abs(ob[3] - y) < 0.5
+	local up = same and (p.foaUp or 0) or 0
+	p.foaBase = { cv, x, y }
+	p.foaUp, p.foaUpFor = up, p.foaBase
+	p:SetPoint("CENTER", cv, "TOPLEFT", x, y + up)
+end
+
 function M:Pin(i)
 	self.pins = self.pins or {}
 	local p = self.pins[i]
@@ -650,8 +661,7 @@ function M:Refresh()
 			p.baseScale = pinScale * (g.state == 2 and 0.85 or 1)
 			p:SetScale(p.baseScale)
 			-- 크기를 바꾼 틀의 위치 값은 그 크기만큼 곱해지므로 나눠서 제자리에
-			p.foaBase = { cv, g.x * W / p.baseScale, -g.y * H / p.baseScale }
-			p:SetPoint("CENTER", cv, "TOPLEFT", p.foaBase[2], p.foaBase[3])
+			M.Place(p, cv, g.x * W / p.baseScale, -g.y * H / p.baseScale)
 			p.list, p.giver, p.state, p.mapID, p.wx, p.wy = g.list, g.giver, g.state, mapID, g.x, g.y
 			local col = (g.state == 2) and SOON or (g.rep and BLUE or GOLD)
 			Paint(p, col, g.state == 2, #g.list)
@@ -680,8 +690,7 @@ function M:Refresh()
 			p:ClearAllPoints()
 			p.baseScale = pinScale * 1.06
 			p:SetScale(p.baseScale)
-			p.foaBase = { cv, t.x * W / p.baseScale, -t.y * H / p.baseScale }
-			p:SetPoint("CENTER", cv, "TOPLEFT", p.foaBase[2], p.foaBase[3])
+			M.Place(p, cv, t.x * W / p.baseScale, -t.y * H / p.baseScale)
 			p.ids, p.giver, p.poi, p.mapID, p.wx, p.wy = t.ids, t.giver, t.poi, mapID, t.x, t.y
 			Paint(p, GOLD, false, #t.ids)
 			p.glow:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 0.45)
