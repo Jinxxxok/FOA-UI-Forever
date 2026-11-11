@@ -752,6 +752,42 @@ function M:Declutter()
 	if not (wm and wm:IsShown()) then return end
 	local view = Rect(wm.ScrollContainer)
 	local Q = Ink.modules.QuestMap
+	-- 퀘스트 느낌표 · 물음표가 같은 자리 NPC 아이콘(훈련사 · 상인 · 편의 시설)과 겹치면 그 아이콘 위로 올린다
+	--  (머리 위 느낌표처럼 · 미니맵엔 NPC 아이콘이 없어서 보였는데 세계 지도에선 아이콘 밑에 깔려 안 보였다)
+	if Q then
+		local icons = {}
+		for _, pool in ipairs({ self.cityPins or {}, self.pins or {}, self.entrPins or {}, self.bookPins or {} }) do
+			for _, p in ipairs(pool) do
+				if p:IsShown() then
+					local r = Rect(p.art or p)
+					if r then icons[#icons + 1] = r end
+				end
+			end
+		end
+		for _, pool in ipairs({ Q.pins or {}, Q.tpins or {} }) do
+			for _, p in ipairs(pool) do
+				local b = p.foaBase
+				if p:IsShown() and b then
+					p:ClearAllPoints()
+					p:SetPoint("CENTER", b[1], "TOPLEFT", b[2], b[3])
+					local r = Rect(p)
+					if r then
+						for _, o in ipairs(icons) do
+							if Hit(r, o, -3) then
+								local s = p:GetEffectiveScale()
+								local up = (o[4] - r[2]) / s - 5   -- 핀 아래끝을 아이콘 윗끝 살짝 아래까지
+								if up > 0 then
+									p:ClearAllPoints()
+									p:SetPoint("CENTER", b[1], "TOPLEFT", b[2], b[3] + up)
+								end
+								break
+							end
+						end
+					end
+				end
+			end
+		end
+	end
 	local items, obstacles = {}, {}
 	local function add(pin, icon, label, prio, defSide, relTo)
 		local ir = Rect(icon or pin)

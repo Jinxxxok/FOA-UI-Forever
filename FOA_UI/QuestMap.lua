@@ -650,7 +650,8 @@ function M:Refresh()
 			p.baseScale = pinScale * (g.state == 2 and 0.85 or 1)
 			p:SetScale(p.baseScale)
 			-- 크기를 바꾼 틀의 위치 값은 그 크기만큼 곱해지므로 나눠서 제자리에
-			p:SetPoint("CENTER", cv, "TOPLEFT", g.x * W / p.baseScale, -g.y * H / p.baseScale)
+			p.foaBase = { cv, g.x * W / p.baseScale, -g.y * H / p.baseScale }
+			p:SetPoint("CENTER", cv, "TOPLEFT", p.foaBase[2], p.foaBase[3])
 			p.list, p.giver, p.state, p.mapID, p.wx, p.wy = g.list, g.giver, g.state, mapID, g.x, g.y
 			local col = (g.state == 2) and SOON or (g.rep and BLUE or GOLD)
 			Paint(p, col, g.state == 2, #g.list)
@@ -679,7 +680,8 @@ function M:Refresh()
 			p:ClearAllPoints()
 			p.baseScale = pinScale * 1.06
 			p:SetScale(p.baseScale)
-			p:SetPoint("CENTER", cv, "TOPLEFT", t.x * W / p.baseScale, -t.y * H / p.baseScale)
+			p.foaBase = { cv, t.x * W / p.baseScale, -t.y * H / p.baseScale }
+			p:SetPoint("CENTER", cv, "TOPLEFT", p.foaBase[2], p.foaBase[3])
 			p.ids, p.giver, p.poi, p.mapID, p.wx, p.wy = t.ids, t.giver, t.poi, mapID, t.x, t.y
 			Paint(p, GOLD, false, #t.ids)
 			p.glow:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 0.45)
@@ -723,7 +725,8 @@ function M:Hook()
 	self.hooked = true
 	self.layer = CreateFrame("Frame", nil, Canvas())
 	self.layer:SetAllPoints()
-	self.layer:SetFrameLevel(Canvas():GetFrameLevel() + 2300)
+	-- FOA 지도 표시(+2500: 훈련사 · 상인 · 편의 시설) 위에: 퀘스트 주는 NPC 가 훈련사이기도 하면 느낌표가 그 아이콘에 가려졌다
+	self.layer:SetFrameLevel(Canvas():GetFrameLevel() + 2600)
 	self:BuildLegend()
 	wm:HookScript("OnShow", function() M:Queue() end)
 	if wm.OnMapChanged then hooksecurefunc(wm, "OnMapChanged", function() M:Refresh() end) end
