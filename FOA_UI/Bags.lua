@@ -325,6 +325,59 @@ local function NewHolder(parent)
 end
 
 -- 칸 모양 갱신 (전투 중에도 안전한 부분만)
+-- 쿨다운: 칸 쿨(가방 칸) → 0 이면 그 아이템이 쓰는 주문의 쿨 (포에버 귀환석은 아이템 쿨은 0 인데
+--  귀환 주문이 쿨이라 못 쓰는 경우가 있었다 · 툴팁에도 남은 시간이 안 나옴)
+local itemSpell = {}
+local function ItemCooldown(bag, slot, itemID)
+	local ok, st, du, en = pcall(C_Container.GetContainerItemCooldown, bag, slot)
+	local cs, cd = 0, 0
+	if ok and plain(st) and plain(du) and du > 0 and en ~= 0 and en ~= false then cs, cd = st, du end
+	local ss, sd = 0, 0
+	if itemID and C_Item.GetItemSpell and C_Spell and C_Spell.GetSpellCooldown then
+		local sp = itemSpell[itemID]
+		if sp == nil then
+			local ok2, _, id = pcall(C_Item.GetItemSpell, itemID)
+			sp = (ok2 and id) or false
+			itemSpell[itemID] = sp
+		end
+		if sp then
+			local ok3, info = pcall(C_Spell.GetSpellCooldown, sp)
+			if ok3 and type(info) == "table" and info.isActive ~= false and not info.isOnGCD then
+				local a, d = plain(info.startTime), plain(info.duration)
+				if a and d and d > 2 then ss, sd = a, d end
+			end
+		end
+	end
+	if itemID == HEARTH then
+		-- 진단용: 귀환석 쿨 값 (다음 /reload 때 저장 파일에 남음)
+		Ink.db.cdProbe = { t = date("%m-%d %H:%M:%S"), now = GetTime(), item = { cs, cd, plain(en) }, spell = { ss, sd, itemSpell[itemID] } }
+	end
+	if cd > 0 and (sd == 0 or cs + cd >= ss + sd) then return cs, cd end
+	if sd > 0 then return ss, sd end
+	return 0, 0
+end
+
+-- 툴팁용: 아이템 쿨은 0 인데 그 주문만 쿨일 때 남은 시간 (블리자드 툴팁이 안 알려 줌)
+local function SpellOnlyLeft(itemID)
+	if not (C_Item.GetItemCooldown and C_Spell and C_Spell.GetSpellCooldown) then return end
+	local ok, st, du = pcall(C_Item.GetItemCooldown, itemID)
+	if ok and plain(du) and du > 0 then return end
+	local sp = itemSpell[itemID]
+	if sp == nil then
+		local ok2, _, id = pcall(C_Item.GetItemSpell, itemID)
+		sp = (ok2 and id) or false
+		itemSpell[itemID] = sp
+	end
+	if not sp then return end
+	local ok3, info = pcall(C_Spell.GetSpellCooldown, sp)
+	if not (ok3 and type(info) == "table" and info.isActive ~= false and not info.isOnGCD) then return end
+	local a, d = plain(info.startTime), plain(info.duration)
+	if not (a and d and d > 2) then return end
+	local left = a + d - GetTime()
+	if left > 0 then return left end
+end
+M.SpellOnlyLeft = SpellOnlyLeft
+
 local function Paint(h)
 	local b = h.btn
 	local s = skin[b]
@@ -392,8 +445,8 @@ local function Paint(h)
 	local isNew = C_NewItems and C_NewItems.IsNewItem and C_NewItems.IsNewItem(bag, slot)
 	s.new:SetShown(isNew and true or false)
 
-	local ok, start, dur, enable = pcall(C_Container.GetContainerItemCooldown, bag, slot)
-	if ok and plain(start) and plain(dur) and dur > 0 and enable ~= 0 and enable ~= false then
+	local start, dur = ItemCooldown(bag, slot, info.itemID)
+	if dur > 0 then
 		s.cd:SetCooldown(start, dur)
 	else
 		s.cd:Clear()
@@ -1112,6 +1165,12 @@ function M:HookNeedTooltip()
 		pcall(function()
 			if not tt.AddLine then return end
 			local id = data and plain(data.id)
+			local left = type(id) == "number" and SpellOnlyLeft(id)
+			if left then
+				local m = math.ceil(left / 60)
+				local txt = left < 60 and (math.ceil(left) .. "초") or (m >= 60 and string.format("%d시간 %d분", math.floor(m / 60), m % 60) or (m .. "분"))
+				tt:AddLine("재사용 대기 · " .. txt .. " 남음", C.red[1], C.red[2], C.red[3])
+			end
 			local name = type(id) == "number" and C_Item.GetItemInfo(id)
 			local list = name and NeedOf(name)
 			if not list then return end

@@ -139,6 +139,12 @@ def main():
             probe.get('plainID'), probe.get('secretID'), probe.get('plainName'), probe.get('secretName')))
         for line in arr(probe.get('list'))[-15:]:
             print('  ' + line)
+    cp = db.get('cdProbe')
+    if cp:
+        it, sp = arr(cp.get('item')), arr(cp.get('spell'))
+        print('\n== 귀환석 쿨 조사  %s  (GetTime %.0f)' % (cp.get('t'), cp.get('now') or 0))
+        print('  가방 칸 쿨  시작 %s · 길이 %s · enable %s' % tuple((it + [None] * 3)[:3]))
+        print('  주문 쿨     시작 %s · 길이 %s · 주문 %s' % tuple((sp + [None] * 3)[:3]))
     tr = arr(db.get('abandonTrace'))
     if tr:
         print('\n== 퀘스트 포기 창 닫힘 추적')
