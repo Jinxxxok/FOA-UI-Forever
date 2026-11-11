@@ -706,7 +706,9 @@ end
 function M:LayoutAnchors()
 	Ink:Fit(BuffFrame, self.buffAnchor, "TOPRIGHT")
 	self:PlaceDebuffs()
-	Ink:Fit(ObjectiveTrackerFrame, self.questAnchor, "TOPRIGHT")
+	-- 블리자드 목표 추적기: FOA 목록을 쓰는 동안은 화면 밖에 두므로 퀘스트 목록 모듈이 자리를 정한다
+	local Q = Ink.modules.Quest
+	if Q and Q.PlaceOTF and Q.hideOTF ~= nil then pcall(Q.PlaceOTF, Q) else Ink:Fit(ObjectiveTrackerFrame, self.questAnchor, "TOPRIGHT") end
 	if ChatFrame1 then
 		safe(function()
 			if ChatFrame1.SetUserPlaced then ChatFrame1:SetUserPlaced(true) end

@@ -717,19 +717,34 @@ function M:UpdateMode()
 			end
 		end)
 	end
+	-- 블리자드 목표 추적기는 FOA 코드에서 Show/Hide 하지 않는다:
+	--  Show 를 부르면 추적기가 그 자리에서 다시 그려지면서 블리자드 상태 값이 FOA 로 오염돼
+	--  시나리오에서 "GetAuraDataByIndex … tainted by FOA_UI" 오류가 났다 (오류 기록 11-09 · 11-10)
+	--  → 투명도와 자리만 바꾼다: 쓰는 동안은 원래 자리, 안 쓰는 동안은 화면 밖 (투명해도 클릭이 걸리지 않게)
 	if otf then
-		if useBlizzard then
-			M.otfBusy = true
-			otf:SetAlpha(1)
-			M.otfBusy = nil
-			if not otf:IsShown() then safe(otf.Show, otf) end
-		else
-			otf:SetAlpha(0)
-			if otf:IsShown() then safe(otf.Hide, otf) end
-		end
+		M.otfBusy = true
+		otf:SetAlpha(useBlizzard and 1 or 0)
+		M.otfBusy = nil
+		self:PlaceOTF()
 	end
 	self.frame:SetShown(not useBlizzard)
 	self:Update()
+end
+
+-- 블리자드 목표 추적기 자리: FOA 목록을 쓰는 동안은 화면 밖으로 (전투 중에는 못 옮겨서 전투 뒤에)
+function M:PlaceOTF()
+	local otf = ObjectiveTrackerFrame
+	if not otf then return end
+	if otf.IsProtected and otf:IsProtected() and InCombatLockdown() then self.modeDirty = true return end
+	local blz = Ink.modules.Blizzard
+	if M.hideOTF then
+		safe(function()
+			otf:ClearAllPoints()
+			otf:SetPoint("TOPLEFT", UIParent, "BOTTOMRIGHT", 400, -400)
+		end)
+	elseif blz and blz.questAnchor then
+		Ink:Fit(otf, blz.questAnchor, "TOPRIGHT")
+	end
 end
 
 -------------------------------------------------------------------------------

@@ -2507,6 +2507,20 @@ SlashCmdList.INKUI = function(msg)
 			print(string.format("  %d. %s · 합계 %.1fms (전투 %.1fms) · %d번 · 최대 %.2fms", i, r.k, r.v.total, r.v.combat, r.v.n, r.v.max))
 		end
 		Ink.perf = {}
+	elseif msg == "taint" or msg == "taint on" or msg == "오염" or msg == "taint off" then
+		-- 오염 추적: 게임이 "어느 줄에서 FOA 때문에 블리자드 실행이 오염됐는지"를 Logs\taint.log 에 직접 적는다
+		local on = msg ~= "taint off"
+		pcall(SetCVar, "taintLog", on and "1" or "0")
+		local now = GetCVar and GetCVar("taintLog")
+		if on then
+			if now == "1" or now == "2" then
+				print("|cffFFF468FOA|r 오염 추적을 켰어요 · 게임 폴더 Logs\\taint.log 에 기록돼요 · 다 보면 /foa taint off")
+			else
+				print("|cffFFF468FOA|r 애드온이 직접 켤 수 없는 설정이에요 · 채팅창에 /console taintLog 1 을 입력해 주세요")
+			end
+		else
+			print("|cffFFF468FOA|r 오염 추적을 껐어요.")
+		end
 	elseif msg == "log clear" or msg == "log 지우기" then
 		Ink:ClearErrors()
 		print("|cffFFF468FOA|r 오류 · 막힌 동작 기록을 지웠어요.")
