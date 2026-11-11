@@ -335,6 +335,23 @@ end
 
 local function RepKey(f) return f.id and ("f:" .. f.id) or ("r:" .. (f.name or "?")) end
 
+-- 직접 고른 묶음 (무기 · 평판): 하나라도 고르면 그 묶음은 "고른 것만" 보인다
+--  자동(덜 올린 무기 · 추적 중 · 방금 오른 평판)은 아무것도 안 골랐을 때만
+--  (다 올려서 자동으로 숨었던 무기가 레벨업 뒤 다시 튀어나오지 않게)
+local function RepManual()
+	for k, v in pairs(Picks()) do
+		if v ~= nil and (k:find("^f:") or k:find("^r:")) then return true end
+	end
+	return false
+end
+
+local function WeaponManual(skills)
+	for _, sk in ipairs(skills) do
+		if sk.kind == "weapon" and Pick(sk.key) ~= nil then return true end
+	end
+	return false
+end
+
 local function RepEntry(f)
 	f.icon = f.icon or RepIcon(f.id, f.name)
 	f.key = "r:" .. f.name
@@ -369,7 +386,7 @@ local function Reps()
 		if id then add(FactionByID(id)) end
 	end
 	-- 자동: 추적 중 + 이번 접속에서 오른 것 (뺀 것은 건너뜀 · 자동은 3개까지)
-	if Ink.db.trackerReps ~= false then
+	if Ink.db.trackerReps ~= false and not RepManual() then
 		local auto = {}
 		local w = Watched()
 		if w then auto[#auto + 1] = w end
@@ -618,7 +635,7 @@ function M:Collect()
 		s.pick = s.key
 		if s.kind == "prof" and Pick(s.key) ~= false then list[#list + 1] = s end
 	end
-	local autoW, n = Ink.db.trackerWeapons ~= false, 0
+	local autoW, n = Ink.db.trackerWeapons ~= false and not WeaponManual(skills), 0
 	for _, s in ipairs(skills) do
 		if s.kind == "weapon" then
 			local p = Pick(s.key)
@@ -679,20 +696,37 @@ function M:PickItems(sec)
 end
 
 -- 칩 하나의 상태: 떠 있나, 직접 고른 값 (true 고정 / false 뺌 / nil 자동)
-function M:PickState(key)
-	return self:Shown()[key] and true or false, Pick(key)
+function M:IsManual(kind)
+	if kind == "rep" then return RepManual() end
+	if kind == "weapon" then return WeaponManual(Skills()) end
+	return false
+end
+
+-- 칩 하나의 상태: 떠 있나 · 직접 고른 값 (true 고정 / false 뺌 / nil 자동) · 그 묶음이 "고른 것만" 상태인가
+function M:PickState(key, kind)
+	return self:Shown()[key] and true or false, Pick(key), self:IsManual(kind)
 end
 
 function M:TogglePick(key, kind)
 	local t = Picks(true)
+	local function nextSeq()
+		local top = 0
+		for _, v in pairs(t) do if type(v) == "number" and v > top then top = v end end
+		return top + 1
+	end
+	-- 무기 · 평판을 처음 고르는 순간: 지금 자동으로 떠 있는 것은 고정해서 그대로 남긴다 (화면이 갑자기 비지 않게)
+	if kind ~= "prof" and not self:IsManual(kind) then
+		for _, e in ipairs(self:Collect()) do
+			local k = e.pick or e.key
+			if e.kind == kind and k ~= key and t[k] == nil then t[k] = nextSeq() end
+		end
+	end
 	if self:Shown()[key] then
 		t[key] = false
 	elseif kind == "prof" then
 		t[key] = nil
 	else
-		local top = 0
-		for _, v in pairs(t) do if type(v) == "number" and v > top then top = v end end
-		t[key] = top + 1
+		t[key] = nextSeq()
 	end
 	self.shown = nil
 	pcall(self.Update, self)

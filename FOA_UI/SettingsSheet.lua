@@ -285,7 +285,7 @@ end
 local function Picks(id, sec, label, desc, empty)
 	return { kind = "picks", id = id, label = label, desc = desc, empty = empty, dep = "tracker", hud = "tracker",
 		items = function() return TR("PickItems", sec) or {} end,
-		state = function(it) return TR("PickState", it.key) end,
+		state = function(it) return TR("PickState", it.key, it.kind) end,
 		toggle = function(it) TR("TogglePick", it.key, it.kind) end,
 		changed = function() return TR("PickChanged", sec) end,
 		set = function() TR("ClearPicks", sec) end }
@@ -356,8 +356,8 @@ function M:BuildRegistry()
 			} },
 			{ t = "현황 아이콘 고르기", rows = {
 				Picks("trackerPickProf", "prof", "전문기술", "누르면 켜고 끄기", "배운 전문기술이 없어요"),
-				Picks("trackerPickWeapon", "weapon", "무기 숙련 · 방어", "누르면 고정 · 한 번 더 누르면 빼기", "무기 숙련이 없어요"),
-				Picks("trackerPickRep", "rep", "평판", "고른 평판은 늘 보여요 · 노란 점 = 고정", "아직 만난 진영이 없어요"),
+				Picks("trackerPickWeapon", "weapon", "무기 숙련 · 방어", "하나라도 고르면 고른 것만 보여요 · 자동으로 = 처음처럼", "무기 숙련이 없어요"),
+				Picks("trackerPickRep", "rep", "평판", "하나라도 고르면 고른 것만 보여요 · 노란 점 = 고정", "아직 만난 진영이 없어요"),
 			} },
 			{ t = "미니맵", rows = {
 				SW("mmArcane", "아케인 미니맵", "금세공 모서리 · 위 나침반 띠 · 아래 지역 이름과 레벨", { reload = true, hud = "minimap" }),
@@ -724,8 +724,8 @@ local function NewPickChip(r, parent)
 		RowEnter(r)
 		local it, e = self.it, r.e
 		if not it then return end
-		local on, pick = false, nil
-		if e.state then on, pick = e.state(it) end
+		local on, pick, manual = false, nil, false
+		if e.state then on, pick, manual = e.state(it) end
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
 		GameTooltip:AddLine(it.name or "?", 1, 1, 1)
 		if it.kind == "rep" then
@@ -746,6 +746,8 @@ local function NewPickChip(r, parent)
 				or "자동으로 보여 주는 중 (추적 · 방금 오름) · 누르면 빼요")
 		elseif pick == false then
 			line = "뺐어요 · 누르면 다시 보여요"
+		elseif manual then
+			line = "고른 것만 보이는 중 · 누르면 추가해요"
 		elseif it.kind == "weapon" then
 			line = it.maxed and "다 올려서 자동에선 숨겨요 · 누르면 고정해요"
 				or ((it.rank or 0) <= 1 and "아직 안 써 본 무기라 자동에선 숨겨요 · 누르면 고정해요" or "자동 칸(4개)이 찼어요 · 누르면 고정해요")
