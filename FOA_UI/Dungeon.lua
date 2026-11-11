@@ -3773,6 +3773,23 @@ function M:CheckLoot()
 	end
 end
 
+-- 지금 던전의 보스인가 (보스 알림: 블리자드 보스 정보가 없는 옛 던전에서 보스 시전을 알아보려고)
+--  희귀몹 · 상자는 빼고 진짜 보스만. 전투 중 GUID 가 비공개면 모른다(false)
+function M:IsHereBoss(unit)
+	local key = self.hereKey
+	if not key then return false end
+	local ok, guid = pcall(UnitGUID, unit)
+	guid = ok and plain(guid)
+	if type(guid) ~= "string" then return false end
+	local npc = tonumber((select(6, strsplit("-", guid))))
+	if not npc then return false end
+	local d = FLoot(key)
+	for _, b in ipairs(d and d.bosses or {}) do
+		if b[3] == npc and (b[4] or 0) == 0 then return true end
+	end
+	return false
+end
+
 function M:CheckDead(unit)
 	local key = self.hereKey
 	if not key then return end

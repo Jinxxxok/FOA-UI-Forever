@@ -660,6 +660,113 @@ function M:ObjDiag(unit, where, info)
 	return rec
 end
 
+-------------------------------------------------------------------------------
+-- 퀘스트 물체 반짝임: 몬스터 전리품 반짝임처럼 배지 주위에서 별이 반짝이고
+--  배지 뒤로 은은한 빛 + 퍼지는 고리 (멀리서도 눈에 띄게). 설정: 퀘스트 물체 반짝임
+-------------------------------------------------------------------------------
+local SPARK_TEX = "Interface\\AddOns\\FOA_UI\\Media\\Textures\\Sparkle"
+-- { x, y, 크기, 쉬는 시간 } — 쉬는 시간이 달라서 별마다 반짝이는 때가 어긋난다
+local SPARK_POS = {
+	{ -21, 9, 15, 0.1 }, { 19, 15, 12, 0.55 }, { -13, -13, 11, 0.95 },
+	{ 23, -7, 14, 0.3 }, { 3, 25, 10, 0.75 }, { -28, -1, 9, 1.2 },
+}
+
+local function SparkAnim(region, loop, kind, dur, order, delay, smooth)
+	local ag = region.ag
+	if not ag then
+		ag = region:CreateAnimationGroup()
+		if loop then ag:SetLooping(loop) end
+		region.ag = ag
+	end
+	local a = ag:CreateAnimation(kind)
+	a:SetDuration(dur)
+	if order then a:SetOrder(order) end
+	if delay then a:SetStartDelay(delay) end
+	if smooth then a:SetSmoothing(smooth) end
+	return a
+end
+
+local function SparkFrames(f)
+	if f.spark then return f.spark end
+	local col = QUEST_COLOR
+	-- 배지 뒤 (빛 · 고리)
+	local back = CreateFrame("Frame", nil, f)
+	back:SetSize(24, 24)
+	back:SetPoint("CENTER", f.role, "CENTER")
+	back:SetFrameLevel(f:GetFrameLevel())
+	back.glow = back:CreateTexture(nil, "BACKGROUND")
+	back.glow:SetTexture(Ink.tex.glow)
+	back.glow:SetPoint("CENTER")
+	back.glow:SetSize(70, 70)
+	back.glow:SetBlendMode("ADD")
+	back.glow:SetVertexColor(col[1], col[2], col[3], 1)
+	local g = SparkAnim(back.glow, "BOUNCE", "Alpha", 0.9, nil, nil, "IN_OUT")
+	g:SetFromAlpha(0.3)
+	g:SetToAlpha(0.85)
+	back.ring = back:CreateTexture(nil, "ARTWORK")
+	back.ring:SetTexture(Ink.tex.ring)
+	back.ring:SetAllPoints()
+	back.ring:SetBlendMode("ADD")
+	back.ring:SetVertexColor(col[1], col[2], col[3], 1)
+	back.ring:SetAlpha(0)
+	local rs = SparkAnim(back.ring, "REPEAT", "Scale", 1.4, 1, 0.5, "OUT")
+	rs:SetScaleFrom(1, 1)
+	rs:SetScaleTo(2.8, 2.8)
+	local ra = SparkAnim(back.ring, "REPEAT", "Alpha", 1.4, 1, 0.5, "OUT")
+	ra:SetFromAlpha(0.85)
+	ra:SetToAlpha(0)
+	-- 배지 앞 (반짝이는 별)
+	local front = CreateFrame("Frame", nil, f)
+	front:SetSize(24, 24)
+	front:SetPoint("CENTER", f.role, "CENTER")
+	front:SetFrameLevel(f.role:GetFrameLevel() + 3)
+	front.stars = {}
+	for i, p in ipairs(SPARK_POS) do
+		local t = front:CreateTexture(nil, "OVERLAY")
+		t:SetTexture(SPARK_TEX)
+		t:SetSize(p[3], p[3])
+		t:SetPoint("CENTER", p[1], p[2])
+		t:SetBlendMode("ADD")
+		t:SetVertexColor(1, 0.95, 0.72, 1)
+		t:SetAlpha(0)
+		local a1 = SparkAnim(t, "REPEAT", "Alpha", 0.26, 1, p[4] + 0.25)
+		a1:SetFromAlpha(0)
+		a1:SetToAlpha(1)
+		local s1 = SparkAnim(t, "REPEAT", "Scale", 0.26, 1, p[4] + 0.25, "OUT")
+		s1:SetScaleFrom(0.25, 0.25)
+		s1:SetScaleTo(1, 1)
+		local a2 = SparkAnim(t, "REPEAT", "Alpha", 0.45, 2, nil, "IN")
+		a2:SetFromAlpha(1)
+		a2:SetToAlpha(0)
+		local s2 = SparkAnim(t, "REPEAT", "Scale", 0.45, 2, nil, "IN")
+		s2:SetScaleFrom(1, 1)
+		s2:SetScaleTo(0.3, 0.3)
+		local r2 = SparkAnim(t, "REPEAT", "Rotation", 0.45, 2)
+		r2:SetDegrees(-45)
+		front.stars[i] = t
+	end
+	f.spark = { back = back, front = front }
+	return f.spark
+end
+
+function M.Sparkle(f, on)
+	if on and Ink.db.questSparkle ~= false then
+		local s = SparkFrames(f)
+		if not s.on then
+			s.on = true
+			s.back:Show(); s.front:Show()
+			s.back.glow.ag:Play(); s.back.ring.ag:Play()
+			for _, t in ipairs(s.front.stars) do t.ag:Play() end
+		end
+	elseif f.spark and f.spark.on then
+		local s = f.spark
+		s.on = nil
+		s.back.glow.ag:Stop(); s.back.ring.ag:Stop()
+		for _, t in ipairs(s.front.stars) do t.ag:Stop(); t:SetAlpha(0) end
+		s.back:Hide(); s.front:Hide()
+	end
+end
+
 -- 물체 이름표: 퀘스트 물체만 보인다 (배지 + 이름 + 진행 수치), 나머지 물체는 숨김
 function M:DrawObject(f, unit)
 	self:SetFriendly(f, true)
@@ -686,10 +793,12 @@ function M:DrawObject(f, unit)
 		f.name:SetAlpha(1)
 		f.otext:SetText(info.text)
 		f.otext:SetShown(info.text ~= "")
+		M.Sparkle(f, true)
 	else
 		f.role:Hide()
 		f.name:SetAlpha(0)
 		f.otext:Hide()
+		M.Sparkle(f, false)
 	end
 end
 
@@ -1033,6 +1142,7 @@ function M:Draw(f, unit)
 	if f.object then
 		f.object, f.objInfo = nil, nil
 		if f.otext then f.otext:Hide() end
+		M.Sparkle(f, false)
 	end
 	local friendly = IsFriendly(unit)
 	self:SetFriendly(f, friendly)
@@ -1116,6 +1226,7 @@ function M:OnRemoved(unit)
 		f.auras:SetUnit("none")
 		f.object, f.objInfo = nil, nil
 		if f.otext then f.otext:Hide() end
+		M.Sparkle(f, false)
 	end
 	local plate = C_NamePlate.GetNamePlateForUnit(unit)
 	if plate then RestoreBlizzard(plate) end
@@ -1209,7 +1320,7 @@ local SOFT_CVARS = {
 	SoftTargetNameplateInteract = "1", -- 그 대상에 이름표
 	SoftTargetIconInteract = "1",      -- 줍기 · 상호작용 물체 위에 게임 아이콘
 	SoftTargetIconGameObject = "1",    -- 바닥 물체(퀘스트 물건 등)에도
-	SoftTargetInteractRange = "30",    -- 잡는 거리 (기본 10미터라 바로 앞까지 가야 떴다)
+	SoftTargetInteractRange = "45",    -- 잡는 거리 (기본 10미터라 바로 앞까지 가야 떴다 · 30도 가까워서 45)
 	SoftTargetInteractArc = "2",       -- 앞쪽만이 아니라 옆에 있는 물체도
 }
 

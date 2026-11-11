@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.63.2"
+Ink.version = "0.64.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1234,6 +1234,15 @@ local defaults = {
 	autoPush = true,
 	clock = true,
 	questObjects = true,
+	questSparkle = true,  -- 퀘스트 물체 배지 반짝임
+	itemCountTip = true,  -- 툴팁에 가방 · 은행 · 다른 캐릭터 보유 개수
+	oneTouchFish = true,  -- 원터치 낚시 (낚싯대를 들었을 때만)
+	speedyLoot = true,    -- 빠른 자동 줍기
+	tracker = true,       -- 현황 아이콘 (전문기술 · 무기 숙련 · 평판)
+	unitPortrait = false, -- 플레이어 · 대상 초상화 (기본 끔)
+	bossSound = true,     -- 보스 시전 경고 소리
+	trackerWeapons = true,
+	trackerReps = true,
 	combatHide = true,
 	dungeon = true,
 	actionBars = true,

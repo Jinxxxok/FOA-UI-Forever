@@ -108,6 +108,25 @@ local function Row(parent, i)
 	r.name:SetPoint("LEFT", r.icon, "RIGHT", 7, 0)
 	r.name:SetPoint("RIGHT", r.value, "LEFT", -8, 0)
 	if ns.FX then pcall(ns.FX.AttachMeterRow, r, ROW - 2) end
+	r.index = i
+	-- 줄을 누르면 그 사람의 기술별 구성 (상세 창 줄은 제외)
+	if not parent.isDetail then
+		r.hl = r:CreateTexture(nil, "BACKGROUND")
+		r.hl:SetAllPoints()
+		r.hl:SetColorTexture(1, 1, 1, 0.05)
+		r.hl:Hide()
+		r:EnableMouse(true)
+		r:SetScript("OnEnter", function(self)
+			self.hl:Show()
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			GameTooltip:SetText("누르면 기술별 구성", 1, 1, 1)
+			GameTooltip:Show()
+		end)
+		r:SetScript("OnLeave", function(self) self.hl:Hide(); GameTooltip:Hide() end)
+		r:SetScript("OnMouseUp", function(self, btn)
+			if btn == "LeftButton" then M:ToggleDetail(parent, self) end
+		end)
+	end
 	r:Hide()
 	return r
 end
@@ -189,6 +208,8 @@ local function ResetButton(parent)
 	paint()
 	return b
 end
+
+local Channels -- 채팅 보내기 대상 (아래에서 정의 · 메뉴가 먼저 쓴다)
 
 local function WinKey(slot) return slot == 1 and "meter" or ("meter" .. slot) end
 
@@ -350,6 +371,10 @@ function M:OpenMenu(owner, f)
 				M:RefreshWin(f)
 			end)
 			root:CreateDivider()
+			local rep = root:CreateButton("채팅에 보내기 (상위 5)")
+			for _, ch in ipairs(Channels()) do
+				rep:CreateButton(ch[2], function() M:Report(f, ch[1]) end)
+			end
 			root:CreateButton("새 미터기 창 열기", function() M:OpenWindow() end)
 			if f.slot > 1 then root:CreateButton("이 창 닫기", function() M:CloseWindow(f.slot) end) end
 			root:CreateButton("|cffFF6B5E기록 초기화|r", function()
@@ -370,6 +395,7 @@ end
 -------------------------------------------------------------------------------
 local function Paint(r, src, maxAmount, mode, rank, win)
 	local class = plain(src.classFilename)
+	r.src = { guid = src.sourceGUID, creature = src.sourceCreatureID, name = src.name, class = class, isLocal = plain(src.isLocalPlayer) }
 	local cr, cg, cb = ns.ClassColorOf(class)
 	r.bar:SetStatusBarColor(cr, cg, cb, 0.3)
 	r.edge:SetColorTexture(cr, cg, cb, 0.9)
@@ -449,6 +475,226 @@ function M:RefreshWin(f)
 	f.empty:SetShown(shown == 0)
 	local dur = C_DamageMeter and C_DamageMeter.GetSessionDurationSeconds and C_DamageMeter.GetSessionDurationSeconds(sesType)
 	f.time:SetText(Clock(dur))
+	if f.detail and f.detail:IsShown() then pcall(self.PaintDetail, self, f) end
+end
+
+-------------------------------------------------------------------------------
+-- 기술별 구성 (줄을 누르면 미터기 옆에): 기술 아이콘 · 이름 · 비율 · 수치
+--  전투 중엔 값이 비공개라 비율(%) 계산을 못 해서 수치만, 전투가 끝나면 비율까지
+-------------------------------------------------------------------------------
+local DROWS = 10
+function M:BuildDetail(f)
+	if f.detail then return f.detail end
+	local d = CreateFrame("Frame", nil, f)
+	d.isDetail = true
+	d:SetSize(270, HEAD + DROWS * ROW + 8)
+	d:SetFrameStrata("MEDIUM")
+	d:EnableMouse(true)
+	d.bg = Ink:Round(d, "BACKGROUND", false, false, -8)
+	d.bg:SetAllPoints()
+	d.bg:SetVertexColor(0.035, 0.04, 0.052, 0.94)
+	d.bd = Ink:Round(d, "BORDER", false, true, -8)
+	d.bd:SetAllPoints()
+	d.bd:SetVertexColor(1, 1, 1, 0.08)
+	d.accent = d:CreateTexture(nil, "ARTWORK")
+	d.accent:SetSize(22, 2)
+	d.accent:SetPoint("TOPLEFT", 12, -1)
+	d.title = Ink:Text(d, F.bold, 13, C.text, "LEFT")
+	d.title:SetPoint("TOPLEFT", 12, -9)
+	d.title:SetWidth(150)
+	d.sub = Ink:Text(d, F.sans, 10, C.dim, "LEFT")
+	d.sub:SetPoint("LEFT", d.title, "RIGHT", 6, -1)
+	d.close = TinyButton(d, "×", "닫기")
+	d.close:SetPoint("TOPRIGHT", -8, -5)
+	d.close:SetScript("OnClick", function() d:Hide() end)
+	d.send = TinyButton(d, "↗", "기술별 구성을 채팅에 보내기")
+	d.send:SetPoint("RIGHT", d.close, "LEFT", -4, 0)
+	d.send:SetScript("OnClick", function(self) M:ReportMenu(self, f, true) end)
+	d.line = d:CreateTexture(nil, "ARTWORK")
+	d.line:SetColorTexture(1, 1, 1, 0.05)
+	d.line:SetHeight(1)
+	d.line:SetPoint("TOPLEFT", 10, -HEAD + 2)
+	d.line:SetPoint("TOPRIGHT", -10, -HEAD + 2)
+	d.rows = {}
+	for i = 1, DROWS do d.rows[i] = Row(d, i) end
+	d.empty = Ink:Text(d, F.sans, 11, C.dim, "CENTER")
+	d.empty:SetPoint("CENTER", 0, -HEAD / 2)
+	d.empty:SetText("기술 기록이 없어요")
+	d:Hide()
+	f.detail = d
+	return d
+end
+
+function M:ToggleDetail(f, r)
+	local d = self:BuildDetail(f)
+	if d:IsShown() and d.rowIndex == r.index then d:Hide() return end
+	d.rowIndex = r.index
+	d.who = r.src
+	-- 화면 오른쪽에 있는 미터기면 왼쪽으로, 왼쪽이면 오른쪽으로 연다
+	d:ClearAllPoints()
+	local cx = f:GetCenter()
+	local half = (UIParent:GetWidth() or 1920) / 2
+	if cx and cx > half then d:SetPoint("BOTTOMRIGHT", f, "BOTTOMLEFT", -8, 0) else d:SetPoint("BOTTOMLEFT", f, "BOTTOMRIGHT", 8, 0) end
+	d:Show()
+	pcall(self.PaintDetail, self, f)
+end
+
+-- 지금 보기(피해량 · 치유량 …)와 전투(현재 · 전체)로 그 사람의 기술 목록
+function M:DetailData(f)
+	local d = f.detail
+	local who = d and d.who
+	if not (who and C_DamageMeter and C_DamageMeter.GetCombatSessionSourceFromType) then return end
+	local mode = self:Mode(f)
+	local sesType = f.cfg.session == SESSION.Overall and SESSION.Overall or SESSION.Current
+	local ok, src = pcall(C_DamageMeter.GetCombatSessionSourceFromType, sesType, mode.type, who.guid, who.creature)
+	if not ok or not src then
+		-- 예전 클라이언트: 생물 번호 칸이 없다
+		ok, src = pcall(C_DamageMeter.GetCombatSessionSourceFromType, sesType, mode.type, who.guid)
+	end
+	return ok and src or nil, mode
+end
+
+local function SpellLabel(id)
+	local name, icon
+	if C_Spell and C_Spell.GetSpellName then name = C_Spell.GetSpellName(id) end
+	if C_Spell and C_Spell.GetSpellTexture then icon = C_Spell.GetSpellTexture(id) end
+	if not name and GetSpellInfo then
+		local n, _, ic = GetSpellInfo(id)
+		name, icon = n, icon or ic
+	end
+	return name, icon
+end
+
+function M:PaintDetail(f)
+	local d = f.detail
+	local who = d.who or {}
+	local src, mode = self:DetailData(f)
+	local cr, cg, cb = ns.ClassColorOf(who.class)
+	d.accent:SetColorTexture(cr, cg, cb, 0.95)
+	d.title:SetText(who.name or "")
+	d.title:SetTextColor(cr, cg, cb)
+	d.sub:SetText((mode and mode.name or "") .. " · 기술별")
+	local spells = src and src.combatSpells or {}
+	-- 전투 밖이면 큰 순서로 정렬하고 비율도 계산
+	local total = plain(src and src.totalAmount)
+	local sorted = spells
+	local plainVals = true
+	for _, sp in ipairs(spells) do if type(plain(sp.totalAmount)) ~= "number" then plainVals = false break end end
+	if plainVals then
+		sorted = {}
+		for i, sp in ipairs(spells) do sorted[i] = sp end
+		table.sort(sorted, function(a, b) return a.totalAmount > b.totalAmount end)
+		if not total or total <= 0 then
+			total = 0
+			for _, sp in ipairs(sorted) do total = total + sp.totalAmount end
+		end
+	end
+	local maxAmount = src and src.maxAmount or 0
+	if plainVals and sorted[1] then maxAmount = sorted[1].totalAmount end
+	local shown = 0
+	for i, r in ipairs(d.rows) do
+		local sp = sorted[i]
+		if sp then
+			shown = i
+			pcall(function()
+				local name, icon = SpellLabel(sp.spellID)
+				r.bar:SetStatusBarColor(cr, cg, cb, 0.28)
+				r.edge:SetColorTexture(cr, cg, cb, 0.9)
+				r.tip:SetColorTexture(cr, cg, cb, 0.85)
+				pcall(r.bar.SetMinMaxValues, r.bar, 0, maxAmount)
+				SetBar(r.bar, sp.totalAmount)
+				r.icon:SetTexture(icon or 134400)
+				r.rank:SetText(i)
+				local rc = RANK[i] or C.dim
+				r.rank:SetTextColor(rc[1], rc[2], rc[3])
+				r.name:SetText(name or "")
+				r.name:SetTextColor(0.9, 0.91, 0.93)
+				local text = Abbr(sp.totalAmount)
+				if plainVals and total and total > 0 then
+					text = string.format("|cffFFD14D%d%%|r  %s", math.floor(sp.totalAmount / total * 100 + 0.5), text)
+				end
+				r.value:SetText(text)
+				r:SetAlpha(1)
+				r:Show()
+			end)
+		else
+			r:Hide()
+		end
+	end
+	d.empty:SetShown(shown == 0)
+	d:SetHeight(HEAD + math.max(2, shown) * ROW + 8)
+end
+
+-------------------------------------------------------------------------------
+-- 채팅에 보내기 (전투가 끝난 뒤: 전투 중엔 값이 비공개라 글로 못 만든다)
+-------------------------------------------------------------------------------
+Channels = function()
+	local t = {}
+	if IsInGroup and IsInGroup(LE_PARTY_CATEGORY_INSTANCE or 2) then t[#t + 1] = { "INSTANCE_CHAT", "인스턴스" } end
+	if IsInRaid and IsInRaid() then t[#t + 1] = { "RAID", "공격대" }
+	elseif IsInGroup and IsInGroup() then t[#t + 1] = { "PARTY", "파티" } end
+	if IsInGuild and IsInGuild() then t[#t + 1] = { "GUILD", "길드" } end
+	t[#t + 1] = { "SAY", "말하기" }
+	return t
+end
+
+function M:ReportMenu(owner, f, detail)
+	if MenuUtil and MenuUtil.CreateContextMenu then
+		local ok = pcall(MenuUtil.CreateContextMenu, owner, function(_, root)
+			root:CreateTitle(detail and "기술별 구성 보내기" or "채팅에 보내기 (상위 5)")
+			for _, ch in ipairs(Channels()) do
+				root:CreateButton(ch[2], function() M:Report(f, ch[1], detail) end)
+			end
+		end)
+		if ok then return end
+	end
+	self:Report(f, IsInGroup() and "PARTY" or "SAY", detail)
+end
+
+function M:Report(f, chan, detail)
+	local lines = {}
+	local ok = pcall(function()
+		local mode = self:Mode(f)
+		local sesType = f.cfg.session == SESSION.Overall and SESSION.Overall or SESSION.Current
+		local dur = C_DamageMeter.GetSessionDurationSeconds and C_DamageMeter.GetSessionDurationSeconds(sesType)
+		local when = (sesType == SESSION.Overall and "전체" or "현재") .. " " .. Clock(dur)
+		if detail then
+			local src = self:DetailData(f)
+			local who = f.detail and f.detail.who or {}
+			local spells = {}
+			for i, sp in ipairs(src and src.combatSpells or {}) do spells[i] = sp end
+			table.sort(spells, function(a, b) return a.totalAmount > b.totalAmount end)
+			local total = 0
+			for _, sp in ipairs(spells) do total = total + sp.totalAmount end
+			lines[1] = string.format("[FOA] %s %s 기술별 (%s)", who.name or "?", mode.name, when)
+			for i = 1, math.min(6, #spells) do
+				local sp = spells[i]
+				local name = SpellLabel(sp.spellID) or "?"
+				lines[#lines + 1] = string.format("%d. %s %d%% (%s)", i, name, total > 0 and math.floor(sp.totalAmount / total * 100 + 0.5) or 0, Abbr(sp.totalAmount))
+			end
+		else
+			local s = C_DamageMeter.GetCombatSessionFromType(sesType, mode.type)
+			local list = s and s.combatSources or {}
+			local total = 0
+			for _, src in ipairs(list) do total = total + src.totalAmount end
+			lines[1] = string.format("[FOA] %s (%s)", mode.name, when)
+			for i = 1, math.min(5, #list) do
+				local src = list[i]
+				local main = mode.rate and src.amountPerSecond or src.totalAmount
+				local txt = string.format("%d. %s %s", i, src.name, Abbr(main))
+				if not mode.count then
+					txt = txt .. string.format(" (%s, %d%%)", Abbr(mode.rate and src.totalAmount or src.amountPerSecond),
+						total > 0 and math.floor(src.totalAmount / total * 100 + 0.5) or 0)
+				end
+				lines[#lines + 1] = txt
+			end
+		end
+	end)
+	if not ok or #lines < 2 then
+		print("|cffFFF468FOA|r " .. (InCombatLockdown() and "전투 중엔 값이 비공개라 보낼 수 없어요 · 전투가 끝나면 다시 눌러 주세요" or "보낼 기록이 없어요"))
+		return
+	end
+	for _, l in ipairs(lines) do pcall(SendChatMessage, l, chan) end
 end
 
 -------------------------------------------------------------------------------
@@ -502,15 +748,28 @@ function M:BuildThreat()
 		r.over = CreateFrame("Frame", nil, r)
 		r.over:SetAllPoints()
 		r.over:SetFrameLevel(r.bar:GetFrameLevel() + 2)
+		-- 1등 강조: 은은한 금빛 바탕 + 왼쪽 굵은 띠
+		r.top = r:CreateTexture(nil, "BACKGROUND")
+		r.top:SetAllPoints()
+		r.top:SetTexture(Ink.tex.white)
+		if r.top.SetGradient and CreateColor then
+			r.top:SetGradient("HORIZONTAL", CreateColor(1, 0.82, 0.3, 0.22), CreateColor(1, 0.82, 0.3, 0))
+		else
+			r.top:SetVertexColor(1, 0.82, 0.3, 0.12)
+		end
+		r.top:Hide()
+		r.rank = Ink:Text(r.over, F.latinB, 10, C.dim, "CENTER", "OVERLAY")
+		r.rank:SetPoint("LEFT", 2, 0)
+		r.rank:SetWidth(12)
 		r.tank = r.over:CreateTexture(nil, "OVERLAY")
 		r.tank:SetTexture(Ink.tex.roleTank)
 		r.tank:SetSize(11, 11)
-		r.tank:SetPoint("LEFT", 7, 0)
+		r.tank:SetPoint("LEFT", 15, 0)
 		r.tank:SetVertexColor(C.red[1], C.red[2], C.red[3])
 		r.value = Ink:Text(r.over, F.latin, 11, C.text, "RIGHT", "OVERLAY")
 		r.value:SetPoint("RIGHT", -8, 0)
 		r.name = Ink:Text(r.over, F.semi, 11, C.text, "LEFT", "OVERLAY")
-		r.name:SetPoint("LEFT", 22, 0)
+		r.name:SetPoint("LEFT", 30, 0)
 		r.name:SetPoint("RIGHT", r.value, "LEFT", -6, 0)
 		r:Hide()
 		f.rows[i] = r
@@ -554,10 +813,21 @@ local function ThreatUnits()
 	return list
 end
 
-local function PaintThreat(r, name, class, pct, tanking)
+local function PaintThreat(r, name, class, pct, tanking, rank, warn)
 	local cr, cg, cb = ns.ClassColorOf(class)
-	r.bar:SetStatusBarColor(cr, cg, cb, 0.2)
+	local top = rank == 1
+	r.bar:SetStatusBarColor(cr, cg, cb, top and 0.34 or 0.2)
 	r.edge:SetColorTexture(cr, cg, cb, 0.9)
+	r.edge:SetWidth(top and 3 or 2)
+	r.rank:SetText(rank or "")
+	local rc = RANK[rank or 0] or C.dim
+	r.rank:SetTextColor(rc[1], rc[2], rc[3])
+	-- 1등 줄: 금빛 바탕 · 내가 탱커가 아닌데 1등이면 빨갛게 (어그로 끌었어요)
+	r.top:SetShown(top)
+	if top and r.top.SetGradient and CreateColor then
+		local w = warn and { 1, 0.36, 0.3 } or { 1, 0.82, 0.3 }
+		r.top:SetGradient("HORIZONTAL", CreateColor(w[1], w[2], w[3], 0.26), CreateColor(w[1], w[2], w[3], 0))
+	end
 	r.name:SetText(name or "")
 	r.name:SetTextColor(cr, cg, cb)
 	SetBar(r.bar, pct or 0)
@@ -579,7 +849,7 @@ function M:RefreshThreat()
 		local fake = { { "방패벽", "WARRIOR", 100, true }, { "디피킹", "ROGUE", 87 }, { "얼음꽃", "MAGE", 64 }, { "빛의서약", "PALADIN", 21 } }
 		for i = 1, f.nrows do
 			local d = fake[i]
-			if d then PaintThreat(f.rows[i], d[1], d[2], d[3], d[4] or false) else f.rows[i]:Hide() end
+			if d then PaintThreat(f.rows[i], d[1], d[2], d[3], d[4] or false, i) else f.rows[i]:Hide() end
 		end
 		f.target:SetText("훈련용 허수아비")
 		f.empty:Hide()
@@ -589,14 +859,37 @@ function M:RefreshThreat()
 	local n = 0
 	if has then
 		f.target:SetText(UnitName("target") or "")
-		for _, u in ipairs(ThreatUnits()) do
-			if n >= f.nrows then break end
+		-- 위협 높은 순으로 (미터기처럼 1등이 늘 맨 위)
+		local list, allPlain = {}, true
+		for i, u in ipairs(ThreatUnits()) do
 			local ok, tanking, _, scaled = pcall(UnitDetailedThreatSituation, u, "target")
 			if ok and scaled ~= nil then
-				n = n + 1
-				local _, class = UnitClass(u)
-				PaintThreat(f.rows[n], UnitName(u), plain(class), scaled, tanking)
+				local p = plain(scaled)
+				if type(p) ~= "number" then allPlain = false end
+				local aggro = plain(UnitIsUnit("targettarget", u)) and true or false
+				list[#list + 1] = { u = u, i = i, tanking = tanking, scaled = scaled, p = p, aggro = aggro }
 			end
+		end
+		if allPlain then
+			table.sort(list, function(a, b)
+				if a.p ~= b.p then return a.p > b.p end
+				if a.aggro ~= b.aggro then return a.aggro end
+				return a.i < b.i
+			end)
+		else
+			-- 전투 중 값이 비공개면 비교를 못 하니, 지금 대상이 때리는 사람을 맨 위로
+			table.sort(list, function(a, b)
+				if a.aggro ~= b.aggro then return a.aggro end
+				return a.i < b.i
+			end)
+		end
+		local myRole = UnitGroupRolesAssigned and UnitGroupRolesAssigned("player")
+		for k, e in ipairs(list) do
+			if n >= f.nrows then break end
+			n = n + 1
+			local _, class = UnitClass(e.u)
+			local warn = k == 1 and UnitIsUnit(e.u, "player") and myRole ~= "TANK" and IsInGroup()
+			PaintThreat(f.rows[n], UnitName(e.u), plain(class), e.scaled, e.tanking, k, warn)
 		end
 	else
 		f.target:SetText("")

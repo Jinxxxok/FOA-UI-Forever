@@ -684,6 +684,72 @@ ns.CastBar = CastBar
 local P_COL, P_NUM = 258, 108
 local P_W = P_COL + P_NUM + 16
 
+-------------------------------------------------------------------------------
+-- 초상화 (설정 → 프레임 → 플레이어 · 대상 초상화, 기본 끔)
+--  플레이어는 프레임 왼쪽, 대상은 오른쪽 바깥에 둥근 얼굴 + 직업(NPC는 관계) 색 고리.
+--  죽으면 흑백. 프레임이 움직이면 같이 움직인다.
+-------------------------------------------------------------------------------
+local PORTRAIT = 46
+function M:BuildPortrait(f, side)
+	local p = CreateFrame("Frame", nil, f)
+	p:SetSize(PORTRAIT, PORTRAIT)
+	if side == "left" then
+		p:SetPoint("TOPRIGHT", f, "TOPLEFT", -14, 5)
+	else
+		p:SetPoint("TOPLEFT", f, "TOPRIGHT", 14, 5)
+	end
+	p:EnableMouse(false)
+	p.shadow = p:CreateTexture(nil, "BACKGROUND", nil, -3)
+	p.shadow:SetTexture(Ink.tex.glow)
+	p.shadow:SetPoint("CENTER", 0, -2)
+	p.shadow:SetSize(PORTRAIT * 1.7, PORTRAIT * 1.7)
+	p.shadow:SetVertexColor(0, 0, 0, 0.6)
+	p.glow = p:CreateTexture(nil, "BACKGROUND", nil, -2)
+	p.glow:SetTexture(Ink.tex.glow)
+	p.glow:SetPoint("CENTER")
+	p.glow:SetSize(PORTRAIT * 1.45, PORTRAIT * 1.45)
+	p.glow:SetBlendMode("ADD")
+	p.disc = p:CreateTexture(nil, "BACKGROUND")
+	p.disc:SetTexture(Ink.tex.disc)
+	p.disc:SetAllPoints()
+	p.disc:SetVertexColor(0.035, 0.04, 0.052, 1)
+	p.face = p:CreateTexture(nil, "ARTWORK")
+	p.face:SetPoint("TOPLEFT", 3, -3)
+	p.face:SetPoint("BOTTOMRIGHT", -3, 3)
+	if p.CreateMaskTexture and p.face.AddMaskTexture then
+		local m = p:CreateMaskTexture()
+		m:SetTexture(Ink.tex.mask, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+		m:SetAllPoints(p.face)
+		p.face:AddMaskTexture(m)
+	end
+	-- 얼굴 아래쪽을 살짝 어둡게 (고리와 자연스럽게 이어지게)
+	p.vig = p:CreateTexture(nil, "ARTWORK", nil, 1)
+	p.vig:SetTexture(Ink.tex.ring)
+	p.vig:SetPoint("TOPLEFT", 2, -2)
+	p.vig:SetPoint("BOTTOMRIGHT", -2, 2)
+	p.vig:SetVertexColor(0, 0, 0, 0.55)
+	p.ring = p:CreateTexture(nil, "OVERLAY")
+	p.ring:SetTexture(Ink.tex.ring)
+	p.ring:SetAllPoints()
+	p:Hide()
+	f.portrait = p
+end
+
+function M:UpdatePortrait(f)
+	local p = f and f.portrait
+	if not p then return end
+	local u = f.unit
+	if Ink.db.unitPortrait ~= true or not (u and UnitExists(u)) then p:Hide() return end
+	p:Show()
+	if SetPortraitTexture then SetPortraitTexture(p.face, u) end
+	local r, g, b = UnitColor(u)
+	p.ring:SetVertexColor(r, g, b, 0.95)
+	p.glow:SetVertexColor(r, g, b, 0.28)
+	local dead = plain(UnitIsDeadOrGhost(u)) and true or false
+	p.face:SetDesaturated(dead)
+	p.face:SetAlpha(dead and 0.6 or 1)
+end
+
 function M:BuildPlayer()
 	local f = UnitButton("InkUIPlayer", "player", P_W, 84)
 
@@ -714,6 +780,7 @@ function M:BuildPlayer()
 	f.auras = ns.AuraBox(f, AURA_SIZE, 10)
 	f.auras:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -44)
 	f.auraFilter = "HARMFUL"
+	self:BuildPortrait(f, "left")
 	self.player = f
 end
 
@@ -774,6 +841,7 @@ function M:BuildTarget()
 	f.buffs = ns.AuraBox(f, 18, 12, { groups = { { key = "buff", filter = "HELPFUL" } }, dispel = false })
 	f.buffs:SetPoint("TOPLEFT", f, "TOPLEFT", T_COL, -82)
 	f.buffs:Hide()
+	self:BuildPortrait(f, "right")
 	self.target = f
 end
 
@@ -1174,6 +1242,7 @@ function M:UpdateUnit(f)
 	self:UpdateInfo(f)
 	self:UpdateHealth(f)
 	self:UpdatePower(f)
+	if f.portrait then self:UpdatePortrait(f) end
 	if f.auras then self:UpdateDebuffs(f, true) end
 	if f.cast then CastUpdate(f.cast, f.unit) end
 end
@@ -1330,7 +1399,7 @@ function M:Init()
 		"UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
 		"UNIT_SPELLCAST_CHANNEL_UPDATE", "UNIT_SPELLCAST_INTERRUPTIBLE", "UNIT_SPELLCAST_NOT_INTERRUPTIBLE",
 		"UNIT_PET", "PET_UI_UPDATE", "UNIT_HAPPINESS", "PET_BAR_UPDATE", "UNIT_SPELLCAST_SUCCEEDED",
-		"RAID_TARGET_UPDATE",
+		"RAID_TARGET_UPDATE", "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION",
 	}) do
 		pcall(e.RegisterEvent, e, ev) -- 클라이언트마다 없는 이벤트가 있다 (기분은 포에버만)
 	end
@@ -1366,8 +1435,17 @@ function M:Init()
 		end
 		local f = unit and M.frames[unit]
 		if not f then return end
+		if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" or event == "UNIT_CONNECTION" then
+			M:UpdatePortrait(f)
+			return
+		end
 		if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
 			M:UpdateHealth(f)
+			-- 죽으면 흑백으로
+			if f.portrait and f.portrait:IsShown() then
+				local dead = plain(UnitIsDeadOrGhost(unit)) and true or false
+				if dead ~= f.portrait.dead then f.portrait.dead = dead; M:UpdatePortrait(f) end
+			end
 		elseif event == "UNIT_POWER_FREQUENT" or event == "UNIT_MAXPOWER" or event == "UNIT_DISPLAYPOWER" then
 			M:UpdatePower(f)
 		elseif event == "UNIT_AURA" then

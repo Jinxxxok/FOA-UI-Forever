@@ -110,6 +110,63 @@ local function Gems(link)
 	return icons, math.max(0, empty - #icons)
 end
 
+-- 마법부여 · 보석 효과를 짧게: "민첩성 +7" → "민+7", "체력 +8 및 지능 +2" → "체+8 지+2"
+local STAT_SHORT = {
+	{ "모든 능력치", "모능" }, { "모든 저항", "모저" }, { "민첩성", "민" }, { "민첩", "민" }, { "힘", "힘" }, { "체력", "체" },
+	{ "지능", "지" }, { "정신력", "정" }, { "원거리 전투력", "원전" }, { "공격 전투력", "전투력" }, { "전투력", "전투력" },
+	{ "주문 공격력", "주공" }, { "주문 피해", "주피" }, { "주문력", "주문력" }, { "치유", "치유" }, { "치명타", "치명" }, { "적중", "적중" },
+	{ "방어 숙련", "방숙" }, { "방어", "방어" }, { "회피", "회피" }, { "막기", "막기" }, { "생명력", "생명" }, { "마나", "마나" },
+	{ "이동 속도", "이속" }, { "화염 저항", "화저" }, { "냉기 저항", "냉저" }, { "자연 저항", "자저" }, { "비전 저항", "비저" },
+	{ "암흑 저항", "암저" }, { "무기 공격력", "무공" }, { "공격력", "공" }, { "가속", "가속" }, { "숙련", "숙련" },
+	{ "All Stats", "All" }, { "All Resistances", "Res" }, { "Agility", "Agi" }, { "Strength", "Str" }, { "Stamina", "Sta" },
+	{ "Intellect", "Int" }, { "Spirit", "Spi" }, { "Attack Power", "AP" }, { "Spell Power", "SP" }, { "Healing", "Heal" },
+	{ "Critical", "Crit" }, { "Hit", "Hit" }, { "Defense", "Def" }, { "Dodge", "Dodge" }, { "Armor", "Armor" },
+	{ "Health", "HP" }, { "Mana", "Mana" }, { "Damage", "Dmg" },
+}
+local function ShortStats(text)
+	if type(text) ~= "string" or text == "" then return nil end
+	text = CleanText(text):gsub("^%s+", ""):gsub("%s+$", "")
+	local list = text:gsub(" 및 ", ","):gsub(" and ", ","):gsub("/", ",")
+	local parts = {}
+	for chunk in (list .. ","):gmatch("([^,]+),") do
+		local num = chunk:match("([%+%-]?%d+%%?)")
+		local short
+		for _, p in ipairs(STAT_SHORT) do
+			if chunk:find(p[1], 1, true) then short = p[2] break end
+		end
+		if num and short then
+			if not num:find("^[%+%-]") then num = "+" .. num end
+			parts[#parts + 1] = short .. num
+		end
+	end
+	if #parts > 0 then return table.concat(parts, " ") end
+	-- 숫자가 없는 마법부여(예: 십자군)는 이름 그대로
+	return text
+end
+
+-- 박힌 보석 효과 (짧게) · 빈 홈 수
+local function GemStats(link)
+	local out = {}
+	local getGem = (C_Item and C_Item.GetItemGem) or GetItemGem
+	if getGem and C_TooltipInfo and C_TooltipInfo.GetHyperlink then
+		for i = 1, 4 do
+			local ok, _, glink = pcall(getGem, link, i)
+			if ok and glink then
+				local ok2, data = pcall(C_TooltipInfo.GetHyperlink, glink)
+				for j, line in ipairs(ok2 and data and data.lines or {}) do
+					local t = j > 1 and plain(line.leftText)
+					if type(t) == "string" and t:find("%d") and (t:find("^%+") or t:find("%+%d")) then
+						out[#out + 1] = ShortStats(t)
+						break
+					end
+				end
+			end
+		end
+	end
+	local _, empty = Gems(link)
+	return (#out > 0) and table.concat(out, " ") or nil, empty
+end
+
 local function SkinSlot(info)
 	local b = _G["Character" .. info.name .. "Slot"]
 	if not b or S[b] then return end
@@ -254,6 +311,24 @@ local function PaintSlot(b)
 	if not t then return end
 	t:Show()
 
+	-- 아이템 이름 대신 마법부여 · 보석 효과만 짧게 (이름은 길어서 옆 칸과 겹쳤다 · 이름은 툴팁에서)
+	if Ink.db.charSlotText ~= "name" then
+		local enchant = ScanSlot(id)
+		local es = ShortStats(enchant)
+		t.name:SetText(es or "")
+		t.name:SetTextColor(0.45, 0.9, 0.62)
+		local gs, empty = GemStats(link)
+		local sub = gs or ""
+		if empty > 0 then sub = (sub ~= "" and (sub .. "  ") or "") .. "빈 홈 " .. empty end
+		t.sub:SetText(sub)
+		t.sub:SetTextColor(0.6, 0.82, 1)
+		t.ench:Hide()
+		for _, gm in ipairs(t.gems) do gm:Hide() end
+		t.shade:SetShown((es and es ~= "") or sub ~= "")
+		return
+	end
+	t.shade:Show()
+	t.sub:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
 	local name = C_Item.GetItemInfo and C_Item.GetItemInfo(link)
 	name = name or link:match("%[(.-)%]") or ""
 	t.name:SetText(name)

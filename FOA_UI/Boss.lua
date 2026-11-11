@@ -262,6 +262,10 @@ local function NewWarn(parent)
 	w.line:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.9)
 	w.line:SetSize(40, 2)
 	w.line:SetPoint("TOP", w.text, "BOTTOM", 0, -6)
+	-- 아래 작은 글자 (보스 시전: "차단하세요" 등)
+	w.tag = Ink:Text(w, F.semi, 13, C.gold or { 1, 0.82, 0.3 }, "CENTER")
+	w.tag:SetPoint("TOP", w.line, "BOTTOM", 0, -4)
+	w.tag:Hide()
 
 	local ag = w:CreateAnimationGroup()
 	local s1 = ag:CreateAnimation("Scale")
@@ -297,13 +301,25 @@ end
 function M:ShowWarning(info, text)
 	self.warnIdx = self.warnIdx % #self.warns + 1
 	local w = self.warns[self.warnIdx]
-	w.text:SetText(text or "")
+	w.text:SetText(text)
 	if info.color then
 		pcall(function() w.text:SetTextColor(info.color:GetRGB()) end)
 	else
 		w.text:SetTextColor(C.text[1], C.text[2], C.text[3])
 	end
 	w.icon:SetTexture(info.iconFileID)
+	w.icon:SetShown(not info.noIcon)
+	if info.tag then
+		w.tag:SetText(info.tag)
+		w.tag:Show()
+		if info.tagBool ~= nil and w.tag.SetAlphaFromBoolean then
+			pcall(w.tag.SetAlphaFromBoolean, w.tag, info.tagBool, 0, 1)
+		else
+			w.tag:SetAlpha(1)
+		end
+	else
+		w.tag:Hide()
+	end
 	-- 치명적인 기술이면 붉은 빛 (비공개 참/거짓이라 SetAlphaFromBoolean 사용)
 	if w.glow.SetAlphaFromBoolean and info.isDeadly ~= nil then
 		pcall(w.glow.SetAlphaFromBoolean, w.glow, info.isDeadly, 0.55, 0)
@@ -385,9 +401,147 @@ function M:HideBlizzard()
 	if WR and WR.SetWarningsShown then pcall(WR.SetWarningsShown, false) end
 end
 
+-------------------------------------------------------------------------------
+-- 블리자드 보스 정보가 없는 던전 (포에버 옛 던전 등)
+--  블리자드 타임라인 · 경고가 하나도 안 오면 FOA 가 직접:
+--   · 보스가 기술을 시전하면 기술 이름 + 아이콘을 크게 (차단할 수 있으면 "차단하세요")
+--   · 보스 감정 표현(광폭화 · 도망 등) 문구
+--   · 보스 전투 시작 알림
+--  보스 판정: 보스 프레임(boss1~5) · 해골 레벨 · 지금 던전의 보스 목록(FOA 전리품 자료)
+-------------------------------------------------------------------------------
+local BOSS_TOKENS = { boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true }
+
+function M:IsBossUnit(unit)
+	if not unit then return false end
+	if BOSS_TOKENS[unit] then return UnitExists(unit) end
+	if not UnitExists(unit) or not plain(UnitCanAttack("player", unit)) then return false end
+	local inInst = IsInInstance()
+	if not inInst then return false end
+	if plain(UnitLevel(unit)) == -1 then return true end
+	if plain(UnitClassification(unit)) == "worldboss" then return true end
+	local D = Ink.modules.Dungeon
+	if D and D.IsHereBoss then
+		local ok, yes = pcall(D.IsHereBoss, D, unit)
+		if ok and yes then
+			self:RememberBoss(unit)
+			return true
+		end
+	end
+	-- 전투 중엔 GUID 가 비공개일 수 있어서, 전투 전에 알아 둔 보스 이름으로도 본다
+	local okN, nm = pcall(UnitName, unit)
+	nm = okN and plain(nm)
+	return nm ~= nil and self.bossNames ~= nil and self.bossNames[nm] == true
+end
+
+function M:RememberBoss(unit)
+	local okN, nm = pcall(UnitName, unit)
+	nm = okN and plain(nm)
+	if type(nm) == "string" then
+		self.bossNames = self.bossNames or {}
+		self.bossNames[nm] = true
+	end
+end
+
+-- 전투 밖에서 보스를 보면(이름표 · 대상) 이름을 기억해 둔다
+function M:ScanBoss(unit)
+	if InCombatLockdown() or not unit or not UnitExists(unit) then return end
+	local D = Ink.modules.Dungeon
+	if D and D.IsHereBoss then
+		local ok, yes = pcall(D.IsHereBoss, D, unit)
+		if ok and yes then self:RememberBoss(unit) end
+	end
+end
+
+function M:FallbackOn()
+	if Ink.db.bossMod == false then return false end
+	-- 블리자드가 이번 전투에 패턴 정보를 주고 있으면 그쪽만
+	return not self.blizzActive
+end
+
+function M:OnBossCast(unit, channel)
+	if not self:FallbackOn() or not self:IsBossUnit(unit) then return end
+	local now = GetTime()
+	if now - (self.lastCastAt or 0) < 0.3 then return end -- 같은 시전이 boss1 · 대상 · 이름표로 겹쳐 오는 것
+	self.lastCastAt = now
+	local fn = channel and UnitChannelInfo or UnitCastingInfo
+	local ok, name, _, tex, startMS, endMS, _, _, notInt = pcall(fn, unit)
+	if channel and ok then
+		-- 정신 집중은 돌려주는 순서가 한 칸 다르다 (castID 가 없다)
+		local r = { pcall(UnitChannelInfo, unit) }
+		name, tex, startMS, endMS, notInt = r[2], r[4], r[5], r[6], r[8]
+	end
+	if not ok then return end
+	if not (issecretvalue and issecretvalue(name)) and name == nil then return end
+	local dur = 3
+	pcall(function()
+		local d = (endMS - startMS) / 1000
+		if d > 0 then dur = math.min(8, d + 0.6) end
+	end)
+	self:ShowWarning({ iconFileID = tex, duration = dur, tag = "차단하세요", tagBool = notInt }, name)
+	if Ink.db.bossSound ~= false and now - (self.lastSoundAt or 0) > 1.5 then
+		self.lastSoundAt = now
+		pcall(PlaySound, (SOUNDKIT and SOUNDKIT.RAID_WARNING) or 8959, "Master")
+	end
+end
+
+function M:OnBossEmote(text, who)
+	if not self:FallbackOn() or type(text) ~= "string" then return end
+	local ok, msg = pcall(string.format, text, who or "")
+	if not ok then msg = text end
+	msg = msg:gsub("|T.-|t", ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+	self:ShowWarning({ duration = 4, isDeadly = true, noIcon = true }, msg)
+	pcall(PlaySound, (SOUNDKIT and SOUNDKIT.RAID_WARNING) or 8959, "Master")
+end
+
+function M:InitFallback(e)
+	for _, ev in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START", "RAID_BOSS_EMOTE",
+		"CHAT_MSG_RAID_BOSS_EMOTE", "ENCOUNTER_START", "ENCOUNTER_END", "ENCOUNTER_WARNING",
+		"ENCOUNTER_TIMELINE_EVENT_ADDED", "PLAYER_ENTERING_WORLD", "NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED" }) do
+		pcall(e.RegisterEvent, e, ev)
+	end
+end
+
+function M:FallbackEvent(event, a1, a2)
+	if event == "UNIT_SPELLCAST_START" then
+		self:OnBossCast(a1, false)
+	elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
+		self:OnBossCast(a1, true)
+	elseif event == "RAID_BOSS_EMOTE" or event == "CHAT_MSG_RAID_BOSS_EMOTE" then
+		local now = GetTime()
+		if now - (self.lastEmoteAt or 0) < 0.5 then return end -- 두 알림이 같이 온다
+		self.lastEmoteAt = now
+		self:OnBossEmote(a1, a2)
+	elseif event == "ENCOUNTER_WARNING" or event == "ENCOUNTER_TIMELINE_EVENT_ADDED" then
+		self.blizzActive = true
+	elseif event == "ENCOUNTER_START" then
+		self.blizzActive = nil
+		if self:FallbackOn() and type(a2) == "string" then
+			self:ShowWarning({ duration = 2.5, noIcon = true, tag = "보스 전투 시작" }, a2)
+		end
+	elseif event == "NAME_PLATE_UNIT_ADDED" then
+		self:ScanBoss(a1)
+	elseif event == "PLAYER_TARGET_CHANGED" then
+		self:ScanBoss("target")
+	elseif event == "ENCOUNTER_END" then
+		self.blizzActive = nil
+	elseif event == "PLAYER_ENTERING_WORLD" then
+		self.blizzActive = nil
+		self.bossNames = nil
+	end
+end
+
 function M:Init()
-	if Ink.db.bossMod == false or not TL or not WR then
+	if Ink.db.bossMod == false then
 		if WR and WR.SetWarningsShown then pcall(WR.SetWarningsShown, true) end
+		return
+	end
+	if not TL or not WR then
+		-- 블리자드 보스 기능이 없는 클라이언트: 경고 문구만 FOA 가 직접
+		self:BuildWarnings()
+		local e = CreateFrame("Frame")
+		self:InitFallback(e)
+		e:SetScript("OnEvent", function(_, event, a1, a2) pcall(M.FallbackEvent, M, event, a1, a2) end)
+		e:SetScript("OnUpdate", function() M:TickWarnings() end)
 		return
 	end
 	-- 보스 타임라인 / 경고 기능 켜기
@@ -405,7 +559,10 @@ function M:Init()
 		"ENCOUNTER_WARNING", "PLAYER_ENTERING_WORLD", "ENCOUNTER_START", "ENCOUNTER_END" }) do
 		pcall(e.RegisterEvent, e, ev)
 	end
-	e:SetScript("OnEvent", function(_, event, a1)
+	self:InitFallback(e)
+	e:SetScript("OnEvent", function(_, event, a1, a2)
+		pcall(M.FallbackEvent, M, event, a1, a2)
+		if event:find("^UNIT_SPELLCAST") or event:find("BOSS_EMOTE") then return end
 		if event == "ENCOUNTER_WARNING" then
 			pcall(M.OnWarning, M, a1)
 		elseif event == "PLAYER_ENTERING_WORLD" or event == "ENCOUNTER_TIMELINE_VIEW_ACTIVATED" then

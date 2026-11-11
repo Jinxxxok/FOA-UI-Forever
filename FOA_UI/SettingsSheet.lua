@@ -332,6 +332,11 @@ function M:BuildRegistry()
 				SW("hideTutorials", "튜토리얼 끄기", "노란 안내 상자 · 화살표 · 말풍선", { reload = true }),
 				SW("windows", "기본 창 · 글꼴 (실험)", "블리자드 창 껍데기와 글꼴 바꾸기", { reload = true, def = false }),
 			} },
+			{ t = "현황 아이콘", rows = {
+				SW("tracker", "현황 아이콘", "전문기술 · 무기 숙련 · 평판을 둥근 아이콘으로 · 오르면 톡 튀어요", { reload = true, hud = "tracker" }),
+				SW("trackerWeapons", "무기 숙련 · 방어", "아직 다 안 올린 것만", { dep = "tracker", apply = function() call("Tracker", "Update") end }),
+				SW("trackerReps", "평판", "추적 중인 평판 + 이번 접속에서 오른 평판", { dep = "tracker", apply = function() call("Tracker", "Update") end }),
+			} },
 			{ t = "미니맵", rows = {
 				SW("mmArcane", "아케인 미니맵", "금세공 모서리 · 위 나침반 띠 · 아래 지역 이름과 레벨", { reload = true, hud = "minimap" }),
 				SW("mmSigil", "뒤에서 도는 마법진", "미니맵 뒤로 은은하게 비쳐요", { dep = "mmArcane", hud = "minimap",
@@ -343,6 +348,10 @@ function M:BuildRegistry()
 			} },
 		},
 		frames = {
+			{ t = "플레이어 · 대상", rows = {
+				SW("unitPortrait", "초상화", "플레이어는 왼쪽 · 대상은 오른쪽에 둥근 얼굴 · 직업색 고리", { def = false, hud = { "player", "target" },
+					apply = function() call("Units", "UpdateAll") end }),
+			} },
 			{ t = "파티 · 레이드", rows = {
 				SW("party", "파티 프레임", "FOA 파티 프레임", { reload = true, hud = "party" }),
 				SW("raid", "레이드 프레임", "FOA 레이드 프레임", { reload = true, hud = "raid" }),
@@ -353,6 +362,9 @@ function M:BuildRegistry()
 			} },
 			{ t = "창", rows = {
 				SW("charSheet", "캐릭터 창", "FOA 스타일 · BIS 탭", { reload = true }),
+				{ kind = "seg", key = "charSlotText", label = "장비 칸 옆 글자", desc = "마법부여 · 보석 효과를 짧게 (민+2 체+8) 또는 아이템 이름", dep = "charSheet",
+					opts = { { "ench", "마부 · 보석" }, { "name", "아이템 이름" } }, def = "ench",
+					apply = function() call("Character", "PaintAll") end },
 			} },
 		},
 		bars = {
@@ -377,6 +389,7 @@ function M:BuildRegistry()
 			{ t = "표시", rows = {
 				SW("npcIcons", "NPC 역할 아이콘", "상인 · 수리 · 여관 등 머리 위에"),
 				SW("questObjects", "퀘스트 물체 배지", "줍기 · 부수기 물체 위에 노란 배지"),
+				SW("questSparkle", "퀘스트 물체 반짝임", "배지 주위로 별이 반짝이고 빛이 퍼져요 · 몬스터 전리품처럼", { dep = "questObjects" }),
 			} },
 		},
 		map = {
@@ -439,11 +452,17 @@ function M:BuildRegistry()
 		bags = {
 			{ t = "가방", rows = {
 				SW("bags", "FOA 가방", "분류별로 정리되는 가방", { reload = true, hud = "bags" }),
+				SW("itemCountTip", "툴팁에 보유 개수", "가방 · 은행 · 다른 캐릭터가 몇 개 갖고 있는지 · 은행은 마지막으로 열었을 때 기준"),
 			} },
 			{ t = "상인", rows = {
 				SW("sellJunk", "잡동사니 자동 판매", "상인 창을 열면 회색 아이템"),
 				SW("autoRepair", "자동 수리", "상인 창을 열면 장비 수리"),
 				SW("guildRepair", "길드 자금으로 수리", "가능하면 길드 자금 먼저", { dep = "autoRepair" }),
+			} },
+			{ t = "편의", rows = {
+				SW("oneTouchFish", "원터치 낚시", "낚싯대를 들었을 때 오른쪽 두 번 클릭으로 던지고 · 찌가 뜨면 같은 동작으로 낚아채기 · 단축키도 가능",
+					{ apply = function() call("Fishing", "Refresh") end }),
+				SW("speedyLoot", "빠른 자동 줍기", "자동 줍기일 때 전리품 창을 기다리지 않고 한 번에 · 가방이 차면 원래 창이 떠요"),
 			} },
 			{ t = "경매장", rows = {
 				SW("ahTooltip", "툴팁에 경매장 가격", "가격 스캔으로 받은 최저 단가"),
@@ -459,6 +478,7 @@ function M:BuildRegistry()
 			} },
 			{ t = "알림", rows = {
 				SW("bossMod", "보스 알림", "패턴 타이머 · 경고", { reload = true, hud = { "bossWarn", "bossBars" } }),
+				SW("bossSound", "보스 시전 소리", "블리자드 보스 정보가 없는 던전에서 보스가 기술을 쓸 때 경고음", { dep = "bossMod" }),
 			} },
 		},
 		fx = {
