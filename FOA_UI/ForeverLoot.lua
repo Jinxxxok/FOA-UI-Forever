@@ -135,6 +135,14 @@ ns.FOREVER_LOOT = {
 			{ "종교재판관 페어뱅크스", { 19507, 19508, 19509 }, 4542, 0, "High Inquisitor Fairbanks" },
 			{ "붉은십자군 사령관 모그레인", { 7726, 7724, 7723, 10330 }, 3976, 0, "Scarlet Commander Mograine" },
 			{ "종교재판관 화이트메인", { 7721, 7722, 7720 }, 3977, 0, "High Inquisitor Whitemane" } } },
+		{ key = "drowned", ko = "가라앉은 도시", en = "The Drowned City", lo = 35, hi = 40, entr = { 1434, 21.4, 27.8 },
+			bosses = {
+			{ "Zul'Alai", { 274600, 274598, 274599 }, 258905, 0, "Zul'Alai" },
+			{ "Var'Taka", { 274602, 274601 }, 258924, 0, "Var'Taka" },
+			{ "Captain Dreadrise", { 274605, 274603, 274604 }, 260042, 0, "Captain Dreadrise" },
+			{ "Deathless Guardians", {  }, 260213, 0, "Deathless Guardians" },
+			{ "Primeval Elemental", { 274611 }, 273738, 0, "Primeval Elemental" },
+			{ "Min'loth the Serpent", { 274608, 274610, 274609 }, 260243, 0, "Min'loth the Serpent" } } },
 		{ key = "downs", ko = "가시덩굴 구릉", en = "Razorfen Downs", lo = 37, hi = 46, inst = 129, ui = 300, entr = { 1413, 50, 92 },
 			bosses = {
 			{ "투텐카쉬", { 10776, 10775, 10777 }, 7355, 0, "Tuten'kash" },
@@ -144,6 +152,14 @@ ns.FOREVER_LOOT = {
 			{ "게걸먹보", { 10772, 10774 }, 8567, 0, "Glutton" },
 			{ "혹한의 암네나르", { 10420, 10761, 10763, 10764, 10762, 10765 }, 7358, 0, "Amnennar the Coldbringer" },
 			{ "사절 블러드레이지", { 286639 }, 7895, 1, "Ambassador Bloodrage" } } },
+		{ key = "kroldok", ko = "크롤도크 보루", en = "Krol'dok Stronghold", lo = 40, hi = 45, entr = { 2548, 37.5, 37.2 },
+			bosses = {
+			{ "Slavecrusher Grox", { 274997, 274996, 274995 }, 258966, 0, "Slavecrusher Grox" },
+			{ "Twilight Commander Zarmok", { 274999, 274998, 275000 }, 258972, 0, "Twilight Commander Zarmok" },
+			{ "War Handler Ashka", { 275001, 275002, 275003 }, 259281, 0, "War Handler Ashka" },
+			{ "Nar'gurk", { 275004, 275005, 275006 }, 258964, 0, "Nar'gurk" },
+			{ "Bossman Toof", { 286428, 286429, 286430 }, 264773, 0, "Bossman Toof" },
+			{ "Overlord Mugg", { 275009, 271721, 275008, 275007, 275010 }, 258968, 0, "Overlord Mugg" } } },
 		{ key = "uldaman", ko = "울다만", en = "Uldaman", lo = 41, hi = 51, inst = 70, ui = 230, entr = { 16, 36.6, 29.4 },
 			bosses = {
 			{ "레벨로쉬", { 7741, 9389, 9388, 9390, 9387 }, 6910, 0, "Revelosh" },
@@ -170,7 +186,8 @@ ns.FOREVER_LOOT = {
 			{ "제릴리스", { 12470 }, 10082, 1, "Zerillis" },
 			{ "산다르 듄리버", { 9512, 9511, 6440, 9480, 9483, 5616, 862, 9484, 9481, 2040, 9482 }, 10080, 1, "Sandarr Dunereaver" },
 			{ "더스트레이스", { 12471 }, 10081, 1, "Dustwraith" },
-			{ "하사관 블라이", { 8548 }, 7604, 1, "Sergeant Bly" } } },
+			{ "하사관 블라이", { 8548 }, 7604, 1, "Sergeant Bly" },
+			{ "루즐루", { 274654 }, 7797, 1, "" } } },
 		{ key = "maraudon", ko = "마라우돈", en = "Maraudon", lo = 46, hi = 55, inst = 349, ui = 280, entr = { 1443, 35.7, 55.5 },
 			bosses = {
 			{ "녹시온", { 17702, 17745, 17746, 17744 }, 13282, 0, "Noxxion" },
@@ -319,8 +336,6 @@ ns.FOREVER_LOOT = {
 		{ key = "onyxia", ko = "오닉시아의 둥지", en = "Onyxia's Lair", lo = 60, hi = 60, inst = 249, ui = 248, entr = { 1445, 52.3, 76.2 }, raid = true,
 			bosses = {
 			{ "오닉시아", { 18423, 18422, 18705, 17966 }, 10184, 0, "Onyxia" } } },
-		{ key = "drowned", ko = "가라앉은 도시", en = "The Drowned City", lo = 35, hi = 40, soon = true, bosses = {} },
-		{ key = "kroldok", ko = "크롤도크 보루", en = "Krol'dok Stronghold", lo = 40, hi = 45, soon = true, bosses = {} },
 		{ key = "alcaz", ko = "알카즈 감옥", en = "Alcaz Prison", lo = 48, hi = 53, soon = true, bosses = {} },
 		{ key = "blackmaw", ko = "검은아귀 요새", en = "Blackmaw Hold", lo = 55, hi = 60, soon = true, bosses = {} },
 		{ key = "shapers", ko = "구체자의 정원", en = "The Shaper's Terrace", lo = 58, hi = 60, soon = true, bosses = {} },

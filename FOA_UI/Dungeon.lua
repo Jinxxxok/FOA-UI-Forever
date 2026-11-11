@@ -2921,6 +2921,7 @@ local DQ_INST = {
 	strat_live = 236, strat_ud = 236, sunken = 237, stockade = 238, uldaman = 239, wailing = 240, zulfarrak = 241,
 	scholo = 246, sm_gy = 316, sm_lib = 316, sm_arm = 316, sm_cath = 316, onyxia = 760,
 	thanes = 3065, lordaeron = 2999, excavation = 2998, dalaran = 2959,
+	drowned = 2970, kroldok = 3039,
 }
 M.DQ_INST = DQ_INST
 local DQ_W = 300

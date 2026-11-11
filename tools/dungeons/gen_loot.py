@@ -32,9 +32,11 @@ D = [
  ("sm_lib", "붉은십자군 수도원 도서관", "Scarlet Monastery: Library", 33, 41, "sm", "도서관", 189, [(316, -362)], [3974, 6487], []),
  ("sm_arm", "붉은십자군 수도원 무기고", "Scarlet Monastery: Armory", 36, 44, "sm", "무기고", 189, [(316, -363)], [3975], [6575]),
  ("sm_cath", "붉은십자군 수도원 대성당", "Scarlet Monastery: Cathedral", 38, 46, "sm", "대성당", 189, [(316, -364)], [4542, 3976, 3977], []),
+ ("drowned", "가라앉은 도시", "The Drowned City", 35, 40, None, None, None, [(2970, 0)], [258905, 258924, 260042, 260213, 273738, 260243], []),
  ("downs", "가시덩굴 구릉", "Razorfen Downs", 37, 46, None, None, 129, [(233, 0)], [7355, 7356, 7357, 7354, 8567, 7358], [7895]),
+ ("kroldok", "크롤도크 보루", "Krol'dok Stronghold", 40, 45, None, None, None, [(3039, 0)], [258966, 258972, 259281, 258964, 264773, 258968], []),
  ("uldaman", "울다만", "Uldaman", 41, 51, None, None, 70, [(239, 0)], [6910, 6906, 6907, 6908, 7023, 7206, 7291, 4854, 2748], [6912, 7057]),
- ("zulfarrak", "줄파락", "Zul'Farrak", 44, 54, None, None, 209, [(241, 0)], [7795, 7273, 8127, 7272, 7271, 7796, 7275, 7267], [10082, 10080, 10081, 7604]),
+ ("zulfarrak", "줄파락", "Zul'Farrak", 44, 54, None, None, 209, [(241, 0)], [7795, 7273, 8127, 7272, 7271, 7796, 7275, 7267], [10082, 10080, 10081, 7604, 7797]),
  ("maraudon", "마라우돈", "Maraudon", 46, 55, None, None, 349, [(232, -359), (232, -360), (232, -358)], [13282, 12258, 13601, 12236, 12225, 12203, 13596, 12201], [12237]),
  ("sunken", "가라앉은 사원", "The Temple of Atal'Hakkar", 50, 60, None, None, 109, [(237, 0)], [5719, 5710, 5711, 8440, 5709], [5708]),
  ("brd", "검은바위 나락", "Blackrock Depths", 52, 60, None, None, 230, [(228, -351), (228, -352), (228, -58)],
@@ -55,12 +57,15 @@ D = [
  ("onyxia", "오닉시아의 둥지", "Onyxia's Lair", 60, 60, None, None, 249, [(760, 0)], [10184], []),
 ]
 SOON = [  # 개방 예정 (wowf.io)
- ("drowned", "가라앉은 도시", "The Drowned City", 35, 40),
- ("kroldok", "크롤도크 보루", "Krol'dok Stronghold", 40, 45),
  ("alcaz", "알카즈 감옥", "Alcaz Prison", 48, 53),
  ("blackmaw", "검은아귀 요새", "Blackmaw Hold", 55, 60),
  ("shapers", "구체자의 정원", "The Shaper's Terrace", 58, 60),
 ]
+# 자료에 입구 좌표가 없는 던전 (공략의 입구 좌표 · 포에버 게임 좌표)
+ENTR = {
+    "drowned": (1434, 21.4, 27.8),     # 가시덤불 골짜기 서쪽 바다 밑 (가라앉은 동굴 · 비석 옆)
+    "kroldok": (2548, 37.5, 37.2),     # 리버글레이드 북쪽 언덕 · 요새 문 서쪽 동굴
+}
 GROUP = {"sm": "붉은십자군 수도원", "dm": "혈투의 전장", "brs": "검은바위 첨탑", "strat": "스트라솔름"}
 
 KO = {
@@ -104,7 +109,13 @@ KO = {
  10506: "사자 키르토노스", 10503: "잔다이스 바로브", 11622: "들창어금니", 10433: "마르두크 블랙풀", 10432: "벡투스", 16118: "코르모크", 10508: "라스 프로스트위스퍼",
  10505: "조교 말리시아", 11261: "학자 테올렌 크라스티노브", 10901: "현자 폴켈트", 10507: "라베니안", 10504: "군주 알렉세이 바로브", 1853: "암흑스승 간들링",
  14861: "키르토노스의 혈지기", 14516: "죽음의 기사 다크리버",
- 10184: "오닉시아",
+ 10184: "오닉시아", 7797: "루즐루",
+ # 포에버 신규 던전 (2026-11 개방) · 한글 이름은 게임 안에서 클라이언트 이름으로 바뀐다 (여기는 영문 대체)
+ #  보스 ↔ NPC 짝: AllTheThings 보스 전리품 부위(무기 종류 · 방어구 칸)와 공략(conquestcapped · wowf.io)의 보스별 전리품을 대조
+ 258905: "Zul'Alai", 258924: "Var'Taka", 260042: "Captain Dreadrise", 260213: "Deathless Guardians", 273738: "Primeval Elemental",
+ 260243: "Min'loth the Serpent",
+ 258966: "Slavecrusher Grox", 258972: "Twilight Commander Zarmok", 259281: "War Handler Ashka", 258964: "Nar'gurk",
+ 264773: "Bossman Toof", 258968: "Overlord Mugg",
  9816: "불의수호자 엠버시어", 10264: "화염고리 솔라카르", 10899: "고랄루크 앤빌크랙", 10339: "기스", 10429: "대족장 렌드 블랙핸드", 10430: "괴수",
  16042: "군주 발타라크", 10363: "사령관 드라키사스", 10509: "제드 룬와처",
 }
@@ -135,7 +146,7 @@ for (key, ko, en, lo, hi, grp, wing, iid, srcs, order, rares) in D:
         rows.append((n, KO.get(n, b["en"] or "?"), b["en"] or "", b["items"], 1 if n in rares else 0))
     for n, b in bosses.items():
         problems.append((key, "unplaced", n, b["en"]))
-    e = meta and meta.get("entr")
+    e = (meta and meta.get("entr")) or ENTR.get(key)
     if e and float(e[1]) == 50 and float(e[2]) == 50: e = None   # 자리 표시용 좌표는 버린다
     ui = meta and meta.get("map")
     bl = ",\n\t\t\t".join("{ %s, { %s }, %d, %d, %s }" % (lua_s(k), ", ".join(map(str, its)), n, r, lua_s(enn)) for (n, k, enn, its, r) in rows)
