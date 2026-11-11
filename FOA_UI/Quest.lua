@@ -186,6 +186,40 @@ function M:AbandonQuest(id)
 	end, true)
 end
 
+-- 블리자드 "퀘스트 포기" 확인 창이 뜨자마자 닫혀 버리는 경우 대비 (윈도우에서 제보)
+--  블리자드 창은 건드리지 않고(오염 방지) 보기만 한다: 0.35초 뒤에도 퀘스트가 그대로인데 확인 창이 사라졌으면
+--  FOA 확인 창을 대신 띄운다. 누가 닫았는지 원인 추적용으로 호출 경로를 Ink.db.abandonTrace 에 남긴다.
+local ABANDON = { ABANDON_QUEST = true, ABANDON_QUEST_WITH_ITEMS = true }
+function M:GuardAbandon()
+	if self.abandonGuarded or not hooksecurefunc or type(StaticPopup_Show) ~= "function" then return end
+	self.abandonGuarded = true
+	hooksecurefunc("StaticPopup_Show", function(which)
+		if not ABANDON[which] then return end
+		local qid = C_QuestLog.GetAbandonQuest and C_QuestLog.GetAbandonQuest()
+		if not (type(qid) == "number" and qid > 0) then
+			qid = C_QuestLog.GetSelectedQuest and C_QuestLog.GetSelectedQuest()
+		end
+		if not (type(qid) == "number" and qid > 0) then return end
+		local shownAt = GetTime()
+		M.abandonShownAt = shownAt
+		C_Timer.After(0.35, function()
+			if M.abandonShownAt ~= shownAt then return end
+			if StaticPopup_Visible("ABANDON_QUEST") or StaticPopup_Visible("ABANDON_QUEST_WITH_ITEMS") then return end
+			if not (C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(qid)) then return end -- 이미 포기됨
+			M:AbandonQuest(qid)
+		end)
+	end)
+	if type(StaticPopup_Hide) == "function" then
+		hooksecurefunc("StaticPopup_Hide", function(which)
+			if not ABANDON[which] or not M.abandonShownAt or GetTime() - M.abandonShownAt > 0.5 then return end
+			local t = Ink.db.abandonTrace
+			if type(t) ~= "table" then t = {}; Ink.db.abandonTrace = t end
+			if #t >= 5 then table.remove(t, 1) end
+			t[#t + 1] = date("%m-%d %H:%M:%S") .. " " .. tostring(which) .. "\n" .. (debugstack and debugstack(2, 8, 0) or "")
+		end)
+	end
+end
+
 -- 퀘스트 레벨 색 (이름표 레벨과 같은 색): 빨강 +5 · 주황 +3 · 노랑 ±2 · 초록 · 회색
 local LVL_COL = {
 	red = { 1.00, 0.42, 0.37 }, orange = { 1.00, 0.62, 0.30 }, yellow = { 1.00, 0.86, 0.36 },
@@ -815,6 +849,7 @@ end
 
 -------------------------------------------------------------------------------
 function M:Init()
+	pcall(self.GuardAbandon, self)
 	self:Build()
 	local blz = Ink.modules.Blizzard
 	self.anchor = blz and blz.questAnchor
