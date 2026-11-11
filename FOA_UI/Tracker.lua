@@ -54,20 +54,93 @@ local function Section(h)
 	return "other"
 end
 
--- 기술 목록 읽기 (캐릭터 창 "기술" 탭과 같은 자료)
-local function Skills()
-	local out = {}
-	if not (GetNumSkillLines and GetSkillLineInfo) then return out end
+-- 기술 번호 → 아이콘 주문 · 종류 (포에버 C_SkillInfo 는 기술 번호를 준다)
+local SKILL_SPELL = {
+	[171] = 2259, [164] = 2018, [333] = 7411, [202] = 4036, [182] = 2366, [165] = 2108, [186] = 2575, [393] = 8613,
+	[197] = 3908, [185] = 2550, [129] = 3273, [356] = 7620, [633] = 1804,
+	[173] = 1180, [43] = 201, [55] = 202, [44] = 196, [172] = 197, [54] = 198, [160] = 199, [229] = 200, [136] = 227,
+	[162] = 203, [473] = 15590, [45] = 264, [46] = 266, [226] = 5011, [176] = 2567, [228] = 5009, [95] = 204,
+}
+local PROF_ORDER = { 171, 164, 333, 202, 182, 165, 186, 393, 197, 185, 129, 356, 633 }
+local WEAPON_ORDER = { 173, 43, 55, 44, 172, 54, 160, 229, 136, 162, 473, 45, 46, 226, 176, 228, 3014, 95 }
+local PROF_ID, WEAPON_ID = {}, {}
+for _, id in ipairs(PROF_ORDER) do PROF_ID[id] = true end
+for _, id in ipairs(WEAPON_ORDER) do WEAPON_ID[id] = true end
+-- 기술 분류 번호: 6 무기 · 9 보조 기술 · 11 전문기술
+local CAT_KIND = { [6] = "weapon", [9] = "prof", [11] = "prof" }
+
+local function SkillIcon(id, name)
+	local sp = id and SKILL_SPELL[id]
+	if sp then
+		local _, ic = SpellInfo(sp)
+		if ic then return ic end
+	end
 	BuildIcons()
-	local sec = "other"
-	for i = 1, GetNumSkillLines() do
-		local name, header, _, rank, _, mod, max = GetSkillLineInfo(i)
-		if header then
-			sec = Section(name)
-		elseif name and (max or 0) > 1 then
-			local kind = (sec ~= "other" and sec) or KIND[name]
-			if kind then
-				out[#out + 1] = { key = "s:" .. name, name = name, rank = rank or 0, max = max, mod = mod or 0, kind = kind, icon = ICONS[name] }
+	return name and ICONS[name]
+end
+
+local function AddSkill(out, seen, kind, name, rank, max, mod, id, icon)
+	if not name or seen[name] or (max or 0) < 1 then return end
+	seen[name] = true
+	out[#out + 1] = { key = "s:" .. name, name = name, rank = rank or 0, max = max, mod = mod or 0, kind = kind,
+		icon = icon or SkillIcon(id, name), skillID = id }
+end
+
+-- 기술 목록 읽기 (캐릭터 창 "기술" 탭과 같은 자료)
+--  포에버: C_SkillInfo (번호 · 표) · 오리지널식: GetSkillLineInfo · 본섭: GetProfessions (전문기술만)
+local function Skills()
+	local out, seen = {}, {}
+	local SI = C_SkillInfo
+	if SI and SI.GetSkillLineInfo then
+		local sec = "other"
+		local n = SI.GetNumSkillLines and SI.GetNumSkillLines() or 0
+		for i = 1, n do
+			local ok, d = pcall(SI.GetSkillLineInfo, i)
+			if ok and type(d) == "table" then
+				if d.isHeader then
+					sec = Section(d.name)
+				elseif (d.parentSkillLineID or 0) == 0 then
+					local id = d.skillID
+					local kind = (WEAPON_ID[id] and "weapon") or (PROF_ID[id] and "prof") or CAT_KIND[d.skillLineCategoryID]
+						or (sec ~= "other" and sec) or nil
+					if kind then AddSkill(out, seen, kind, d.name, d.rank, d.maxRank, d.modifier, id) end
+				end
+			end
+		end
+		-- 기술 창에서 접어 둔 묶음 안의 기술은 위 목록에 안 나와서 번호로 한 번 더 찾는다
+		if SI.GetSkillLineInfoByID then
+			for _, grp in ipairs({ { PROF_ORDER, "prof" }, { WEAPON_ORDER, "weapon" } }) do
+				for _, id in ipairs(grp[1]) do
+					local ok, d = pcall(SI.GetSkillLineInfoByID, id)
+					if ok and type(d) == "table" and not d.isHeader and (d.rank or 0) > 0 then
+						AddSkill(out, seen, grp[2], d.name, d.rank, d.maxRank, d.modifier, id)
+					end
+				end
+			end
+		end
+		if #out > 0 then return out end
+	end
+	if GetNumSkillLines and GetSkillLineInfo then
+		BuildIcons()
+		local sec = "other"
+		for i = 1, GetNumSkillLines() do
+			local name, header, _, rank, _, mod, max = GetSkillLineInfo(i)
+			if header then
+				sec = Section(name)
+			elseif name and (max or 0) > 1 then
+				local kind = (sec ~= "other" and sec) or KIND[name]
+				if kind then AddSkill(out, seen, kind, name, rank, max, mod, nil, ICONS[name]) end
+			end
+		end
+		if #out > 0 then return out end
+	end
+	if GetProfessions and GetProfessionInfo then
+		local t = { GetProfessions() }
+		for i = 1, 6 do
+			local idx = t[i]
+			if idx then
+				local ok, name, icon, rank, max, _, _, line, mod = pcall(GetProfessionInfo, idx)
+				if ok and name then AddSkill(out, seen, "prof", name, rank, max, mod, line, icon) end
 			end
 		end
 	end
@@ -505,8 +578,8 @@ function M:Init()
 	Ink:Movable("tracker", "현황 아이콘", f, "left", 60, 16, 300, SIZE + 14)
 	self.recentRep = {}
 
-	-- 접힌 기술 묶음이 있으면 목록에 안 나와서 한 번 펼쳐 둔다
-	if ExpandSkillHeader then pcall(ExpandSkillHeader, 0) end
+	-- 오리지널식 기술 목록: 접힌 묶음이 있으면 목록에 안 나와서 한 번 펼쳐 둔다 (포에버는 번호로 찾아서 필요 없음)
+	if not C_SkillInfo and ExpandSkillHeader then pcall(ExpandSkillHeader, 0) end
 
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({ "PLAYER_ENTERING_WORLD", "SKILL_LINES_CHANGED", "CHAT_MSG_SKILL", "UPDATE_FACTION",
