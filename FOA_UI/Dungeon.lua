@@ -3267,6 +3267,7 @@ function M:QuestTip(r)
 	local LC = Ink.modules.Quest and Ink.modules.Quest.LevelColor
 	local lc = (LC and q[2] > 0) and LC(q[2]) or C.soft
 	tt:AddDoubleLine(q[2] > 0 and (q[2] .. "레벨부터") or "레벨 제한 없음", q[3] == 1 and "호드" or (q[3] == 2 and "얼라이언스" or "공통"), lc[1], lc[2], lc[3], 0.7, 0.72, 0.75)
+	if Ink.TimerTipLine then Ink.TimerTipLine(tt, e.id) end
 	-- 시작
 	tt:AddLine(" ")
 	local giver, zone = NpcOf(q[7]), ZoneName(q[4])

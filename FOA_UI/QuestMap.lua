@@ -422,8 +422,12 @@ function M:Tip(p)
 		if bit.band(r[12], 1) ~= 0 then tag[#tag + 1] = "|cff66BFFF반복|r" end
 		if bit.band(r[12], 2) ~= 0 then tag[#tag + 1] = "|cffB4B8BF다른 지역으로 안내|r" end
 		if r[13] ~= 0 then tag[#tag + 1] = "|cffE3C07A아이템으로 시작|r" end
+		local tm = Ink.TimerTag and Ink.TimerTag(r[1])
+		if tm then tag[#tag + 1] = tm end
 		local c = q.state == 2 and SOON or (bit.band(r[12], 1) ~= 0 and BLUE or { 0.96, 0.95, 0.90 })
 		GameTooltip:AddDoubleLine(name, table.concat(tag, "  "), c[1], c[2], c[3], 1, 1, 1)
+		-- 시간 제한 퀘스트: 바로 아래 강조 한 줄
+		if Ink.TimerTipLine then Ink.TimerTipLine(GameTooltip, r[1], "   ") end
 	end
 	GameTooltip:AddLine(" ")
 	GameTooltip:AddLine("클릭: 길 안내 표시", 0.56, 0.58, 0.61)

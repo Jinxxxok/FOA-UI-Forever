@@ -110,6 +110,7 @@ local function Row(i)
 		self.title:SetAlpha(0.8)
 		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
 		GameTooltip:AddLine(self.title:GetText() or "", 1, 1, 1)
+		if Ink.TimerTipLine then Ink.TimerTipLine(GameTooltip, self.questID) end
 		Ink.TipLine(GameTooltip, "클릭: 퀘스트 보기 · 우클릭: 퀘스트 포기 · Shift 클릭: 목록에서 빼기", 0.7, 0.7, 0.7)
 		GameTooltip:Show()
 	end)
@@ -150,6 +151,28 @@ end
 --  애드온 코드로 여는 거라 지도 표시가 FOA 로 찍혀서, 나중에 전투 중 지도를 열면 블리자드가
 --  지도 표시의 "오른쪽 클릭 통과" 설정(SetPassThroughButtons)을 못 하는 일이 생긴다.
 --  화면 · 기능엔 영향이 거의 없어서(표시 위에서 오른쪽 클릭으로 지도 축소가 안 될 뿐) 채팅에는 안 띄운다.
+-- 남은 시간 글자 (1분 아래면 빨강)
+function M:PaintTimer(o)
+	local left = (o.deadline or 0) - GetTime()
+	if left <= 0 then
+		o.count:SetText("시간 초과")
+		o.count:SetTextColor(C.red[1], C.red[2], C.red[3])
+		return
+	end
+	local m, s = math.floor(left / 60), math.floor(left % 60)
+	o.count:SetText(m >= 60 and string.format("%d:%02d:%02d", math.floor(m / 60), m % 60, s) or string.format("%d:%02d", m, s))
+	local c = left < 60 and C.red or { 1, 0.72, 0.35 }
+	o.count:SetTextColor(c[1], c[2], c[3])
+end
+
+function M:TickTimers()
+	local f = self.frame
+	if not (f and f:IsShown()) then return end
+	for _, r in ipairs(f.rows or {}) do
+		if r:IsShown() and r.timerLine and r.timerLine:IsShown() then self:PaintTimer(r.timerLine) end
+	end
+end
+
 function M:ShowQuest(id)
 	if QuestMapFrame_OpenToQuestDetails then
 		local ok = pcall(QuestMapFrame_OpenToQuestDetails, id)
@@ -612,6 +635,29 @@ function M:Update()
 				end
 			end
 		end
+		-- 시간 제한 퀘스트: 남은 시간 (1초마다 글자만 갱신)
+		r.timerLine = nil
+		local tAll, tGone
+		if type(id) == "number" and C_QuestLog.GetTimeAllowed then
+			local okT, a, b = pcall(C_QuestLog.GetTimeAllowed, id)
+			tAll, tGone = okT and plain(a), okT and plain(b)
+		end
+		if type(tAll) == "number" and tAll > 0 and not complete then
+			used = used + 1
+			local o = ObjectiveLine(r, used)
+			o:ClearAllPoints()
+			o:SetPoint("TOPLEFT", r, "TOPLEFT", 0, oy)
+			o.text:SetWidth(W - 50)
+			o.text:SetText("|T" .. Ink.icon("Wait") .. ":11:11:0:-1:64:64:0:64:0:64:255:184:90|t 남은 시간")
+			o.text:SetTextColor(1, 0.72, 0.35)
+			o.count:SetFont(F.latin, 10, "")
+			o.bar:Hide()
+			o.deadline = GetTime() + (tAll - (type(tGone) == "number" and tGone or 0))
+			o:Show()
+			r.timerLine = o
+			M:PaintTimer(o)
+			oy = oy - 16
+		end
 		for oi = used + 1, #r.objs do r.objs[oi]:Hide() end
 
 		-- 퀘스트 아이템
@@ -888,6 +934,8 @@ function M:Init()
 		pcall(e.RegisterEvent, e, ev)
 	end
 	C_Timer.After(4, function() pcall(M.WatchClass, M) M:Update() end)
+	-- 시간 제한 퀘스트 남은 시간: 1초마다 글자만
+	C_Timer.NewTicker(1, function() pcall(M.TickTimers, M) end)
 	local pending, donePending
 	C_Timer.After(3, function() M:CheckDone() end)
 	e:SetScript("OnEvent", function(_, event, arg1, arg2)
