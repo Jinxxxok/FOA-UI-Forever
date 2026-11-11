@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.65.6"
+Ink.version = "0.65.7"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1146,31 +1146,166 @@ function Ink:Module(name)
 	return m
 end
 
--- 오류 기록 (SavedVariables 에 최근 30개 저장 → /reload 후 파일에서 확인 가능)
-function Ink:LogError(msg)
-	if not Ink.db then return end
-	Ink.db.errors = Ink.db.errors or {}
-	table.insert(Ink.db.errors, date("%m-%d %H:%M:%S") .. " " .. tostring(msg))
-	while #Ink.db.errors > 30 do table.remove(Ink.db.errors, 1) end
+-------------------------------------------------------------------------------
+-- 오류 기록 (나중에 저장 파일만 보고 원인을 찾을 수 있게 정리해 둔다)
+--  저장 위치: WTF\Account\<계정>\SavedVariables\FOA_UI.lua → InkUIDB.errlog
+--  · 같은 오류는 한 칸에 모아서 횟수 · 처음/마지막 시각만 늘린다 (한 오류가 도배돼도 다른 오류가 밀려나지 않게)
+--  · 칸마다: 종류(FOA 코드 / FOA 오염 / 블리자드) · 메시지 · 호출 경로 · 지역 변수(FOA 오류만) · 버전 · 지역 · 전투/인스턴스
+--  · 접속마다 세션 한 줄 (FOA 버전 · 게임 빌드) → 어느 버전에서 난 오류인지
+--  · 막힌 동작(ADDON_ACTION_BLOCKED)도 함수별로 횟수만 모은다
+--  · 저장 파일은 /reload · 접속 종료 때 기록된다 (게임이 튕기면 그 세션 기록은 안 남는다)
+--  · 접속 전(저장 자료를 읽기 전)에 난 오류도 잠깐 들고 있다가 접속하면 옮긴다
+-------------------------------------------------------------------------------
+local ERR_MAX, BLOCK_MAX = 60, 40
+local errIndex, pendingErr, errSaidThisSession = nil, {}, false
+
+local function ErrCtx()
+	local ok, s = pcall(function()
+		local z = GetRealZoneText and GetRealZoneText() or ""
+		local _, it = IsInInstance()
+		return z .. ((it and it ~= "none") and (" [" .. it .. "]") or "") .. (InCombatLockdown() and " (전투 중)" or "")
+	end)
+	return ok and s or "?"
 end
 
--- FOA 코드에서 난 Lua 오류를 저장 파일에도 남긴다 (게임 오류 표시가 꺼져 있어도 원인을 찾을 수 있게)
---  같은 오류는 횟수만 늘린다 · 원래 오류 처리기는 그대로 부른다
+local function ErrLog()
+	local db = Ink.db
+	if not db then return end
+	local L = db.errlog
+	if type(L) ~= "table" or L.v ~= 1 then
+		L = { v = 1, sessions = {}, list = {}, blocked = {} }
+		db.errlog = L
+		errIndex = nil
+	end
+	if not errIndex then
+		errIndex = {}
+		for _, e in ipairs(L.list) do if e.sig then errIndex[e.sig] = e end end
+	end
+	return L
+end
+
+-- 오류 문장 → 같은 오류끼리 묶는 열쇠 (주소 · 횟수 같은 바뀌는 값은 뺀다)
+local function ErrSig(m)
+	m = m:gsub("Interface/AddOns/", ""):gsub("0x%x+", "0x"):gsub("\n.*", "")
+	return m:sub(1, 200)
+end
+
+local function ErrKind(m, st)
+	if m:find("tainted by 'FOA_UI'", 1, true) or m:find("Lua Taint: FOA_UI", 1, true) then return "FOA 오염" end
+	if m:find("FOA_UI", 1, true) or (st and st:find("FOA_UI/", 1, true)) then return "FOA" end
+	return "블리자드"
+end
+
+local function ErrPrune(L)
+	-- 넘치면: 블리자드 오류 중 오래된 것부터, 그다음 아무거나 오래된 것
+	while #L.list > ERR_MAX do
+		local pick, pickT
+		for i, e in ipairs(L.list) do
+			if e.kind == "블리자드" and (not pickT or (e.lastT or 0) < pickT) then pick, pickT = i, e.lastT or 0 end
+		end
+		if not pick then
+			for i, e in ipairs(L.list) do
+				if not pickT or (e.lastT or 0) < pickT then pick, pickT = i, e.lastT or 0 end
+			end
+		end
+		local e = table.remove(L.list, pick)
+		if e and errIndex then errIndex[e.sig] = nil end
+	end
+end
+
+local function ErrRecord(m, st, loc, forceKind)
+	m = tostring(m)
+	local L = ErrLog()
+	if not L then
+		if #pendingErr < 20 then pendingErr[#pendingErr + 1] = { m, st, loc, date("%m-%d %H:%M:%S"), forceKind } end
+		return
+	end
+	local sig = ErrSig(m)
+	local now, t = date("%m-%d %H:%M:%S"), time()
+	local e = errIndex[sig]
+	if e then
+		e.n = (e.n or 1) + 1
+		e.last, e.lastT, e.lastVer, e.lastCtx = now, t, Ink.version, ErrCtx()
+		return e
+	end
+	local kind = forceKind or ErrKind(m, st)
+	st = st and st:gsub("Interface/AddOns/", ""):gsub("Interface\\AddOns\\", "") or nil
+	e = {
+		sig = sig, kind = kind, msg = m:sub(1, 700), n = 1,
+		first = now, last = now, lastT = t, ver = Ink.version, lastVer = Ink.version,
+		ctx = ErrCtx(), session = #L.sessions,
+		stack = st and st:sub(1, 1600) or nil,
+		locals = (kind ~= "블리자드" and loc) and loc:sub(1, 900) or nil,
+	}
+	L.list[#L.list + 1] = e
+	errIndex[sig] = e
+	ErrPrune(L)
+	-- FOA 쪽 오류는 접속마다 한 번만 채팅에 알린다 (도배 방지)
+	if kind ~= "블리자드" and not errSaidThisSession then
+		errSaidThisSession = true
+		print("|cffFF6B5EFOA|r 오류가 생겨서 기록해 뒀어요 · /foa log 로 볼 수 있어요 (/reload 하면 저장 파일에도 남아요)")
+	end
+	return e
+end
+
+-- 모듈 코드에서 pcall 로 잡은 오류 (오류 처리기를 거치지 않는 것)
+function Ink:LogError(msg)
+	local st = debugstack and debugstack(2, 10, 3) or nil
+	pcall(ErrRecord, tostring(msg), st, nil, "FOA")
+end
+
+-- 막힌 동작: 함수별로 횟수 · 마지막 시각 · 전투 중 횟수
+function Ink:LogBlocked(fn, event)
+	local L = ErrLog()
+	if not L then return end
+	fn = tostring(fn or "?")
+	local b = L.blocked[fn]
+	if not b then
+		b = { n = 0, combat = 0, first = date("%m-%d %H:%M:%S"), ver = Ink.version }
+		L.blocked[fn] = b
+		local cnt, oldK, oldT = 0, nil, nil
+		for k, v in pairs(L.blocked) do
+			cnt = cnt + 1
+			if k ~= fn and (not oldT or (v.lastT or 0) < oldT) then oldK, oldT = k, v.lastT or 0 end
+		end
+		if cnt > BLOCK_MAX and oldK then L.blocked[oldK] = nil end
+	end
+	b.n = b.n + 1
+	if InCombatLockdown() then b.combat = b.combat + 1 end
+	b.last, b.lastT, b.ctx, b.kind = date("%m-%d %H:%M:%S"), time(), ErrCtx(), (event or ""):gsub("ADDON_ACTION_", "")
+end
+
+-- 접속: 세션 한 줄 · 접속 전에 난 오류 옮기기 · 예전 형식 기록 정리
+function Ink:StartErrorSession()
+	local L = ErrLog()
+	if not L then return end
+	local build = select(4, GetBuildInfo())
+	L.sessions[#L.sessions + 1] = { t = date("%m-%d %H:%M:%S"), ver = Ink.version, build = build }
+	while #L.sessions > 20 do table.remove(L.sessions, 1) end
+	local pend = pendingErr
+	pendingErr = {}
+	for _, p in ipairs(pend) do
+		local e = ErrRecord(p[1], p[2], p[3], p[5])
+		if e then e.first = p[4] .. " (접속 전)" end
+	end
+	Ink.db.errors, Ink.db.blockedLog = nil, nil
+end
+
+function Ink:ClearErrors()
+	if Ink.db then Ink.db.errlog = nil end
+	errIndex = nil
+	ErrLog()
+end
+
+-- 게임의 오류 처리기에 끼어든다: 원래 처리기(블리자드 오류 창 · 다른 오류 애드온)는 그대로 부른다
 do
-	local seen = {}
 	local mine, orig
-	local function record(msg)
-		local m = tostring(msg)
-		if not Ink.db then return end
-		-- 블리자드 파일에서 난 오류도 남긴다 (FOA 가 블리자드 값을 오염시켜서 생긴 오류일 수 있다)
-		local ours = m:find("FOA_UI", 1, true) ~= nil
-		local key = m:sub(1, 160)
-		seen[key] = (seen[key] or 0) + 1
-		local n = seen[key]
-		if n == 1 or n == 10 or n == 100 or n == 1000 then
-			local st = debugstack and debugstack(4, 6, 0) or ""
-			st = st:gsub("Interface/AddOns/", ""):gsub("\n", " ← ")
-			Ink:LogError((ours and "LUA x" or "블리자드 LUA x") .. n .. " " .. m .. " || " .. st:sub(1, 400))
+	-- 오류가 난 함수의 지역 변수 (C 함수 층은 비어 있어서 몇 층 위까지 본다)
+	local function Locals()
+		if not debuglocals then return nil end
+		for lv = 3, 6 do
+			local ok, s = pcall(debuglocals, lv)
+			if ok and type(s) == "string" and s ~= "" then return s end
 		end
 	end
 	-- 블리자드가 나중에 오류 처리기를 갈아 끼우면 FOA 기록이 빠지므로, 접속 · 화면 전환 때 다시 씌운다
@@ -1180,7 +1315,10 @@ do
 		if cur == mine then return end
 		orig = cur
 		mine = function(msg, ...)
-			pcall(record, msg)
+			local st = debugstack and debugstack(2, 14, 4) or nil
+			local loc
+			if type(msg) == "string" and (msg:find("FOA_UI", 1, true) or (st and st:find("FOA_UI", 1, true))) then loc = Locals() end
+			pcall(ErrRecord, msg, st, loc)
 			if orig then return orig(msg, ...) end
 		end
 		seterrorhandler(mine)
@@ -1306,13 +1444,8 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 			Ink.blocked = Ink.blocked or {}
 			local line = (arg2 or "?") .. " · " .. date("%H:%M:%S") .. (InCombatLockdown() and " (전투 중)" or "") .. (IsInInstance() and " (인스턴스)" or "")
 			table.insert(Ink.blocked, line)
-			-- 다음 접속 때도 볼 수 있게 저장 (최근 40개)
-			if Ink.db then
-				Ink.db.blockedLog = Ink.db.blockedLog or {}
-				local bl = Ink.db.blockedLog
-				bl[#bl + 1] = date("%m-%d ") .. line .. " · " .. event:gsub("ADDON_ACTION_", "")
-				while #bl > 40 do table.remove(bl, 1) end
-			end
+			-- 다음 접속 때도 볼 수 있게 저장 (함수별 횟수 · 오류 기록과 같은 곳)
+			pcall(Ink.LogBlocked, Ink, arg2, event)
 			-- FOA 가 숨겨 둔 블리자드 행동단축바를 블리자드가 전투 중에 다시 배치하려다 막힌 것은
 			-- 화면에 영향이 없으니 채팅에는 안 띄운다 (/foa log 에는 남김)
 			local fn = tostring(arg2)
@@ -1342,6 +1475,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 		pcall(Ink.DetectDensity, Ink)
 		InkUIDB = InkUIDB or {}
 		Ink.db = InkUIDB
+		pcall(Ink.StartErrorSession, Ink)
 		-- 캐릭터별 배치 (편집 모드 위치 · 가방 위치), 화면 비율마다 따로
 		--  처음 접속한 캐릭터는 마지막으로 편집한 배치를 복사해서 시작한다
 		InkUICharDB = InkUICharDB or {}

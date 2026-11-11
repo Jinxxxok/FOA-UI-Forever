@@ -2507,26 +2507,42 @@ SlashCmdList.INKUI = function(msg)
 			print(string.format("  %d. %s · 합계 %.1fms (전투 %.1fms) · %d번 · 최대 %.2fms", i, r.k, r.v.total, r.v.combat, r.v.n, r.v.max))
 		end
 		Ink.perf = {}
+	elseif msg == "log clear" or msg == "log 지우기" then
+		Ink:ClearErrors()
+		print("|cffFFF468FOA|r 오류 · 막힌 동작 기록을 지웠어요.")
 	elseif msg == "log" then
-		local bl = Ink.db.blockedLog
-		if not bl or #bl == 0 then
-			print("|cffFFF468FOA|r 막힌 동작 기록이 없어요.")
+		-- 오류 기록 요약 (자세한 내용은 저장 파일 InkUIDB.errlog · /reload 해야 파일에 써진다)
+		local L = Ink.db and Ink.db.errlog
+		local list = {}
+		for _, e in ipairs(L and L.list or {}) do list[#list + 1] = e end
+		table.sort(list, function(a, b) return (a.lastT or 0) > (b.lastT or 0) end)
+		if #list == 0 then
+			print("|cffFFF468FOA|r 기록된 오류가 없어요.")
 		else
-			print("|cffFFF468FOA|r 막힌 동작 (최근 " .. math.min(#bl, 12) .. "개):")
-			for i = math.max(1, #bl - 11), #bl do print("|cffFFF468FOA|r " .. bl[i]) end
+			print("|cffFFF468FOA|r 오류 " .. #list .. "가지 (최근 순 8개 · 같은 오류는 횟수로 묶음):")
+			for i = 1, math.min(8, #list) do
+				local e = list[i]
+				local col = (e.kind == "블리자드") and "8E939B" or "FF6B5E"
+				print(string.format("|cff%s[%s] x%d|r %s |cff5E636B(마지막 %s · v%s)|r", col, e.kind or "?", e.n or 1,
+					(e.msg or ""):gsub("\n.*", ""):sub(1, 140), e.last or "?", e.lastVer or e.ver or "?"))
+			end
+		end
+		local bl = {}
+		for fn, b in pairs(L and L.blocked or {}) do bl[#bl + 1] = { fn = fn, b = b } end
+		table.sort(bl, function(a, b) return (a.b.lastT or 0) > (b.b.lastT or 0) end)
+		if #bl > 0 then
+			print("|cffFFF468FOA|r 막힌 동작 " .. #bl .. "가지 (최근 순 5개):")
+			for i = 1, math.min(5, #bl) do
+				local x = bl[i]
+				print(string.format("|cff8E939B  %s x%d (전투 중 %d) · 마지막 %s|r", x.fn, x.b.n or 0, x.b.combat or 0, x.b.last or "?"))
+			end
 		end
 		local enc = Ink.db.encLog
 		if enc and #enc > 0 then
 			print("|cffFFF468FOA|r 보스 이름이 안 맞은 전투 (최근 " .. math.min(#enc, 6) .. "개):")
 			for i = math.max(1, #enc - 5), #enc do print("|cff8E939B" .. enc[i] .. "|r") end
 		end
-		local errs = Ink.db and Ink.db.errors
-		if errs and #errs > 0 then
-			print("|cffFFF468FOA|r 최근 오류 (최대 8개):")
-			for i = math.max(1, #errs - 7), #errs do print("|cffFF6B5EFOA|r " .. errs[i]) end
-		else
-			print("|cffFFF468FOA|r 기록된 오류가 없어요.")
-		end
+		print("|cff8E939B  /reload 하면 저장 파일에 기록돼요 · /foa log clear 로 지우기|r")
 	elseif msg == "kb" or msg == "단축키" then
 		Ink:OpenQuickKeybind()
 	elseif msg == "layout" then

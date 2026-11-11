@@ -1899,6 +1899,8 @@ function M:Init()
 		-- "새 비행 경로를 발견했습니다!" → 서 있는 곳의 비행 지점을 가 본 곳으로
 		if event == "UI_INFO_MESSAGE" or event == "CHAT_MSG_SYSTEM" then
 			local msg = event == "UI_INFO_MESSAGE" and a2 or a1
+			-- 전투 중 채팅 문장은 비공개 값일 수 있어서 비교하면 오류 (오류 기록에서 확인 · 11-10)
+			if issecretvalue and issecretvalue(msg) then return end
 			if ERR_NEWTAXIPATH and msg == ERR_NEWTAXIPATH then
 				C_Timer.After(0.2, function()
 					pcall(M.MarkNearestFlight, M)
