@@ -17,7 +17,9 @@ end
 -- 미니맵: 각진 사각형 + 위/아래 반투명 띠, 주변 버튼 정리
 -------------------------------------------------------------------------------
 function M:BuildMinimap()
-	local a = Ink:Anchor(200, 200)
+	-- 아케인 미니맵은 모서리 장식 · 마법진이 바깥으로 나가서 조금 작게
+	self.mmSize = (Ink.db.mmArcane ~= false) and 184 or 200
+	local a = Ink:Anchor(self.mmSize, self.mmSize)
 	self.mmAnchor = a
 
 	local o = CreateFrame("Frame", "InkUIMinimapOverlay", Ink.root)
@@ -538,7 +540,7 @@ function M:UpdateMinimapText()
 end
 
 function M:LayoutMinimap()
-	Ink:Fit(Minimap, self.mmAnchor, "TOPRIGHT", 200, 200)
+	Ink:Fit(Minimap, self.mmAnchor, "TOPRIGHT", self.mmSize or 200, self.mmSize or 200)
 	self:ApplyMinimapMask()
 	Minimap.foaSquare = true -- 네모 미니맵 (미니맵 퀘스트 표시가 테두리를 네모로 계산)
 	if Minimap.SetArchBlobRingScalar then safe(Minimap.SetArchBlobRingScalar, Minimap, 0) end
@@ -624,6 +626,34 @@ function M:HookDurability()
 	self:PlaceDurability()
 end
 
+-- 디버프 줄: 버프 줄 바로 아래 오른쪽 끝에 맞춘다 (버프를 옮기면 같이 따라간다)
+--  블리자드 편집 모드가 원래 자리로 되돌리면 다시 FOA 자리로
+local debuffState = {}
+function M:PlaceDebuffs()
+	local d = DebuffFrame
+	if not (d and BuffFrame) or debuffState.placing then return end
+	if d:IsProtected() and InCombatLockdown() then return end
+	debuffState.placing = true
+	safe(function()
+		d:ClearAllPoints()
+		d:SetPoint("TOPRIGHT", BuffFrame, "BOTTOMRIGHT", 0, -10)
+	end)
+	debuffState.placing = nil
+	if not debuffState.hooked then
+		debuffState.hooked = true
+		local function again()
+			if debuffState.placing or debuffState.queued then return end
+			debuffState.queued = true
+			C_Timer.After(0, function()
+				debuffState.queued = nil
+				M:PlaceDebuffs()
+			end)
+		end
+		hooksecurefunc(d, "SetPoint", again)
+		if type(d.SetPointBase) == "function" then hooksecurefunc(d, "SetPointBase", again) end
+	end
+end
+
 -- 채팅창 맞추기 상태는 FOA 안쪽에 (블리자드 채팅 틀에 값을 써 넣으면 그 틀을 읽는 블리자드 코드가 오염된다)
 local chatState = {}
 
@@ -640,9 +670,10 @@ function M:BuildAnchors()
 	self.bagAnchor = Ink:Anchor(180, 24)
 
 	-- 아케인 미니맵은 위에 나침반 띠 · 아래에 지역 정보가 붙어서 기본 자리를 조금 내린다
+	--  화면 오른쪽 끝에서도 조금 떼고(모서리 장식 · 마법진이 잘리지 않게) 버프 · 내구도도 같이 왼쪽으로
 	local arc = Ink.db.mmArcane ~= false
-	Ink:Movable("minimap", "미니맵", self.mmAnchor, "right", 16, arc and 44 or 16)
-	Ink:Movable("buffs", "버프", self.buffAnchor, "right", 236, 20)
+	Ink:Movable("minimap", "미니맵", self.mmAnchor, "right", arc and 36 or 16, arc and 44 or 16)
+	Ink:Movable("buffs", "버프", self.buffAnchor, "right", arc and 256 or 236, 20)
 	Ink:Movable("quest", "퀘스트 목록", self.questAnchor, "right", 60, arc and 300 or 240)
 	local cm = Ink:Movable("chat", "채팅", self.chatAnchor, "bottomleft", 16, 48)
 	-- 편집 모드에서 아래 띠 / 모서리를 끌어 채팅창 크기 조절
@@ -659,7 +690,7 @@ function M:BuildAnchors()
 	cm.defW, cm.defH = 340, 140
 	-- 장비 내구도 경고(노란 갑옷 인형): 퀘스트 목록을 가리지 않게 미니맵 왼쪽 아래 빈 곳으로
 	self.duraAnchor = Ink:Anchor(60, 75)
-	Ink:Movable("durability", "내구도", self.duraAnchor, "right", 236, 140)
+	Ink:Movable("durability", "내구도", self.duraAnchor, "right", arc and 256 or 236, 140)
 	self:HookDurability()
 	-- 가방 칸 줄은 진영 문양 메뉴(Launcher.lua)로 대신한다
 	if Ink.db.launcher == false then
@@ -674,6 +705,7 @@ end
 
 function M:LayoutAnchors()
 	Ink:Fit(BuffFrame, self.buffAnchor, "TOPRIGHT")
+	self:PlaceDebuffs()
 	Ink:Fit(ObjectiveTrackerFrame, self.questAnchor, "TOPRIGHT")
 	if ChatFrame1 then
 		safe(function()

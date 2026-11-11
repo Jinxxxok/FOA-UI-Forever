@@ -350,7 +350,7 @@ function M:LayoutArcane()
 	c[4]:SetPoint("BOTTOMRIGHT", a, "BOTTOMRIGHT", off, -off)
 
 	-- 마법진: 텍스처 512 = 시안 512칸 (바깥 원 반지름 236)
-	local ss = 512 * k * 0.92
+	local ss = 512 * k * 0.85
 	A.sigil:SetSize(ss, ss)
 	A.sigil.halo:SetSize(ss * 1.05, ss * 1.05)
 
