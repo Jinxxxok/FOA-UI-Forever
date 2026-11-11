@@ -482,9 +482,12 @@ function M:BuildPopup()
 	local sw = p:CreateAnimationGroup()
 	local sa = sw:CreateAnimation("Alpha"); sa:SetFromAlpha(0.55); sa:SetToAlpha(1); sa:SetDuration(0.16); sa:SetSmoothing("OUT")
 	p.swap = sw
-	-- 밖을 누르면 닫힘 · ESC (다른 장비 칸을 누르는 건 "칸 바꾸기"라서 닫지 않는다)
+	-- 밖을 누르면 닫힘 · ESC · 캐릭터 창이 닫히면 같이 (다른 장비 칸을 누르는 건 "칸 바꾸기"라서 닫지 않는다)
 	tinsert(UISpecialFrames, "FOAGearPopup")
 	p:SetScript("OnUpdate", function(self)
+		-- 캐릭터 창을 닫거나 다른 탭(평판 · 화폐)으로 넘어가 장비 칸이 안 보이면 같이 닫힌다
+		local cf = CharacterFrame
+		if not (cf and cf:IsVisible()) or (self.owner and not self.owner:IsVisible()) then self:Hide() return end
 		if not (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton")) or self:IsMouseOver() then return end
 		for b in pairs(M.slotButtons or {}) do if b:IsMouseOver() then return end end
 		self:Hide()
