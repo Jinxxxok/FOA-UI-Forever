@@ -174,6 +174,120 @@ local function FactionByID(id)
 	end
 end
 
+-------------------------------------------------------------------------------
+-- 평판 그림: 진영마다 그 진영을 떠올리게 하는 아이콘
+--  도시 = 마법사 순간이동 아이콘 · 상인 마을 = 지역 그림 · 그 밖엔 상징 물건
+--  진영 번호 → 이름 낱말 → 묶음(스팀휘들 · 얼라이언스 · 호드) 순으로 찾고, 없으면 첫 글자 칸
+--  후보를 여러 개 두고 게임에 실제로 있는 그림만 쓴다 (GetFileIDFromPath 로 확인)
+-------------------------------------------------------------------------------
+local REP_ICON_ID = {
+	[72] = { "Spell_Arcane_TeleportStormWind", "INV_Misc_Tournaments_banner_Human" },
+	[47] = { "Spell_Arcane_TeleportIronForge" },
+	[69] = { "Spell_Arcane_TeleportDarnassus" },
+	[54] = { "INV_Misc_Tournaments_banner_Gnome", "Achievement_Character_Gnome_Male", "INV_Gizmo_01" },
+	[930] = { "Spell_Arcane_TeleportExodar" },
+	[76] = { "Spell_Arcane_TeleportOrgrimmar" },
+	[81] = { "Spell_Arcane_TeleportThunderBluff" },
+	[68] = { "Spell_Arcane_TeleportUnderCity" },
+	[530] = { "INV_Misc_Tournaments_banner_Troll", "Achievement_Character_Troll_Male" },
+	[911] = { "Spell_Arcane_TeleportSilvermoon" },
+	[21] = { "Achievement_Zone_Stranglethorn_01", "INV_Misc_Bandana_03" },
+	[369] = { "Achievement_Zone_Tanaris_01", "INV_Misc_Coin_02" },
+	[470] = { "Achievement_Zone_Barrens_01", "INV_Misc_Coin_01" },
+	[577] = { "Achievement_Zone_Winterspring", "INV_Misc_Coin_01" },
+	[909] = { "INV_Misc_Ticket_Darkmoon_01" },
+	[1090] = { "Achievement_Reputation_KirinTor", "Spell_Arcane_TeleportDalaran" },
+	[609] = { "Achievement_Zone_Silithus_01", "Spell_Nature_Regeneration" },
+	[529] = { "INV_Jewelry_Talisman_07", "Achievement_Reputation_ArgentCrusader" },
+	[576] = { "Achievement_Reputation_timbermaw" },
+	[59] = { "INV_Ingot_Thorium" },
+	[270] = { "INV_Bijou_Red" },
+	[749] = { "Spell_Frost_SummonWaterElemental_2" },
+	[910] = { "INV_Misc_Head_Dragon_Bronze" },
+	[809] = { "INV_Misc_Book_11" },
+	[589] = { "Ability_Mount_WhiteTiger" },
+	[890] = { "INV_BannerPVP_02" },
+	[730] = { "INV_Jewelry_StormPikeTrinket_01" },
+	[729] = { "INV_Jewelry_FrostwolfTrinket_01" },
+	[509] = { "INV_BannerPVP_02" },
+	[510] = { "INV_BannerPVP_01" },
+	[889] = { "INV_BannerPVP_01" },
+	[92] = { "INV_Misc_Head_Centaur_01" },
+	[93] = { "INV_Misc_Head_Centaur_01" },
+	[349] = { "Ability_Stealth" },
+	[70] = { "INV_Misc_Note_06" },
+	[471] = { "Ability_Mount_Gryphon_01" },
+	[87] = { "INV_Misc_Bandana_03" },
+}
+-- 이름 낱말 (한국어 · 영어) → 같은 그림 · 포에버에만 있는 진영도 이걸로 잡는다
+local REP_ICON_WORD = {
+	{ "스톰윈드", 72 }, { "Stormwind", 72 }, { "아이언포지", 47 }, { "Ironforge", 47 }, { "다르나서스", 69 }, { "Darnassus", 69 },
+	{ "놈리건", 54 }, { "Gnomeregan", 54 }, { "엑소다르", 930 }, { "Exodar", 930 }, { "오그리마", 76 }, { "Orgrimmar", 76 },
+	{ "썬더 블러프", 81 }, { "Thunder Bluff", 81 }, { "언더시티", 68 }, { "Undercity", 68 }, { "검은창", 530 }, { "Darkspear", 530 },
+	{ "실버문", 911 }, { "Silvermoon", 911 }, { "무법항", 21 }, { "Booty Bay", 21 }, { "가젯잔", 369 }, { "Gadgetzan", 369 },
+	{ "톱니항", 470 }, { "Ratchet", 470 }, { "눈망루", 577 }, { "Everlook", 577 }, { "다크문", 909 }, { "Darkmoon", 909 },
+	{ "키린 토", 1090 }, { "Kirin Tor", 1090 }, { "세나리온", 609 }, { "Cenarion", 609 }, { "은빛 여명", 529 }, { "Argent Dawn", 529 },
+	{ "나무구렁", 576 }, { "Timbermaw", 576 }, { "토륨", 59 }, { "Thorium", 59 }, { "잔달라", 270 }, { "Zandalar", 270 },
+	{ "히드락시안", 749 }, { "Hydraxian", 749 }, { "놀즈도르무", 910 }, { "Nozdormu", 910 }, { "쉔드랄라", 809 }, { "Shen'dralar", 809 },
+	{ "Wintersaber", 589 }, { "은빛날개", 890 }, { "Silverwing", 890 }, { "스톰파이크", 730 }, { "Stormpike", 730 },
+	{ "서리늑대", 729 }, { "Frostwolf", 729 }, { "아라소르", 509 }, { "Arathor", 509 }, { "Defilers", 510 }, { "전쟁노래", 889 }, { "Warsong", 889 },
+	{ "켄타우로스", 92 }, { "Centaur", 92 }, { "라벤홀트", 349 }, { "Ravenholdt", 349 }, { "Syndicate", 70 },
+	{ "와일드해머", 471 }, { "Wildhammer", 471 }, { "해적", 87 }, { "Bloodsail", 87 },
+}
+local REP_ICON_THEME = {   -- 그 밖의 진영: 이름에 든 낱말로 분위기 맞추기
+	{ "마법", { "Spell_Holy_MagicalSentry", "Spell_Arcane_ArcaneResilience" } }, { "Arcan", { "Spell_Holy_MagicalSentry" } },
+	{ "상업", { "INV_Misc_Coin_02" } }, { "Commerce", { "INV_Misc_Coin_02" } }, { "무역", { "INV_Misc_Coin_02" } },
+	{ "드루이드", { "Ability_Druid_CatForm", "Spell_Nature_Regeneration" } }, { "Druid", { "Ability_Druid_CatForm" } },
+	{ "화약", { "INV_Misc_Bomb_04" } }, { "Powder", { "INV_Misc_Bomb_04" } }, { "기계", { "Trade_Engineering" } },
+	{ "학자", { "INV_Misc_Book_09" } }, { "서고", { "INV_Misc_Book_09" } },
+}
+local REP_ICON_GROUP = {   -- 묶음 이름 → 그 묶음 공통 그림
+	{ "스팀휘들", { "INV_Misc_Coin_01" } }, { "Steamwheedle", { "INV_Misc_Coin_01" } },
+	{ "얼라이언스", { "INV_BannerPVP_02" } }, { "Alliance", { "INV_BannerPVP_02" } },
+	{ "호드", { "INV_BannerPVP_01" } }, { "Horde", { "INV_BannerPVP_01" } },
+}
+
+local iconCache = {}
+local function IconFile(name)
+	local v = iconCache[name]
+	if v == nil then
+		local path = "Interface\\Icons\\" .. name
+		v = path
+		if GetFileIDFromPath then
+			local ok, id = pcall(GetFileIDFromPath, path)
+			v = (ok and type(id) == "number" and id > 0) and id or false
+		end
+		iconCache[name] = v
+	end
+	return v or nil
+end
+
+local function FirstIcon(list)
+	for _, n in ipairs(list or {}) do
+		local v = IconFile(n)
+		if v then return v end
+	end
+end
+
+local function FindWord(tbl, name)
+	if not name then return end
+	for _, w in ipairs(tbl) do
+		if name:find(w[1], 1, true) then return w[2] end
+	end
+end
+
+M.repGroup = {}   -- 진영 번호 → 평판 창 묶음 이름 (FactionRows 가 채움)
+local function RepIcon(id, name, group)
+	local v = id and FirstIcon(REP_ICON_ID[id])
+	if v then return v end
+	local wid = FindWord(REP_ICON_WORD, name)
+	v = wid and FirstIcon(REP_ICON_ID[wid])
+	if v then return v end
+	v = FirstIcon(FindWord(REP_ICON_THEME, name))
+	if v then return v end
+	return FirstIcon(FindWord(REP_ICON_GROUP, group or (id and M.repGroup[id])))
+end
+
 local function Watched()
 	if C_Reputation and C_Reputation.GetWatchedFactionData then
 		local ok, d = pcall(C_Reputation.GetWatchedFactionData)
@@ -222,6 +336,7 @@ end
 local function RepKey(f) return f.id and ("f:" .. f.id) or ("r:" .. (f.name or "?")) end
 
 local function RepEntry(f)
+	f.icon = f.icon or RepIcon(f.id, f.name)
 	f.key = "r:" .. f.name
 	f.pick = RepKey(f)
 	f.kind = "rep"
@@ -305,10 +420,15 @@ local function FactionRows()
 			i = i + 1
 		end
 	end
-	local rows = {}
+	local rows, grp = {}, nil
 	for i = 1, num() do
 		local d = info(i)
-		if d and d.name then rows[#rows + 1] = d end
+		if d and d.name then
+			if d.header and not d.hasRep then grp = d.name end
+			d.group = grp
+			if d.id then M.repGroup[d.id] = grp end
+			rows[#rows + 1] = d
+		end
 	end
 	-- 펼쳤던 묶음은 뒤에서부터 다시 접는다 (앞 번호가 밀리지 않게)
 	if collapse and next(opened) then
@@ -415,7 +535,7 @@ function M:Paint(b, e)
 	local p = math.max(0, math.min(1, (e.rank or 0) / math.max(1, e.max or 1)))
 	local maxed = (e.rank or 0) >= (e.max or 1)
 	local col = e.kind == "rep" and (STANDING_RGB[e.standing or 4] or GOLD) or (KIND_RGB[e.kind] or KIND_RGB.prof)
-	local useLetter = e.kind == "rep" or not e.icon
+	local useLetter = not e.icon
 	if useLetter then
 		b.icon:Hide()
 		b.wash:SetVertexColor(col[1], col[2], col[3], 0.16)
@@ -537,7 +657,7 @@ function M:PickItems(sec)
 			else
 				local rank = (d.val or 0) - (d.min or 0)
 				local span = math.max(1, (d.max or 1) - (d.min or 0))
-				out[#out + 1] = { key = RepKey(d), kind = "rep", name = d.name, letter = FirstChar(d.name),
+				out[#out + 1] = { key = RepKey(d), kind = "rep", name = d.name, letter = FirstChar(d.name), icon = RepIcon(d.id, d.name, d.group),
 					rgb = STANDING_RGB[d.standing or 4] or GOLD, sub = STANDING_SHORT(d.standing), rank = rank, max = span, standing = d.standing }
 			end
 		end
@@ -718,6 +838,11 @@ function M:Init()
 		end)
 	end)
 	C_Timer.After(2, function() pcall(M.Update, M) end)
+	-- 평판 창 묶음 이름을 한 번 읽어 둔다 (묶음 공통 그림용)
+	C_Timer.After(4, function()
+		pcall(FactionRows)
+		pcall(M.Update, M)
+	end)
 end
 
 M.FactionIDByName = FactionIDByName
