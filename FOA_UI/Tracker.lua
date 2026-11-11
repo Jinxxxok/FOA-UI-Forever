@@ -1,5 +1,7 @@
 -- FOA UI · 현황 아이콘 (전문기술 · 무기 숙련 · 평판을 창을 열지 않고 둥근 아이콘으로)
---  · 전문기술 / 보조 기술 (요리 · 응급치료 · 낚시) / 자물쇠 따기: 아이콘 + 숙련 + 아래 진행 막대
+--  · 전문기술 / 보조 기술 (요리 · 응급치료 · 낚시 · 독) / 자물쇠 따기: 아이콘 + 숙련 + 아래 진행 막대
+--  · 모양: FOA 아이콘 칸 (둥근 모서리 · 얇은 테두리) · 전문 민트 / 무기 파랑 / 평판 단계 색 · 다 올리면 금색
+--  · 묶음 사이엔 넓은 틈과 가는 세로 선
 --  · 무기 숙련 · 방어: 자동이면 써 본 무기 중 아직 다 안 올린 것 4개까지
 --  · 평판: 자동이면 추적 중인 평판 + 이번 접속에서 오른 평판
 --  · 설정 "일반 → 현황 아이콘 고르기" 에서 하나씩 켜고 끄기 (캐릭터별 · 고른 것이 자동보다 먼저)
@@ -12,11 +14,17 @@ local M = Ink:Module("Tracker")
 local F, C = Ink.font, Ink.c
 local plain = Ink.plain
 
-local SIZE, GAP = 28, 8
-local GOLD = { 0.89, 0.75, 0.48 }
+local ICON, GAP, GROUP_GAP, ROW_GAP = 28, 7, 19, 10   -- 아이콘 · 칸 사이 · 묶음 사이 · 줄 사이
+local CHIP_H = ICON + 19                                 -- 아이콘 + 막대 + 숫자
+local PER_ROW = 12                                       -- 한 줄 폭 (아이콘 수 기준)
+local GOLD = { 0.890, 0.753, 0.478 }                     -- 다 올림 (FOA gold)
+local KIND_RGB = {
+	prof = { 0.435, 0.827, 0.604 },     -- 전문기술 · 보조 기술: 민트
+	weapon = { 0.498, 0.659, 1.000 },   -- 무기 숙련 · 방어: 강철 파랑
+}
 
 -- 이름 → 아이콘 (그 기술을 배우는 주문의 아이콘. 이름은 게임 언어 그대로라 한국어 · 영어 다 맞는다)
-local PROF_SPELLS = { 2259, 2018, 7411, 4036, 2366, 2108, 2575, 8613, 3908, 2550, 3273, 7620, 1804 }
+local PROF_SPELLS = { 2259, 2018, 7411, 4036, 2366, 2108, 2575, 8613, 3908, 2550, 3273, 7620, 1804, 2842 }
 local WEAPON_SPELLS = { 196, 197, 264, 266, 198, 199, 200, 201, 202, 227, 15590, 1180, 2567, 5011, 5009, 203, 204 }
 
 local function SpellInfo(id)
@@ -57,11 +65,11 @@ end
 -- 기술 번호 → 아이콘 주문 · 종류 (포에버 C_SkillInfo 는 기술 번호를 준다)
 local SKILL_SPELL = {
 	[171] = 2259, [164] = 2018, [333] = 7411, [202] = 4036, [182] = 2366, [165] = 2108, [186] = 2575, [393] = 8613,
-	[197] = 3908, [185] = 2550, [129] = 3273, [356] = 7620, [633] = 1804,
+	[197] = 3908, [185] = 2550, [129] = 3273, [356] = 7620, [633] = 1804, [40] = 2842,
 	[173] = 1180, [43] = 201, [55] = 202, [44] = 196, [172] = 197, [54] = 198, [160] = 199, [229] = 200, [136] = 227,
 	[162] = 203, [473] = 15590, [45] = 264, [46] = 266, [226] = 5011, [176] = 2567, [228] = 5009, [95] = 204,
 }
-local PROF_ORDER = { 171, 164, 333, 202, 182, 165, 186, 393, 197, 185, 129, 356, 633 }
+local PROF_ORDER = { 171, 164, 333, 202, 182, 165, 186, 393, 197, 185, 129, 356, 633, 40 }
 local WEAPON_ORDER = { 173, 43, 55, 44, 172, 54, 160, 229, 136, 162, 473, 45, 46, 226, 176, 228, 3014, 95 }
 local PROF_ID, WEAPON_ID = {}, {}
 for _, id in ipairs(PROF_ORDER) do PROF_ID[id] = true end
@@ -149,8 +157,8 @@ end
 
 -- 평판 (추적 중 + 이번 접속에서 오른 것)
 local STANDING_RGB = {
-	[1] = { 0.8, 0.13, 0.13 }, [2] = { 0.8, 0.3, 0.22 }, [3] = { 0.75, 0.27, 0 }, [4] = { 0.9, 0.7, 0 },
-	[5] = { 0, 0.6, 0.1 }, [6] = { 0, 0.7, 0.4 }, [7] = { 0, 0.7, 0.7 }, [8] = { 0.3, 0.6, 1 },
+	[1] = { 1.000, 0.420, 0.369 }, [2] = { 1.000, 0.420, 0.369 }, [3] = { 1.000, 0.718, 0.353 }, [4] = { 0.910, 0.824, 0.478 },
+	[5] = { 0.435, 0.827, 0.604 }, [6] = { 0.310, 0.765, 0.631 }, [7] = { 0.361, 0.784, 0.839 }, [8] = { 0.498, 0.659, 1.000 },
 }
 
 local function FactionByID(id)
@@ -313,56 +321,92 @@ local function FactionRows()
 end
 
 -------------------------------------------------------------------------------
--- 아이콘 칩
+-- 아이콘 칩 (FOA 아이콘 칸: 둥근 모서리 + 얇은 테두리 · 아래 가는 진행 막대 + 숫자)
+--  전문기술 = 민트 · 무기 = 파랑 · 평판 = 평판 단계 색 · 다 올리면 금색 테두리와 은은한 빛
 -------------------------------------------------------------------------------
+local function FirstChar(name)
+	return (name or "?"):match("^[%z\1-\127\194-\244][\128-\191]*") or "?"
+end
+
 local function NewChip(parent)
 	local b = CreateFrame("Button", nil, parent)
-	b:SetSize(SIZE, SIZE + 12)
-	b.disc = b:CreateTexture(nil, "BACKGROUND")
-	b.disc:SetTexture(Ink.tex.disc)
-	b.disc:SetSize(SIZE, SIZE)
-	b.disc:SetPoint("TOP")
-	b.disc:SetVertexColor(0.035, 0.04, 0.052, 0.85)
-	b.icon = b:CreateTexture(nil, "ARTWORK")
-	b.icon:SetSize(SIZE - 6, SIZE - 6)
-	b.icon:SetPoint("CENTER", b.disc, "CENTER")
-	if b.CreateMaskTexture and b.icon.AddMaskTexture then
-		b.mask = b:CreateMaskTexture()
-		b.mask:SetTexture(Ink.tex.mask, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-		b.mask:SetAllPoints(b.icon)
-		b.icon:AddMaskTexture(b.mask)
+	b:SetSize(ICON, CHIP_H)
+	-- 아이콘 칸
+	b.ic = CreateFrame("Frame", nil, b)
+	b.ic:SetSize(ICON, ICON)
+	b.ic:SetPoint("TOP")
+	b.icon = b.ic:CreateTexture(nil, "ARTWORK")
+	b.icon:SetPoint("TOPLEFT", 1, -1)
+	b.icon:SetPoint("BOTTOMRIGHT", -1, 1)
+	b.skin = Ink:IconSkin(b.ic, b.icon, true)
+	b.skin.bg:SetVertexColor(0.035, 0.040, 0.052, 0.86)
+	-- 글자 칸 (평판 · 아이콘 없는 기술): 단계 색을 옅게 깐 바탕 + 굵은 첫 글자
+	b.wash = Ink:Round(b.ic, "BORDER", true)
+	b.wash:SetPoint("TOPLEFT", 1, -1)
+	b.wash:SetPoint("BOTTOMRIGHT", -1, 1)
+	b.letter = Ink:Text(b.skin.top, F.bold, 13, C.text, "CENTER")
+	b.letter:SetPoint("CENTER", b.ic, "CENTER", 0, 0)
+	-- 위쪽 은은한 윤기 (아이콘이 납작해 보이지 않게)
+	b.sheen = b.skin.top:CreateTexture(nil, "ARTWORK")
+	b.sheen:SetPoint("TOPLEFT", b.ic, "TOPLEFT", 4, -2)
+	b.sheen:SetPoint("TOPRIGHT", b.ic, "TOPRIGHT", -4, -2)
+	b.sheen:SetHeight(ICON * 0.42)
+	b.sheen:SetTexture(Ink.tex.white)
+	if b.sheen.SetGradient and CreateColor then
+		pcall(b.sheen.SetGradient, b.sheen, "VERTICAL", CreateColor(1, 1, 1, 0), CreateColor(1, 1, 1, 0.07))
+	else
+		b.sheen:SetVertexColor(1, 1, 1, 0.035)
 	end
-	b.letter = Ink:Text(b, F.bold, 11, C.text, "CENTER")
-	b.letter:SetPoint("CENTER", b.disc, "CENTER", 0, 0)
-	b.ring = b:CreateTexture(nil, "BORDER")
-	b.ring:SetTexture(Ink.tex.ring)
-	b.ring:SetAllPoints(b.disc)
-	-- 진행 막대 (아이콘 아래)
-	b.bar = b:CreateTexture(nil, "ARTWORK")
-	b.bar:SetTexture(Ink.tex.white)
-	b.bar:SetSize(SIZE - 6, 2)
-	b.bar:SetPoint("TOP", b.disc, "BOTTOM", 0, -3)
-	b.bar:SetVertexColor(1, 1, 1, 0.12)
+	-- 빛 (다 올림 · 오를 때 번쩍)
+	b.glow = b:CreateTexture(nil, "BACKGROUND", nil, -7)
+	b.glow:SetTexture(Ink.tex.glow)
+	b.glow:SetPoint("TOPLEFT", b.ic, "TOPLEFT", -11, 11)
+	b.glow:SetPoint("BOTTOMRIGHT", b.ic, "BOTTOMRIGHT", 11, -11)
+	b.glow:SetBlendMode("ADD")
+	b.glow:SetAlpha(0)
+	-- 진행 막대 (아이콘 폭 · 2점 · 둥근 끝 대신 1점 안쪽으로 들여 깔끔하게)
+	b.track = b:CreateTexture(nil, "ARTWORK")
+	b.track:SetTexture(Ink.tex.white)
+	b.track:SetHeight(2)
+	b.track:SetPoint("TOPLEFT", b.ic, "BOTTOMLEFT", 2, -4)
+	b.track:SetPoint("TOPRIGHT", b.ic, "BOTTOMRIGHT", -2, -4)
+	b.track:SetVertexColor(1, 1, 1, 0.09)
 	b.fill = b:CreateTexture(nil, "OVERLAY")
 	b.fill:SetTexture(Ink.tex.white)
 	b.fill:SetHeight(2)
-	b.fill:SetPoint("LEFT", b.bar, "LEFT")
-	b.num = Ink:Text(b, F.numR, 9, C.soft, "CENTER")
-	b.num:SetPoint("TOP", b.bar, "BOTTOM", 0, -2)
-	-- 오를 때: 톡 튀기 + "+1" 떠오르기
-	b.pop = b:CreateAnimationGroup()
+	b.fill:SetPoint("LEFT", b.track, "LEFT")
+	b.tip = b:CreateTexture(nil, "OVERLAY", nil, 1)   -- 막대 끝 밝은 점
+	b.tip:SetTexture(Ink.tex.white)
+	b.tip:SetSize(2, 2)
+	b.tip:SetPoint("RIGHT", b.fill, "RIGHT")
+	b.num = Ink:Text(b, F.numR, 10, C.soft, "CENTER")
+	b.num:SetPoint("TOP", b.track, "BOTTOM", 0, -3)
+	-- 오를 때: 톡 튀기 + 빛 번쩍 + "+1" 떠오르기
+	b.pop = b.ic:CreateAnimationGroup()
 	local s1 = b.pop:CreateAnimation("Scale")
-	s1:SetScaleFrom(1, 1); s1:SetScaleTo(1.22, 1.22); s1:SetDuration(0.12); s1:SetOrder(1); s1:SetSmoothing("OUT")
+	s1:SetScaleFrom(1, 1); s1:SetScaleTo(1.16, 1.16); s1:SetDuration(0.12); s1:SetOrder(1); s1:SetSmoothing("OUT")
 	local s2 = b.pop:CreateAnimation("Scale")
-	s2:SetScaleFrom(1.22, 1.22); s2:SetScaleTo(1, 1); s2:SetDuration(0.22); s2:SetOrder(2); s2:SetSmoothing("IN")
-	b.plus = Ink:Text(b, F.latinB, 11, { 0.55, 0.9, 0.55 }, "CENTER", "OVERLAY")
-	b.plus:SetPoint("BOTTOM", b.disc, "TOP", 0, 0)
+	s2:SetScaleFrom(1.16, 1.16); s2:SetScaleTo(1, 1); s2:SetDuration(0.26); s2:SetOrder(2); s2:SetSmoothing("IN")
+	b.flash = b.glow:CreateAnimationGroup()
+	local g1 = b.flash:CreateAnimation("Alpha"); g1:SetFromAlpha(0); g1:SetToAlpha(0.7); g1:SetDuration(0.14); g1:SetOrder(1)
+	local g2 = b.flash:CreateAnimation("Alpha"); g2:SetFromAlpha(0.7); g2:SetToAlpha(0); g2:SetDuration(0.9); g2:SetOrder(2); g2:SetSmoothing("OUT")
+	b.flash:SetScript("OnFinished", function() b.glow:SetAlpha(b.restGlow or 0) end)
+	b.plus = Ink:Text(b, F.latinB, 11, KIND_RGB.prof, "CENTER", "OVERLAY")
+	b.plus:SetPoint("BOTTOM", b.ic, "TOP", 0, 1)
 	b.plus:SetAlpha(0)
 	b.float = b.plus:CreateAnimationGroup()
-	local fa = b.float:CreateAnimation("Alpha"); fa:SetFromAlpha(1); fa:SetToAlpha(0); fa:SetDuration(1.1); fa:SetSmoothing("IN")
-	local ft = b.float:CreateAnimation("Translation"); ft:SetOffset(0, 14); ft:SetDuration(1.1); ft:SetSmoothing("OUT")
-	b:SetScript("OnEnter", function(self) M:Tip(self) end)
-	b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	local fa = b.float:CreateAnimation("Alpha"); fa:SetFromAlpha(1); fa:SetToAlpha(0); fa:SetDuration(1.2); fa:SetSmoothing("IN")
+	local ft = b.float:CreateAnimation("Translation"); ft:SetOffset(0, 14); ft:SetDuration(1.2); ft:SetSmoothing("OUT")
+	b:SetScript("OnEnter", function(self)
+		self.hot = true
+		if self.entry then M:Paint(self, self.entry) end
+		M:Tip(self)
+	end)
+	b:SetScript("OnLeave", function(self)
+		self.hot = nil
+		if self.entry then M:Paint(self, self.entry) end
+		GameTooltip:Hide()
+	end)
 	return b
 end
 
@@ -370,43 +414,75 @@ function M:Paint(b, e)
 	b.entry = e
 	local p = math.max(0, math.min(1, (e.rank or 0) / math.max(1, e.max or 1)))
 	local maxed = (e.rank or 0) >= (e.max or 1)
-	local col
-	if e.kind == "rep" then
-		col = STANDING_RGB[e.standing or 4] or GOLD
+	local col = e.kind == "rep" and (STANDING_RGB[e.standing or 4] or GOLD) or (KIND_RGB[e.kind] or KIND_RGB.prof)
+	local useLetter = e.kind == "rep" or not e.icon
+	if useLetter then
 		b.icon:Hide()
-		b.letter:SetText((e.name or "?"):match("^[%z\1-\127\194-\244][\128-\191]*") or "?")
+		b.wash:SetVertexColor(col[1], col[2], col[3], 0.16)
+		b.wash:Show()
+		b.letter:SetText(FirstChar(e.name))
 		b.letter:SetTextColor(col[1], col[2], col[3])
 		b.letter:Show()
-		b.num:SetText(_G["FACTION_STANDING_LABEL" .. (e.standing or 4)] or "")
 	else
-		col = maxed and GOLD or (e.kind == "weapon" and { 0.62, 0.78, 1 } or { 0.55, 0.85, 0.55 })
+		b.wash:Hide()
 		b.letter:Hide()
-		b.icon:SetTexture(e.icon or 134400)
+		b.icon:SetTexture(e.icon)
 		b.icon:Show()
-		b.num:SetText(tostring(e.rank or 0))
 	end
-	b.ring:SetVertexColor(col[1], col[2], col[3], maxed and 0.95 or 0.6)
-	b.fill:SetWidth(math.max(0.01, (SIZE - 6) * p))
-	b.fill:SetVertexColor(col[1], col[2], col[3], 0.95)
+	-- 테두리: 평소 옅게 · 평판은 단계 색 · 다 올리면 금색 · 마우스 올리면 밝게
+	local bd = b.skin.border
+	if maxed and e.kind ~= "rep" then
+		bd:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], b.hot and 1 or 0.78)
+	elseif e.kind == "rep" then
+		bd:SetVertexColor(col[1], col[2], col[3], b.hot and 0.9 or 0.45)
+	else
+		bd:SetVertexColor(1, 1, 1, b.hot and 0.42 or 0.13)
+	end
+	-- 막대 · 숫자
+	local fc = (maxed and e.kind ~= "rep") and GOLD or col
+	b.fill:SetVertexColor(fc[1], fc[2], fc[3], 0.95)
+	b.fill:SetWidth(math.max(0.01, (ICON - 4) * p))
 	b.fill:SetShown(p > 0)
-	b.num:SetTextColor(maxed and GOLD[1] or 0.8, maxed and GOLD[2] or 0.8, maxed and GOLD[3] or 0.8)
+	b.tip:SetVertexColor(math.min(1, fc[1] + 0.35), math.min(1, fc[2] + 0.35), math.min(1, fc[3] + 0.35), 1)
+	b.tip:SetShown(p > 0.04 and p < 1)
+	if e.kind == "rep" then
+		b.num:SetText(math.floor(p * 100 + 0.5) .. "%")
+		b.num:SetTextColor(col[1], col[2], col[3])
+	else
+		b.num:SetText(tostring(e.rank or 0))
+		local nc = maxed and GOLD or (b.hot and C.text or C.soft)
+		b.num:SetTextColor(nc[1], nc[2], nc[3])
+	end
+	-- 다 올린 것은 금빛이 은은하게 남는다
+	b.restGlow = (maxed and e.kind ~= "rep") and 0.16 or 0
+	b.glow:SetVertexColor(fc[1], fc[2], fc[3])
+	if not (b.flash and b.flash:IsPlaying()) then b.glow:SetAlpha(b.restGlow) end
+	b.plus:SetTextColor(col[1], col[2], col[3])
 end
+
+local KIND_LABEL = { prof = "숙련", weapon = "무기 숙련" }
 
 function M:Tip(b)
 	local e = b.entry
 	if not e then return end
 	GameTooltip:SetOwner(b, "ANCHOR_BOTTOMLEFT")
 	GameTooltip:AddLine(e.name, 1, 1, 1)
+	local g = { 0.56, 0.58, 0.61 }
 	if e.kind == "rep" then
 		local col = STANDING_RGB[e.standing or 4] or GOLD
 		GameTooltip:AddDoubleLine(_G["FACTION_STANDING_LABEL" .. (e.standing or 4)] or "", e.rank .. " / " .. e.max, col[1], col[2], col[3], 1, 1, 1)
+		if e.rank < e.max then GameTooltip:AddLine("다음 단계까지 " .. (e.max - e.rank), g[1], g[2], g[3]) end
 	else
-		GameTooltip:AddDoubleLine(e.kind == "weapon" and "무기 숙련" or "숙련", e.rank .. " / " .. e.max, 0.7, 0.72, 0.75, 1, 1, 1)
-		if (e.mod or 0) ~= 0 then GameTooltip:AddDoubleLine("장비 · 효과", (e.mod > 0 and "+" or "") .. e.mod, 0.7, 0.72, 0.75, 0.55, 0.9, 0.55) end
-		if e.kind == "prof" and e.rank >= e.max then
-			GameTooltip:AddLine("최대예요 · 상급자에게 다음 단계를 배우면 더 올라요", GOLD[1], GOLD[2], GOLD[3], true)
+		local col = KIND_RGB[e.kind] or KIND_RGB.prof
+		GameTooltip:AddDoubleLine(KIND_LABEL[e.kind] or "숙련", e.rank .. " / " .. e.max, col[1], col[2], col[3], 1, 1, 1)
+		if (e.mod or 0) ~= 0 then GameTooltip:AddDoubleLine("장비 · 효과", (e.mod > 0 and "+" or "") .. e.mod, g[1], g[2], g[3], 0.55, 0.9, 0.55) end
+		if e.rank >= e.max then
+			GameTooltip:AddLine(e.kind == "weapon" and "지금 레벨에선 최대예요 · 레벨이 오르면 다시 올라요"
+				or "최대예요 · 상급자에게 다음 단계를 배우면 더 올라요", GOLD[1], GOLD[2], GOLD[3], true)
 		elseif e.kind == "weapon" then
-			GameTooltip:AddLine("이 무기로 싸우면 올라요 (레벨 × 5 까지)", 0.56, 0.58, 0.61, true)
+			GameTooltip:AddLine("이 무기로 싸우면 올라요 (레벨 × 5 까지) · 남은 " .. (e.max - e.rank), g[1], g[2], g[3], true)
+		else
+			GameTooltip:AddLine("최대까지 " .. (e.max - e.rank), g[1], g[2], g[3])
 		end
 	end
 	GameTooltip:Show()
@@ -461,7 +537,7 @@ function M:PickItems(sec)
 			else
 				local rank = (d.val or 0) - (d.min or 0)
 				local span = math.max(1, (d.max or 1) - (d.min or 0))
-				out[#out + 1] = { key = RepKey(d), kind = "rep", name = d.name, letter = (d.name or "?"):match("^[%z\1-\127\194-\244][\128-\191]*") or "?",
+				out[#out + 1] = { key = RepKey(d), kind = "rep", name = d.name, letter = FirstChar(d.name),
 					rgb = STANDING_RGB[d.standing or 4] or GOLD, sub = STANDING_SHORT(d.standing), rank = rank, max = span, standing = d.standing }
 			end
 		end
@@ -475,7 +551,7 @@ function M:PickItems(sec)
 	end
 	for _, s in ipairs(Skills()) do
 		if s.kind == sec then
-			out[#out + 1] = { key = s.key, kind = s.kind, name = s.name, icon = s.icon or 134400, sub = s.rank .. "/" .. s.max,
+			out[#out + 1] = { key = s.key, kind = s.kind, name = s.name, icon = s.icon, letter = FirstChar(s.name), rgb = KIND_RGB[s.kind], sub = s.rank .. "/" .. s.max,
 				rank = s.rank, max = s.max, mod = s.mod, maxed = s.rank >= s.max }
 		end
 	end
@@ -535,8 +611,7 @@ function M:ClearPicks(sec)
 	pcall(self.Update, self)
 end
 
-local PER_ROW = 12   -- 한 줄에 이만큼 넘으면 아래 줄로
-
+-- 묶음(전문기술 · 무기 · 평판) 사이엔 넓은 틈 + 가는 세로 선 · 폭이 넘치면 아래 줄로
 function M:Update()
 	local list = self.Collect and self:Collect() or {}
 	local set = {}
@@ -545,37 +620,63 @@ function M:Update()
 	local f = self.frame
 	if not f then return end
 	self.last = self.last or {}
+	f.divs = f.divs or {}
+	local maxW = PER_ROW * (ICON + GAP) - GAP
+	local x, row, right, nd, prevKind = 0, 0, 0, 0, nil
 	for i, e in ipairs(list) do
 		local b = f.chips[i] or NewChip(f)
 		f.chips[i] = b
+		if prevKind and e.kind ~= prevKind then
+			if x - GAP + GROUP_GAP + ICON > maxW then
+				x, row = 0, row + 1
+			else
+				nd = nd + 1
+				local d = f.divs[nd]
+				if not d then
+					d = f:CreateTexture(nil, "ARTWORK")
+					d:SetTexture(Ink.tex.white)
+					d:SetSize(1, ICON - 10)
+					f.divs[nd] = d
+				end
+				d:SetVertexColor(1, 1, 1, 0.12)
+				d:ClearAllPoints()
+				d:SetPoint("TOP", f, "TOPLEFT", x - GAP + GROUP_GAP / 2, -(row * (CHIP_H + ROW_GAP) + 5))
+				d:Show()
+				x = x - GAP + GROUP_GAP
+			end
+		elseif x > 0 and x + ICON > maxW then
+			x, row = 0, row + 1
+		end
 		b:ClearAllPoints()
-		local col, row = (i - 1) % PER_ROW, math.floor((i - 1) / PER_ROW)
-		b:SetPoint("TOPLEFT", col * (SIZE + GAP), -row * (SIZE + 24))
+		b:SetPoint("TOPLEFT", x, -row * (CHIP_H + ROW_GAP))
 		self:Paint(b, e)
 		b:Show()
+		right = math.max(right, x + ICON)
+		x = x + ICON + GAP
+		prevKind = e.kind
 		local prev = self.last[e.key]
 		if prev and e.rank > prev and e.kind ~= "rep" then
 			b.plus:SetText("+" .. (e.rank - prev))
 			b.pop:Stop(); b.pop:Play()
+			b.flash:Stop(); b.flash:Play()
 			b.float:Stop(); b.float:Play()
 		end
 		self.last[e.key] = e.rank
 	end
 	for i = #list + 1, #f.chips do f.chips[i]:Hide() end
-	local cols = math.min(#list, PER_ROW)
-	local rows = math.max(1, math.ceil(#list / PER_ROW))
-	f:SetWidth(math.max(SIZE, cols * (SIZE + GAP) - GAP))
-	f:SetHeight(SIZE + 14 + (rows - 1) * (SIZE + 24))
+	for i = nd + 1, #f.divs do f.divs[i]:Hide() end
+	f:SetWidth(math.max(ICON, right))
+	f:SetHeight((row + 1) * CHIP_H + row * ROW_GAP)
 end
 
 function M:Init()
 	if Ink.db.tracker == false then return end
 	local f = CreateFrame("Frame", "FOATracker", Ink.root)
-	f:SetSize(SIZE, SIZE + 14)
+	f:SetSize(ICON, CHIP_H)
 	f:SetFrameStrata("LOW")
 	f.chips = {}
 	self.frame = f
-	Ink:Movable("tracker", "현황 아이콘", f, "left", 60, 16, 300, SIZE + 14)
+	Ink:Movable("tracker", "현황 아이콘", f, "left", 60, 16, 300, CHIP_H)
 	self.recentRep = {}
 
 	-- 오리지널식 기술 목록: 접힌 묶음이 있으면 목록에 안 나와서 한 번 펼쳐 둔다 (포에버는 번호로 찾아서 필요 없음)

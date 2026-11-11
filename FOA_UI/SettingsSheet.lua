@@ -660,7 +660,7 @@ local function NewPickChip(r, parent)
 
 	function c:Set(it, maxW)
 		self.it = it
-		local isRep = it.kind == "rep"
+		local isRep = it.kind == "rep" or not it.icon   -- 평판 · 아이콘 없는 기술은 첫 글자
 		self.icon:SetShown(not isRep)
 		self.disc:SetShown(isRep)
 		self.letter:SetShown(isRep)
