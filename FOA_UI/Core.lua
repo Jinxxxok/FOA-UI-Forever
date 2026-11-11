@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.62.0"
+Ink.version = "0.63.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1245,6 +1245,10 @@ local defaults = {
 	mapEntrances = true,
 	mapFieldTrainers = true,
 	mapZoneLevel = true,
+	mmArcane = true,      -- 아케인 미니맵 (금세공 모서리 · 나침반 띠 · 아래 지역 정보)
+	mmSigil = true,       -- 미니맵 뒤 마법진
+	mmRibbon = true,      -- 미니맵 위 나침반 띠
+	mmSoftEdge = true,    -- 미니맵 가장자리 번짐
 	mapReveal = true,
 	questMinimap = true,
 	questTurnIn = true,

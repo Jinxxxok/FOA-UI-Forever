@@ -1170,7 +1170,8 @@ function M:BuildMail()
 	e:RegisterEvent("UPDATE_PENDING_MAIL")
 	e:SetScript("OnEvent", function()
 		local has = HasNewMail and HasNewMail()
-		if has and not M.hadMail then M:Ripple() end
+		-- 미니맵 우편 버튼이 같은 알림에 나타나므로 한 박자 늦게
+		if has and not M.hadMail then C_Timer.After(0.05, function() M:Ripple() end) end
 		M.hadMail = has
 	end)
 	M.hadMail = HasNewMail and HasNewMail()
@@ -1181,8 +1182,12 @@ function M:Ripple(force)
 	local h = self.mail
 	local mc = MinimapCluster
 	local icon = mc and mc.IndicatorFrame and mc.IndicatorFrame.MailFrame
+	local B = Ink.modules.Blizzard
+	local arcMail = B and B.arc and B.arc.mail
 	h:ClearAllPoints()
-	if icon and icon:IsVisible() then
+	if arcMail and arcMail:IsVisible() then
+		h:SetPoint("CENTER", arcMail, "CENTER")
+	elseif icon and icon:IsVisible() then
 		h:SetPoint("CENTER", icon, "CENTER")
 	elseif Minimap then
 		h:SetPoint("CENTER", Minimap, "TOPRIGHT", -36, -36)

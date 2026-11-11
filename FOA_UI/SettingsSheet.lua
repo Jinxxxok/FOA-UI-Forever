@@ -332,6 +332,15 @@ function M:BuildRegistry()
 				SW("hideTutorials", "튜토리얼 끄기", "노란 안내 상자 · 화살표 · 말풍선", { reload = true }),
 				SW("windows", "기본 창 · 글꼴 (실험)", "블리자드 창 껍데기와 글꼴 바꾸기", { reload = true, def = false }),
 			} },
+			{ t = "미니맵", rows = {
+				SW("mmArcane", "아케인 미니맵", "금세공 모서리 · 위 나침반 띠 · 아래 지역 이름과 레벨", { reload = true, hud = "minimap" }),
+				SW("mmSigil", "뒤에서 도는 마법진", "미니맵 뒤로 은은하게 비쳐요", { dep = "mmArcane", hud = "minimap",
+					apply = function() call("Blizzard", "ApplyArcaneOptions") end }),
+				SW("mmRibbon", "나침반 띠", "보는 방향에 맞춰 흘러요 · 길 안내 중인 곳은 금색 마름모", { dep = "mmArcane", hud = "minimap",
+					apply = function() call("Blizzard", "ApplyArcaneOptions") end }),
+				SW("mmSoftEdge", "가장자리 번짐", "지도 끝이 게임 화면에 녹아들게", { dep = "mmArcane", hud = "minimap",
+					apply = function() call("Blizzard", "ApplyArcaneOptions") end }),
+			} },
 		},
 		frames = {
 			{ t = "파티 · 레이드", rows = {

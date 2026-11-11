@@ -116,10 +116,29 @@ function M:BuildMinimap()
 	end)
 	Minimap:HookScript("OnMouseUp", function(_, btn)
 		if btn ~= "RightButton" then return end
+		if M.OpenTracking then M:OpenTracking() return end
 		local tr = mc and (mc.Tracking or mc.TrackingFrame)
 		local b = tr and (tr.Button or tr)
 		if b and b.OpenMenu then safe(b.OpenMenu, b) elseif b and b.Click then safe(b.Click, b) end
 	end)
+
+	-- 아케인 미니맵: 금세공 모서리 · 마법진 · 나침반 띠 · 아래 지역 정보 (MinimapArcane.lua)
+	if Ink.db.mmArcane ~= false and self.BuildArcane then
+		local ok, err = pcall(self.BuildArcane, self)
+		if not ok then
+			Ink:LogError("Blizzard.BuildArcane: " .. tostring(err))
+			self.arc = nil
+		end
+	end
+end
+
+-- 미니맵 모양: 네모 · 아케인이면 가장자리가 부드럽게 번지는 네모
+function M:ApplyMinimapMask()
+	local mask = 130937
+	if self.arc and Ink.db.mmSoftEdge ~= false then
+		mask = "Interface\\AddOns\\FOA_UI\\Media\\Textures\\MMMaskSoft"
+	end
+	safe(Minimap.SetMaskTexture, Minimap, mask)
 end
 
 -------------------------------------------------------------------------------
@@ -290,7 +309,8 @@ local function NewRow(parent)
 	r:RegisterForClicks("AnyUp")
 	r.hl = r:CreateTexture(nil, "BACKGROUND")
 	r.hl:SetAllPoints()
-	r.hl:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.1)
+	local acc = (parent.arc and M.ARC_GOLD) or C.accent
+	r.hl:SetColorTexture(acc[1], acc[2], acc[3], 0.1)
 	r.hl:Hide()
 	r.icon = r:CreateTexture(nil, "ARTWORK")
 	r.icon:SetSize(18, 18)
@@ -348,28 +368,37 @@ end
 function M:BuildAddonList()
 	local o = self.mmOverlay
 	-- 목록 버튼 (미니맵 오른쪽 위)
-	local b = CreateFrame("Button", "FOAAddonListButton", o)
-	b:SetSize(20, 20)
-	b:SetPoint("TOPRIGHT", -5, -3)
-	b:SetFrameLevel(o:GetFrameLevel() + 5)
-	b.bg = Ink:Round(b, "BACKGROUND", true, false)
-	b.bg:SetAllPoints()
-	b.bg:SetVertexColor(1, 1, 1, 0.06)
-	b.icon = b:CreateTexture(nil, "ARTWORK")
-	b.icon:SetTexture(Ink.icon("Menu"))
-	b.icon:SetSize(13, 13)
-	b.icon:SetPoint("CENTER")
-	b.icon:SetVertexColor(C.soft[1], C.soft[2], C.soft[3])
-	b:SetScript("OnEnter", function(self)
-		self.icon:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
-		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-		GameTooltip:SetText("애드온 목록")
-		GameTooltip:Show()
-	end)
-	b:SetScript("OnLeave", function(self)
-		if not (M.listFrame and M.listFrame:IsShown()) then self.icon:SetVertexColor(C.soft[1], C.soft[2], C.soft[3]) end
-		GameTooltip:Hide()
-	end)
+	local b
+	if self.arc and self.ArcButton then
+		-- 아케인: 금세공 모서리 안쪽의 둥근 금테 버튼
+		b = self:ArcButton(o, "Grid", 20, "FOAAddonListButton")
+		b.arc = true
+		b:SetPoint("TOPRIGHT", -6, -6)
+		b.OnTip = function(_, tt) tt:SetText("애드온 목록") end
+	else
+		b = CreateFrame("Button", "FOAAddonListButton", o)
+		b:SetSize(20, 20)
+		b:SetPoint("TOPRIGHT", -5, -3)
+		b.bg = Ink:Round(b, "BACKGROUND", true, false)
+		b.bg:SetAllPoints()
+		b.bg:SetVertexColor(1, 1, 1, 0.06)
+		b.icon = b:CreateTexture(nil, "ARTWORK")
+		b.icon:SetTexture(Ink.icon("Menu"))
+		b.icon:SetSize(13, 13)
+		b.icon:SetPoint("CENTER")
+		b.icon:SetVertexColor(C.soft[1], C.soft[2], C.soft[3])
+		b:SetScript("OnEnter", function(self)
+			self.icon:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
+			GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+			GameTooltip:SetText("애드온 목록")
+			GameTooltip:Show()
+		end)
+		b:SetScript("OnLeave", function(self)
+			if not (M.listFrame and M.listFrame:IsShown()) then self.icon:SetVertexColor(C.soft[1], C.soft[2], C.soft[3]) end
+			GameTooltip:Hide()
+		end)
+	end
+	b:SetFrameLevel(o:GetFrameLevel() + 6)
 	b:SetScript("OnClick", function() M:ToggleAddonList() end)
 	self.listButton = b
 
@@ -396,12 +425,11 @@ function M:BuildAddonList()
 	f.empty:SetPoint("TOPLEFT", 12, -60)
 	f.empty:SetText("미니맵 버튼을 쓰는 애드온이 없어요")
 	f.rows = {}
+	if self.arc and self.StyleArcaneList then self:StyleArcaneList(f) end
 	f:Hide()
 	-- ESC로 닫힘 (블리자드 창 닫기 목록에 등록) / 밖을 누르면 닫힘
 	tinsert(UISpecialFrames, "FOAAddonList")
-	f:SetScript("OnHide", function()
-		if M.listButton then M.listButton.icon:SetVertexColor(C.soft[1], C.soft[2], C.soft[3]) end
-	end)
+	f:SetScript("OnHide", function() M:ListButtonLit(false) end)
 	f:SetScript("OnUpdate", function(self)
 		if (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton"))
 			and not self:IsMouseOver() and not M.listButton:IsMouseOver() then
@@ -411,15 +439,25 @@ function M:BuildAddonList()
 	self.listFrame = f
 end
 
+-- 목록 버튼 켜짐 표시 (아케인은 금테가 빛난다)
+function M:ListButtonLit(on)
+	local b = self.listButton
+	if not b then return end
+	if b.arc then b:Lit(on) return end
+	local c = on and C.accent or C.soft
+	b.icon:SetVertexColor(c[1], c[2], c[3])
+end
+
 function M:ToggleAddonList(show)
 	local f = self.listFrame
 	if not f then return end
 	if show == nil then show = not f:IsShown() end
 	if not show then
 		f:Hide()
-		self.listButton.icon:SetVertexColor(C.soft[1], C.soft[2], C.soft[3])
+		self:ListButtonLit(false)
 		return
 	end
+	local acc = (f.arc and M.ARC_GOLD) or C.accent
 	local list = self:CollectAddonButtons()
 	for i, e in ipairs(list) do
 		local r = f.rows[i] or NewRow(f)
@@ -440,7 +478,7 @@ function M:ToggleAddonList(show)
 			r.icon:SetTexCoord(0, 1, 0, 1)
 		end
 		r.name:SetText(e.text)
-		r.name:SetTextColor(e.foa and C.accent[1] or C.text[1], e.foa and C.accent[2] or C.text[2], e.foa and C.accent[3] or C.text[3])
+		r.name:SetTextColor(e.foa and acc[1] or C.text[1], e.foa and acc[2] or C.text[2], e.foa and acc[3] or C.text[3])
 		r:Show()
 		-- 위에서부터 차례로 내려온다
 		r.anim:Stop()
@@ -454,7 +492,7 @@ function M:ToggleAddonList(show)
 	-- 첫 줄(FOA) 아래 구분선
 	if not f.sep then
 		f.sep = f:CreateTexture(nil, "ARTWORK")
-		f.sep:SetColorTexture(1, 1, 1, 0.06)
+		if f.arc then f.sep:SetColorTexture(acc[1], acc[2], acc[3], 0.14) else f.sep:SetColorTexture(1, 1, 1, 0.06) end
 		f.sep:SetHeight(1)
 	end
 	f.sep:ClearAllPoints()
@@ -465,7 +503,7 @@ function M:ToggleAddonList(show)
 	if #list <= 1 then h = h + 24 end
 	f:SetHeight(h)
 	f:Show()
-	self.listButton.icon:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
+	self:ListButtonLit(true)
 end
 
 -- 미니맵 밑에 따로 붙는 좌표 글자(다른 기능이 만든 것)를 찾아 숨긴다
@@ -487,6 +525,7 @@ function M:HideExtraCoords()
 end
 
 function M:UpdateMinimapText()
+	if self.arc then return self:UpdateArcaneText() end
 	local o = self.mmOverlay
 	o.zone:SetText(GetMinimapZoneText() or "")
 	local x, y
@@ -500,15 +539,15 @@ end
 
 function M:LayoutMinimap()
 	Ink:Fit(Minimap, self.mmAnchor, "TOPRIGHT", 200, 200)
-	safe(Minimap.SetMaskTexture, Minimap, 130937)
+	self:ApplyMinimapMask()
 	Minimap.foaSquare = true -- 네모 미니맵 (미니맵 퀘스트 표시가 테두리를 네모로 계산)
 	if Minimap.SetArchBlobRingScalar then safe(Minimap.SetArchBlobRingScalar, Minimap, 0) end
 	if Minimap.SetQuestBlobRingScalar then safe(Minimap.SetQuestBlobRingScalar, Minimap, 0) end
 	local mc = MinimapCluster
 	if mc then
-		-- 우편/제작 주문 표시는 미니맵 안 오른쪽 위, 난이도는 왼쪽 아래로
+		-- 우편/제작 주문 표시는 미니맵 안 오른쪽 위, 난이도는 왼쪽 아래로 (아케인은 LayoutArcane 이 정한다)
 		local ind = mc.IndicatorFrame
-		if ind then
+		if ind and not self.arc then
 			safe(function()
 				ind:ClearAllPoints()
 				ind:SetPoint("TOPRIGHT", self.mmAnchor, "TOPRIGHT", -24, -30)
@@ -518,9 +557,13 @@ function M:LayoutMinimap()
 		if diff then
 			safe(function()
 				diff:ClearAllPoints()
-				diff:SetPoint("BOTTOMLEFT", self.mmAnchor, "BOTTOMLEFT", 4, 26)
+				diff:SetPoint("BOTTOMLEFT", self.mmAnchor, "BOTTOMLEFT", 4, self.arc and 6 or 26)
 			end)
 		end
+	end
+	if self.arc then
+		local ok, err = pcall(self.LayoutArcane, self)
+		if not ok then Ink:LogError("Blizzard.LayoutArcane: " .. tostring(err)) end
 	end
 	self:UpdateMinimapText()
 	C_Timer.After(1, function() M:HideExtraCoords() end)
@@ -596,9 +639,11 @@ function M:BuildAnchors()
 	self.chatAnchor = Ink:Anchor(Ink:GetSize("chat", 340, 140))
 	self.bagAnchor = Ink:Anchor(180, 24)
 
-	Ink:Movable("minimap", "미니맵", self.mmAnchor, "right", 16, 16)
+	-- 아케인 미니맵은 위에 나침반 띠 · 아래에 지역 정보가 붙어서 기본 자리를 조금 내린다
+	local arc = Ink.db.mmArcane ~= false
+	Ink:Movable("minimap", "미니맵", self.mmAnchor, "right", 16, arc and 44 or 16)
 	Ink:Movable("buffs", "버프", self.buffAnchor, "right", 236, 20)
-	Ink:Movable("quest", "퀘스트 목록", self.questAnchor, "right", 60, 240)
+	Ink:Movable("quest", "퀘스트 목록", self.questAnchor, "right", 60, arc and 300 or 240)
 	local cm = Ink:Movable("chat", "채팅", self.chatAnchor, "bottomleft", 16, 48)
 	-- 편집 모드에서 아래 띠 / 모서리를 끌어 채팅창 크기 조절
 	cm.resize = function(w, h)

@@ -2,7 +2,7 @@
 ## Title: |cffFFF468FOA|r UI
 ## Notes: FOA (First of All) 통합 UI
 ## Author: hyeokjiny
-## Version: 0.62.0
+## Version: 0.63.0
 ## SavedVariables: InkUIDB
 ## SavedVariablesPerCharacter: InkUICharDB
 ## IconTexture: Interface\AddOns\FOA_UI\Media\Textures\Logo
@@ -17,6 +17,7 @@ Units.lua
 Center.lua
 Range.lua
 Blizzard.lua
+MinimapArcane.lua
 ActionBars.lua
 Score.lua
 TalentData.lua
