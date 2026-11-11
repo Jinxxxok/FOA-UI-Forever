@@ -129,6 +129,7 @@ def next_stop(qid, faction, item):
 # 던전 퀘스트
 # ---------------------------------------------------------------------------
 KIND_GIVER, KIND_TURNIN, KIND_INSIDE_NPC, KIND_INSIDE_OBJ, KIND_DROP = 0, 1, 2, 3, 4
+INSIDE_GIVER = {1142}
 out = {}
 stats = {"total": 0, "coords": 0, "npc": 0, "turnin": 0, "inside_npc": 0, "inside_obj": 0, "drop": 0, "none": 0}
 
@@ -166,6 +167,10 @@ def row(qid, qb, faction):
             kind = KIND_DROP; stats["drop"] += 1
         else:
             stats["none"] += 1
+    # 자료의 좌표가 시작 NPC 가 아니라 보고하는 NPC 자리인 퀘스트 → 던전 안 NPC 로 (안내는 DungeonQuestNotes.lua)
+    #  1142 꺼져가는 생명의 불씨: 다르나서스 69.4, 67.6 = 트레샬라(보고) · 헤랄라스는 가시덩굴 우리 안 (워크래프트 태번 포에버 공략)
+    if qid in INSIDE_GIVER:
+        mp, x, y, kind, turnin = 0, 0, 0, KIND_INSIDE_NPC, 0
     rew = []
     return [qid, int(lvl or 0), r, mp, x, y, npc, ints(qb.get("sourceQuests")), rew, ints(qb.get("c")), drop,
             1 if qb.get("repeatable") else 0, item, kind, turnin]

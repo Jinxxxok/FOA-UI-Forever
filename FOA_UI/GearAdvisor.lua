@@ -293,7 +293,9 @@ end
 -------------------------------------------------------------------------------
 -- 칸 업그레이드 창 (장비 칸 오른쪽 클릭)
 -------------------------------------------------------------------------------
-local ROWS, ROW_H, PW = 4, 42, 312
+-- 줄 높이 · 창 너비 (넉넉하게: 이름 · 획득처 · 비교 알약이 겹치지 않게)
+local ROWS, ROW_H, PW = 4, 54, 340
+local ROW_TOP = 90 -- 첫 후보 줄 시작 (창 위에서)
 
 local function Pill(parent)
 	local p = CreateFrame("Frame", nil, parent)
@@ -313,7 +315,7 @@ end
 
 local function NewRow(parent, i)
 	local r = CreateFrame("Button", nil, parent)
-	r:SetSize(PW - 20, ROW_H - 4)
+	r:SetSize(PW - 20, ROW_H - 6)
 	r:RegisterForClicks("AnyUp")
 	r.bg = Ink:Round(r, "BACKGROUND", true, false)
 	r.bg:SetAllPoints()
@@ -347,11 +349,11 @@ local function NewRow(parent, i)
 	r.sg = sg
 
 	r.iconBg = Ink:Round(r, "ARTWORK", true, false, 1)
-	r.iconBg:SetSize(30, 30)
-	r.iconBg:SetPoint("LEFT", 6, 0)
+	r.iconBg:SetSize(36, 36)
+	r.iconBg:SetPoint("LEFT", 7, 0)
 	r.iconBg:SetVertexColor(0, 0, 0, 0.6)
 	r.icon = r:CreateTexture(nil, "ARTWORK", nil, 2)
-	r.icon:SetSize(28, 28)
+	r.icon:SetSize(34, 34)
 	r.icon:SetPoint("CENTER", r.iconBg, "CENTER")
 	r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 	if r.CreateMaskTexture then
@@ -365,13 +367,13 @@ local function NewRow(parent, i)
 	r.rank = Ink:Text(r, F.latinB, 9, C.dim, "CENTER", "OVERLAY")
 	r.rank:SetPoint("BOTTOMRIGHT", r.iconBg, "BOTTOMRIGHT", 3, -3)
 	r.pill = Pill(r)
-	r.pill:SetPoint("RIGHT", -8, 0)
-	r.name = Ink:Text(r, F.semi, 12, C.text, "LEFT")
-	r.name:SetPoint("TOPLEFT", r.iconBg, "TOPRIGHT", 9, -1)
-	r.name:SetPoint("RIGHT", r.pill, "LEFT", -8, 0)
+	r.pill:SetPoint("RIGHT", -10, 0)
+	r.name = Ink:Text(r, F.semi, 13, C.text, "LEFT")
+	r.name:SetPoint("TOPLEFT", r.iconBg, "TOPRIGHT", 11, -2)
+	r.name:SetPoint("RIGHT", r.pill, "LEFT", -10, 0)
 	r.src = Ink:Text(r, F.sans, 10, C.muted, "LEFT")
-	r.src:SetPoint("BOTTOMLEFT", r.iconBg, "BOTTOMRIGHT", 9, 1)
-	r.src:SetPoint("RIGHT", r.pill, "LEFT", -8, 0)
+	r.src:SetPoint("BOTTOMLEFT", r.iconBg, "BOTTOMRIGHT", 11, 2)
+	r.src:SetPoint("RIGHT", r.pill, "LEFT", -10, 0)
 	r:SetScript("OnEnter", function(self)
 		self.bg:SetVertexColor(1, 1, 1, 0.07)
 		if self.link then
@@ -414,28 +416,28 @@ function M:BuildPopup()
 	p.accent:SetSize(22, 2)
 	p.accent:SetPoint("TOPLEFT", 14, -1)
 	-- 머리: 부위 · 지금 템 · 칸 순위
-	p.slot = Ink:Text(p, F.bold, 14, C.text, "LEFT")
-	p.slot:SetPoint("TOPLEFT", 14, -12)
+	p.slot = Ink:Text(p, F.bold, 16, C.text, "LEFT")
+	p.slot:SetPoint("TOPLEFT", 16, -16)
 	p.rankPill = Pill(p)
-	p.rankPill:SetPoint("TOPRIGHT", -12, -10)
-	p.cur = Ink:Text(p, F.sans, 10, C.muted, "LEFT")
-	p.cur:SetPoint("TOPLEFT", p.slot, "BOTTOMLEFT", 0, -4)
-	p.cur:SetPoint("RIGHT", -12, 0)
+	p.rankPill:SetPoint("TOPRIGHT", -14, -14)
+	p.cur = Ink:Text(p, F.sans, 11, C.muted, "LEFT")
+	p.cur:SetPoint("TOPLEFT", p.slot, "BOTTOMLEFT", 0, -7)
+	p.cur:SetPoint("RIGHT", -14, 0)
 	p.line1 = p:CreateTexture(nil, "ARTWORK")
 	p.line1:SetColorTexture(1, 1, 1, 0.06)
 	p.line1:SetHeight(1)
-	p.line1:SetPoint("TOPLEFT", 12, -50)
-	p.line1:SetPoint("TOPRIGHT", -12, -50)
+	p.line1:SetPoint("TOPLEFT", 14, -62)
+	p.line1:SetPoint("TOPRIGHT", -14, -62)
 	p.h1 = Ink:Text(p, F.semi, 10, C.dim, "LEFT")
-	p.h1:SetPoint("TOPLEFT", 14, -58)
+	p.h1:SetPoint("TOPLEFT", 16, -72)
 	p.rows = {}
 	for i = 1, ROWS do
 		local r = NewRow(p, i)
-		r:SetPoint("TOPLEFT", 10, -74 - (i - 1) * ROW_H)
+		r:SetPoint("TOPLEFT", 10, -ROW_TOP - (i - 1) * ROW_H)
 		p.rows[i] = r
 	end
 	p.none = Ink:Text(p, F.sans, 11, C.muted, "LEFT")
-	p.none:SetPoint("TOPLEFT", 16, -82)
+	p.none:SetPoint("TOPLEFT", 16, -ROW_TOP - 10)
 	p.none:SetWidth(PW - 32)
 	p.none:SetWordWrap(true)
 	-- 추천 마법부여
@@ -444,11 +446,13 @@ function M:BuildPopup()
 	p.line2:SetHeight(1)
 	p.h2 = Ink:Text(p, F.semi, 10, C.dim, "LEFT")
 	p.h2:SetText("추천 마법부여")
-	p.ench = Ink:Text(p, F.bold, 13, UP, "LEFT")
+	p.ench = Ink:Text(p, F.bold, 15, UP, "LEFT")
+	p.ench:SetWidth(PW - 32)
 	p.enchName = Ink:Text(p, F.latin, 10, C.dim, "LEFT")
+	p.enchName:SetWidth(PW - 32)
 	p.enchState = Pill(p)
-	p.cheap = Ink:Text(p, F.sans, 10, C.muted, "LEFT")
-	p.cheap:SetWidth(PW - 28)
+	p.cheap = Ink:Text(p, F.sans, 11, C.muted, "LEFT")
+	p.cheap:SetWidth(PW - 32)
 	-- BIS 탭으로
 	p.more = CreateFrame("Button", nil, p)
 	p.more:SetSize(140, 20)
@@ -474,13 +478,16 @@ function M:BuildPopup()
 	local fa = ag:CreateAnimation("Alpha"); fa:SetFromAlpha(0); fa:SetToAlpha(1); fa:SetDuration(0.18); fa:SetSmoothing("OUT")
 	local fs = ag:CreateAnimation("Scale"); fs:SetScaleFrom(0.97, 0.97); fs:SetScaleTo(1, 1); fs:SetDuration(0.22); fs:SetSmoothing("OUT")
 	p.ag, p.agS = ag, fs
-	-- 밖을 누르면 닫힘 · ESC
+	-- 다른 칸으로 바꿀 때: 창은 그 자리에 두고 내용만 살짝 밝아지며 바뀐다
+	local sw = p:CreateAnimationGroup()
+	local sa = sw:CreateAnimation("Alpha"); sa:SetFromAlpha(0.55); sa:SetToAlpha(1); sa:SetDuration(0.16); sa:SetSmoothing("OUT")
+	p.swap = sw
+	-- 밖을 누르면 닫힘 · ESC (다른 장비 칸을 누르는 건 "칸 바꾸기"라서 닫지 않는다)
 	tinsert(UISpecialFrames, "FOAGearPopup")
 	p:SetScript("OnUpdate", function(self)
-		if (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton")) and not self:IsMouseOver()
-			and not (self.owner and self.owner:IsMouseOver()) then
-			self:Hide()
-		end
+		if not (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton")) or self:IsMouseOver() then return end
+		for b in pairs(M.slotButtons or {}) do if b:IsMouseOver() then return end end
+		self:Hide()
 	end)
 	p:Hide()
 	self.popup = p
@@ -499,16 +506,24 @@ function M:TogglePopup(btn)
 	if not INV2EJ[inv] then return end
 	local p = self:BuildPopup()
 	if p:IsShown() and p.inv == inv then p:Hide() return end
+	local switching = p:IsShown()
 	p.inv, p.owner = inv, btn
 	self:Paint()
+	if switching then
+		-- 이미 열려 있으면 자리는 그대로, 내용만 바꾼다
+		p.swap:Stop(); p.swap:Play()
+		return
+	end
 	p:ClearAllPoints()
-	-- 캐릭터 창 바깥(오른쪽 우선, 자리가 없으면 왼쪽)에 그 칸 높이로 붙인다
-	--  (창 안쪽에 열면 장비 칸 · 능력치를 가렸다) · 오른쪽 세로 탭 · BIS 판까지 피해서
+	-- 캐릭터 창 바깥 한 곳에 고정 (오른쪽 우선, 자리가 없으면 왼쪽) · 위쪽은 캐릭터 창 위에 맞춘다
+	--  칸마다 높이를 따라 내려가면 아래 칸에서 화면 밖으로 밀리고 어수선했다
+	--  오른쪽 세로 탭 · BIS 판까지 피해서 놓는다
 	local cf = CharacterFrame
 	local ps = p:GetEffectiveScale()
 	local sw = (UIParent:GetWidth() or 1920) * UIParent:GetEffectiveScale()
 	local pw = PW * ps
-	local outR, outL = ScreenX(cf, "R"), ScreenX(cf, "L")
+	local cfR, cfL = ScreenX(cf, "R"), ScreenX(cf, "L")
+	local outR, outL = cfR, cfL
 	local d = D()
 	for _, x in ipairs({ cf and cf.ModeTabs, _G.FOABisTab, d and d.bisPanel }) do
 		if type(x) == "table" and x.IsShown and x:IsShown() then
@@ -517,17 +532,16 @@ function M:TogglePopup(btn)
 			if l and outL and l < outL then outL = l end
 		end
 	end
-	local bR, bL = ScreenX(btn, "R"), ScreenX(btn, "L")
 	local gap = 10 * ps
 	local side
-	if outR and bR and outR + gap + pw <= sw then
+	if cf and outR and outR + gap + pw <= sw then
 		side = "R"
-		p:SetPoint("TOPLEFT", btn, "TOPRIGHT", (outR - bR + gap) / ps, 6)
-	elseif outL and bL and outL - gap - pw >= 0 then
+		p:SetPoint("TOPLEFT", cf, "TOPRIGHT", (outR - cfR + gap) / ps, 0)
+	elseif cf and outL and outL - gap - pw >= 0 then
 		side = "L"
-		p:SetPoint("TOPRIGHT", btn, "TOPLEFT", -(bL - outL + gap) / ps, 6)
+		p:SetPoint("TOPRIGHT", cf, "TOPLEFT", -(cfL - outL + gap) / ps, 0)
 	else
-		-- 둘 다 자리가 없으면 칸 바로 옆
+		-- 양쪽 다 자리가 없으면 칸 바로 옆
 		local cx, mid = btn:GetCenter(), cf and cf:GetCenter()
 		side = (cx and mid and cx > mid) and "L" or "R"
 		if side == "R" then p:SetPoint("TOPLEFT", btn, "TOPRIGHT", 14, 6) else p:SetPoint("TOPRIGHT", btn, "TOPLEFT", -14, 6) end
@@ -572,7 +586,7 @@ function M:Paint()
 	local d = D()
 	p.h1:SetText((d and d.levelMode) and string.format("%d레벨 · 이 칸 최고템 순위", lvl) or "이 칸 BIS · 대체템")
 	local list = self:SlotList(ej)
-	local y = -74
+	local y = -ROW_TOP
 	local n = 0
 	for i, r in ipairs(p.rows) do
 		local e = list[i]
@@ -631,21 +645,23 @@ function M:Paint()
 		p.none:SetText((d and d.levelPending) and "아이템 정보를 받아 오는 중이에요…" or "지금 레벨에 갈 수 있는 곳에서 이 칸 템을 못 찾았어요")
 		n = 1
 	end
-	y = -74 - n * ROW_H - 6
+	y = -ROW_TOP - n * ROW_H - 8
 	-- 추천 마법부여
 	local best1, cheap = self:Recommend(inv)
 	local function place(r, x, yy) r:ClearAllPoints(); r:SetPoint("TOPLEFT", x, yy) end
 	p.line2:ClearAllPoints()
 	p.line2:SetPoint("TOPLEFT", 12, y)
 	p.line2:SetPoint("TOPRIGHT", -12, y)
-	place(p.h2, 14, y - 8)
+	place(p.h2, 16, y - 12)
+	-- 상태 알약은 "추천 마법부여" 제목 줄 오른쪽 · 효과 · 영문 이름 · 가성비는 각자 한 줄 (겹치지 않게)
+	p.enchState:ClearAllPoints()
+	p.enchState:SetPoint("TOPRIGHT", -14, y - 9)
 	if best1 then
 		local label = FxLabel(best1[3])
 		p.ench:SetText(label)
-		place(p.ench, 14, y - 24)
+		place(p.ench, 16, y - 32)
 		p.enchName:SetText("Enchant · " .. best1[1])
-		p.enchName:ClearAllPoints()
-		p.enchName:SetPoint("LEFT", p.ench, "RIGHT", 8, -1)
+		place(p.enchName, 16, y - 52)
 		-- 지금 발린 마법부여와 비교
 		local Ch = Ink.modules.Character
 		local curE
@@ -654,8 +670,6 @@ function M:Paint()
 			curE = okE and e1 or nil
 		end
 		local curShort = curE and Ch.ShortStats and Ch.ShortStats(curE) or nil
-		p.enchState:ClearAllPoints()
-		p.enchState:SetPoint("TOPRIGHT", -12, y - 22)
 		if not curLink then
 			p.enchState:Hide()
 		elseif Applied(curShort, best1[3]) then
@@ -671,24 +685,24 @@ function M:Paint()
 		if cheap then
 			local cl = FxLabel(cheap[3])
 			p.cheap:SetText("가성비  " .. cl .. "  |cff5E636B(제조법 숙련 " .. cheap[2] .. ")|r")
-			place(p.cheap, 14, y - 44)
+			place(p.cheap, 16, y - 72)
 			p.cheap:Show()
-			y = y - 64
+			y = y - 94
 		else
 			p.cheap:Hide()
-			y = y - 46
+			y = y - 72
 		end
 	else
 		p.ench:SetText(((inv == 16 or inv == 17) and not curLink) and "무기를 들면 골라 드려요" or "마법부여가 없는 칸이에요")
 		p.ench:SetTextColor(0.6, 0.62, 0.66)
-		place(p.ench, 14, y - 24)
+		place(p.ench, 16, y - 32)
 		p.enchName:Hide(); p.enchState:Hide(); p.cheap:Hide()
-		y = y - 46
+		y = y - 56
 	end
 	if best1 then p.ench:SetTextColor(UP[1], UP[2], UP[3]) end
 	p.more:ClearAllPoints()
-	p.more:SetPoint("TOPRIGHT", -14, y - 2)
-	p:SetHeight(-y + 30)
+	p.more:SetPoint("TOPRIGHT", -16, y - 4)
+	p:SetHeight(-y + 38)
 end
 
 function M:OpenBis(inv)
@@ -712,6 +726,8 @@ function M:HookSlots()
 		local b = _G["Character" .. SLOT_FRAME[inv] .. "Slot"]
 		if b and b.HookScript then
 			any = true
+			M.slotButtons = M.slotButtons or {}
+			M.slotButtons[b] = true
 			b:HookScript("OnClick", function(self, button)
 				if button == "RightButton" and not (CursorHasItem and CursorHasItem()) then M:TogglePopup(self) end
 			end)
