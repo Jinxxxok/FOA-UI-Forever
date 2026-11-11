@@ -3279,7 +3279,7 @@ function M:QuestTip(r)
 			tt:AddLine("아이템을 얻는 곳은 자료에 없어요", 0.56, 0.58, 0.61)
 		end
 	elseif q[7] > 0 then
-		tt:AddLine("시작: " .. (giver or "퀘스트 주는 NPC") .. (kind == KIND_IN_NPC and "  |cff8E939B(던전 안)|r" or ""), 1, 0.82, 0.32)
+		Ink.TipLine(tt, "시작: " .. (giver or "퀘스트 주는 NPC") .. (kind == KIND_IN_NPC and "  |cff8E939B(던전 안)|r" or ""), 1, 0.82, 0.32)
 	elseif kind == KIND_IN_OBJ then
 		tt:AddLine("시작: 던전 안 물체", 1, 0.82, 0.32)
 	elseif (q[11] or 0) ~= 0 then
@@ -3290,16 +3290,17 @@ function M:QuestTip(r)
 	if note and note[1] and note[1] > 0 and q[4] == 0 then
 		local data = self.showing and self:Scan(self.showing)
 		for _, bb in ipairs(data and data.bosses or {}) do
-			if bb.npc == note[1] then tt:AddLine("던전 화면: " .. (BossName(bb) or bb.name) .. " 근처 (경로에 느낌표)", 0.89, 0.75, 0.48) break end
+			if bb.npc == note[1] then Ink.TipLine(tt, "던전 화면: " .. (BossName(bb) or bb.name) .. " 근처 (경로에 느낌표)", 0.89, 0.75, 0.48) break end
 		end
 	end
 	if note and note[3] and q[4] == 0 then
 		local nz = ZoneName(note[3])
-		tt:AddLine("보고: " .. (note[6] or "NPC") .. ((nz and not (note[6] or ""):find(nz, 1, true)) and ("  ·  " .. nz) or "") .. string.format("  %.1f, %.1f", note[4], note[5]), 0.7, 0.72, 0.75)
+		-- 긴 설명은 줄을 나눠서 (툴팁이 옆으로 길게 늘어나 미니맵 · 퀘스트 목록을 덮지 않게)
+		Ink.TipLine(tt, "보고: " .. (note[6] or "NPC") .. ((nz and not (note[6] or ""):find(nz, 1, true)) and ("  ·  " .. nz) or "") .. string.format("  %.1f, %.1f", note[4], note[5]), 0.7, 0.72, 0.75)
 	end
 	if zone then
 		if kind == KIND_TURNIN then
-			tt:AddLine("보고: " .. (NpcOf(q[15]) or "NPC") .. "  ·  " .. zone .. string.format("  %.1f, %.1f", q[5], q[6]), 0.7, 0.72, 0.75)
+			Ink.TipLine(tt, "보고: " .. (NpcOf(q[15]) or "NPC") .. "  ·  " .. zone .. string.format("  %.1f, %.1f", q[5], q[6]), 0.7, 0.72, 0.75)
 		else
 			tt:AddLine(zone .. string.format("  %.1f, %.1f", q[5], q[6]), 0.7, 0.72, 0.75)
 		end

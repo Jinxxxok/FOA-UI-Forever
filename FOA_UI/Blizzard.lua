@@ -1941,7 +1941,13 @@ local function SkinTip(tt)
 	if tt.NineSlice then tt.NineSlice:SetAlpha(0) end
 	s.bg = Ink:Round(tt, "BACKGROUND", false, false, -8)
 	s.bg:SetAllPoints()
-	s.bg:SetVertexColor(0.035, 0.04, 0.052, 0.96)
+	-- 불투명하게: 살짝 비치면 뒤의 미니맵 · 퀘스트 목록 글자가 툴팁 글자와 겹쳐 보였다
+	s.bg:SetVertexColor(0.035, 0.04, 0.052, 1)
+	-- 둥근 판 그림의 가운데가 완전히 불투명하지 않은 해상도가 있어서, 모서리 안쪽은 단색으로 한 번 더 채운다
+	s.fill = tt:CreateTexture(nil, "BACKGROUND", nil, -8)
+	s.fill:SetColorTexture(0.035, 0.04, 0.052, 1)
+	s.fill:SetPoint("TOPLEFT", 6, -6)
+	s.fill:SetPoint("BOTTOMRIGHT", -6, 6)
 	s.border = Ink:Round(tt, "BACKGROUND", false, true, -7)
 	s.border:SetAllPoints()
 	s.accent = tt:CreateTexture(nil, "BACKGROUND", nil, -6)

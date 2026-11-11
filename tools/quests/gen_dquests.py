@@ -129,7 +129,51 @@ def next_stop(qid, faction, item):
 # 던전 퀘스트
 # ---------------------------------------------------------------------------
 KIND_GIVER, KIND_TURNIN, KIND_INSIDE_NPC, KIND_INSIDE_OBJ, KIND_DROP = 0, 1, 2, 3, 4
-INSIDE_GIVER = {1142}
+
+# ---------------------------------------------------------------------------
+# 손으로 바로잡은 값 (전 던전 대조 · 2026-11)
+#  QuestieDB 포에버 자료 · 공략(워크래프트 태번 포에버)과 대조해서 AllTheThings 자료가 틀린 것만.
+#  지도 틀(옛 좌표 → 포에버 좌표) 문제는 여기 말고 tools/maps/apply_frame_fixes.py 가 한꺼번에 고친다.
+#  필드: map x y giver kind turnin fac pre(덮어쓰기) add_pre(추가)
+# ---------------------------------------------------------------------------
+FIX = {
+    # 시작 NPC 가 던전 안인데 보고 · 다른 곳 좌표가 시작 위치로 들어가 있던 것
+    1142: dict(map=0, x=0, y=0, kind=KIND_INSIDE_NPC, turnin=0),       # 꺼져가는 생명의 불씨: 다르나서스 좌표 = 보고(트레샬라)
+    2954: dict(giver=7918, map=0, x=0, y=0, kind=KIND_INSIDE_NPC),      # 돌 감시자: 타나리스 좌표 = 보고(울둠 받침대)
+    # 시작 NPC · 자리가 다른 NPC 것으로 들어가 있던 것
+    1445: dict(map=1435, x=47.9, y=54.8),                              # 아탈학카르 신전: 펠제룰(스토나드) 자리
+    1951: dict(x=78.3, y=75.7),                                        # 의식의 힘: 마법사 티르스 (반짝이는 평원)
+    7667: dict(x=38.7, y=35.9, fac=1),                                 # 물자 지원: 사고른 크레스트스트라이더 (지혜의 골짜기) · 호드
+    7495: dict(x=80.2, y=38.4),                                        # 얼라이언스의 승리: 보고 = 볼바르 (왕궁)
+    7496: dict(x=80.2, y=38.4),                                        # 축하할 시간: 볼바르 (왕궁)
+    7492: dict(giver=10880, x=37.6, y=75.4),                           # 모자케 야영지: 전투부름꾼 고를라크 (오그리마)
+    2968: dict(giver=5770, x=75.6, y=31.6),                            # 미래의 임무: 나라 와일드메인이 줌 (진리탐구자는 보고)
+    5511: dict(giver=10837, x=83.1, y=68.9),                           # 스칼로맨스의 열쇠: 고위 집행관 데링턴
+    1490: dict(x=78.6, y=28.6),                                        # 나라 와일드메인: 대드루이드 하물 룬토템 (장로의 봉우리)
+    4742: dict(giver=10296),                                           # 승천의 인장: 바엘란
+    4743: dict(giver=10296),
+    # 진영 (직업 · 진영 전용인데 공통으로 들어가 있던 것)
+    1198: dict(fac=2), 7877: dict(fac=1), 8413: dict(fac=1), 8418: dict(fac=2),
+    7647: dict(fac=2), 7666: dict(fac=2), 8258: dict(fac=1), 1049: dict(fac=1),
+    # 선행 퀘스트 빠진 것
+    2279: dict(add_pre=[2278]), 2280: dict(add_pre=[2278]),
+    7634: dict(add_pre=[7632]), 7635: dict(add_pre=[7632]), 7636: dict(add_pre=[7632]),
+    7631: dict(add_pre=[7630]),
+    92422: dict(add_pre=[99156]), 95216: dict(add_pre=[451]),
+}
+IDX = dict(fac=2, map=3, x=4, y=5, giver=6, pre=7, kind=13, turnin=14)
+
+
+def apply_fix(r):
+    f = FIX.get(r[0])
+    if not f: return r
+    for k, v in f.items():
+        if k == "add_pre":
+            for q in v:
+                if q not in r[7]: r[7].append(q)
+        else:
+            r[IDX[k]] = list(v) if isinstance(v, list) else v
+    return r
 out = {}
 stats = {"total": 0, "coords": 0, "npc": 0, "turnin": 0, "inside_npc": 0, "inside_obj": 0, "drop": 0, "none": 0}
 
@@ -167,10 +211,6 @@ def row(qid, qb, faction):
             kind = KIND_DROP; stats["drop"] += 1
         else:
             stats["none"] += 1
-    # 자료의 좌표가 시작 NPC 가 아니라 보고하는 NPC 자리인 퀘스트 → 던전 안 NPC 로 (안내는 DungeonQuestNotes.lua)
-    #  1142 꺼져가는 생명의 불씨: 다르나서스 69.4, 67.6 = 트레샬라(보고) · 헤랄라스는 가시덩굴 우리 안 (워크래프트 태번 포에버 공략)
-    if qid in INSIDE_GIVER:
-        mp, x, y, kind, turnin = 0, 0, 0, KIND_INSIDE_NPC, 0
     rew = []
     return [qid, int(lvl or 0), r, mp, x, y, npc, ints(qb.get("sourceQuests")), rew, ints(qb.get("c")), drop,
             1 if qb.get("repeatable") else 0, item, kind, turnin]
@@ -192,7 +232,7 @@ def quests_in(node, acc):
                     if isinstance(c, tuple) and c[0] == "call":
                         if c[1] == "s" and len(c[2]) >= 2 and isinstance(c[2][1], int): r[8].append(c[2][1])
                         elif c[1] == "i" and c[2] and isinstance(c[2][0], int): r[8].append(c[2][0])
-                acc[key] = r
+                acc[key] = apply_fix(r)
             continue
         quests_in(k, acc)
 

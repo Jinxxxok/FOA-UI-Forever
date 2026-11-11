@@ -53,4 +53,5 @@ ElvUI 같은 통합 UI 와는 함께 쓰지 마세요. 네임플레이트 / 가�
 
 - 던전 보스 · 전리품, 퀘스트 · 비행 지점 자료: [AllTheThings](https://github.com/ATTWoWAddon/AllTheThings) (MIT License · `FOA_UI/LICENSE-AllTheThings.txt`)
 - 던전 한글 이름 · 권장 레벨 · 보스 순서, 직업 기술 레벨, 전문기술 빠른 레벨링 경로, 특성 레벨업 순서: [wowf.io](https://wowf.io/ko)
+- 퀘스트 시작 위치 · 진영 대조, 포에버에서 바뀐 지도 경계(스톰윈드 · 동부 역병지대 · 멀고어 · 붉은마루 산맥) 변환식: [QuestieDB](https://github.com/Questie/QuestieDB) 자료와 대조해 확인 (자료 자체는 포함하지 않음 · 고친 목록은 `tools/maps/forever_frame_fixes.json`, `tools/quests/gen_dquests.py`)
 - 아이콘: [Lucide](https://lucide.dev) (ISC License · `FOA_UI/Media/Icons/LICENSE-lucide.txt`)
