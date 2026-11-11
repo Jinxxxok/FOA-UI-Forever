@@ -1758,6 +1758,41 @@ function M:PaintZoneLevel(id)
 	f:Show()
 end
 
+-------------------------------------------------------------------------------
+-- 지도 왼쪽 위 "지도 핀" 버튼 숨김: 지역 적정 레벨 표시를 가린다
+--  (핀은 지도에서 Ctrl+클릭으로도 꽂히고, FOA 퀘스트 길 안내도 핀을 대신 꽂는다)
+-------------------------------------------------------------------------------
+local pinHidden = setmetatable({}, { __mode = "k" })
+local function IsPinButton(f)
+	local mix = _G.WorldMapTrackingPinButtonMixin
+	if mix then
+		for _, k in ipairs({ "OnClick", "OnMouseDown", "SetActive" }) do
+			if mix[k] and f[k] == mix[k] then return true end
+		end
+	end
+	local n = f.GetName and f:GetName()
+	if n and n:find("TrackingPin") then return true end
+	local icon = f.Icon or f.icon
+	local atlas = icon and icon.GetAtlas and icon:GetAtlas()
+	if type(atlas) == "string" and (atlas:find("MapPin") or atlas:find("Waypoint")) then return true end
+	return false
+end
+
+function M:HidePinButton()
+	local wm = WorldMapFrame
+	if not (wm and type(wm.overlayFrames) == "table") then return end
+	for _, f in ipairs(wm.overlayFrames) do
+		if type(f) == "table" and not pinHidden[f] and IsPinButton(f) then
+			pinHidden[f] = true
+			Ink:KeepHidden(f)
+			-- SetShown(true) 처럼 Show 를 거치지 않고 켜도 바로 다시 숨긴다
+			if f.HookScript and not (f.IsProtected and f:IsProtected()) then
+				f:HookScript("OnShow", function(self) self:Hide() end)
+			end
+		end
+	end
+end
+
 function M:Hook()
 	local wm = WorldMapFrame
 	if not wm or self.hooked or not Canvas() then return end
@@ -1769,7 +1804,11 @@ function M:Hook()
 	self.layer:SetFrameLevel(Canvas():GetFrameLevel() + 2500)
 	self:BuildBooks()
 	pcall(self.BuildZoneLevel, self)
-	wm:HookScript("OnShow", function() C_Timer.After(0, function() M:Refresh() end) end)
+	pcall(self.HidePinButton, self)
+	wm:HookScript("OnShow", function()
+		pcall(M.HidePinButton, M)
+		C_Timer.After(0, function() M:Refresh() end)
+	end)
 	if wm.OnMapChanged then hooksecurefunc(wm, "OnMapChanged", function() M:Refresh() end) end
 	if wm.OnCanvasScaleChanged then hooksecurefunc(wm, "OnCanvasScaleChanged", function() M:Refresh() end) end
 end
