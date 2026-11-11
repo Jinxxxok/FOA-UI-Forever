@@ -1,7 +1,8 @@
 -- FOA UI · 현황 아이콘 (전문기술 · 무기 숙련 · 평판을 창을 열지 않고 둥근 아이콘으로)
 --  · 전문기술 / 보조 기술 (요리 · 응급치료 · 낚시) / 자물쇠 따기: 아이콘 + 숙련 + 아래 진행 막대
---  · 무기 숙련 · 방어: 아직 다 안 올린 것만
---  · 평판: 추적 중인 평판 + 이번 접속에서 오른 평판
+--  · 무기 숙련 · 방어: 자동이면 써 본 무기 중 아직 다 안 올린 것 4개까지
+--  · 평판: 자동이면 추적 중인 평판 + 이번 접속에서 오른 평판
+--  · 설정 "일반 → 현황 아이콘 고르기" 에서 하나씩 켜고 끄기 (캐릭터별 · 고른 것이 자동보다 먼저)
 --  숙련이 오르면 아이콘이 톡 튀고 "+1" 이 떠오른다. 마우스를 올리면 자세히.
 --  위치: FOA 편집 모드 "현황 아이콘"
 
@@ -119,21 +120,123 @@ local function FactionIDByName(name)
 	end
 end
 
+-------------------------------------------------------------------------------
+-- 직접 고르기 (캐릭터별 InkUICharDB.trackerPick)
+--  [키] = 숫자(고정 · 고른 차례) / false(빼기) / 없음(자동)
+--  키: 기술 "s:이름" · 평판 "f:진영번호" (번호를 못 얻으면 "r:이름")
+-------------------------------------------------------------------------------
+local function Picks(make)
+	local c = Ink.cdb
+	if not c then return {} end
+	if make and type(c.trackerPick) ~= "table" then c.trackerPick = {} end
+	return c.trackerPick or {}
+end
+
+local function Pick(key)
+	local v = Picks()[key]
+	if v == nil then return nil end
+	return v and true or false
+end
+
+local function RepKey(f) return f.id and ("f:" .. f.id) or ("r:" .. (f.name or "?")) end
+
+local function RepEntry(f)
+	f.key = "r:" .. f.name
+	f.pick = RepKey(f)
+	f.kind = "rep"
+	f.rank = (f.val or 0) - (f.min or 0)
+	f.max = math.max(1, (f.max or 1) - (f.min or 0))
+	return f
+end
+
 local function Reps()
 	local out, seen = {}, {}
-	local w = Watched()
-	if w then out[#out + 1] = w; seen[w.name] = true end
-	for _, id in ipairs(M.recentRep or {}) do
-		local f = FactionByID(id)
-		if f and not seen[f.name] and #out < 3 then out[#out + 1] = f; seen[f.name] = true end
+	local function add(f)
+		if not f or not f.name then return end
+		local k = RepKey(f)
+		if seen[k] then return end
+		seen[k] = true
+		out[#out + 1] = RepEntry(f)
 	end
-	for _, f in ipairs(out) do
-		f.key = "r:" .. f.name
-		f.kind = "rep"
-		f.rank = (f.val or 0) - (f.min or 0)
-		f.max = math.max(1, (f.max or 1) - (f.min or 0))
+	-- 고정한 평판 먼저 (고른 차례대로)
+	local pins = {}
+	for k, v in pairs(Picks()) do
+		if type(v) == "number" then
+			local id = tonumber(k:match("^f:(%d+)$"))
+			local name = not id and k:match("^r:(.+)$")
+			if id or name then pins[#pins + 1] = { id = id, name = name, n = v } end
+		end
+	end
+	table.sort(pins, function(a, b) return a.n < b.n end)
+	for _, p in ipairs(pins) do
+		local id = p.id or FactionIDByName(p.name)
+		if id then add(FactionByID(id)) end
+	end
+	-- 자동: 추적 중 + 이번 접속에서 오른 것 (뺀 것은 건너뜀 · 자동은 3개까지)
+	if Ink.db.trackerReps ~= false then
+		local auto = {}
+		local w = Watched()
+		if w then auto[#auto + 1] = w end
+		for _, id in ipairs(M.recentRep or {}) do auto[#auto + 1] = FactionByID(id) end
+		local n = 0
+		for _, f in ipairs(auto) do
+			if f and f.name and n < 3 and Pick(RepKey(f)) == nil and not seen[RepKey(f)] then
+				add(f)
+				n = n + 1
+			end
+		end
 	end
 	return out
+end
+
+-- 평판 창의 모든 진영 (접힌 묶음은 잠깐 펼쳐 읽고 다시 접어 둔다)
+local function FactionRows()
+	local CR = C_Reputation
+	local useC = CR and CR.GetFactionDataByIndex and true or false
+	local function num()
+		if useC and CR.GetNumFactions then return CR.GetNumFactions() or 0 end
+		return GetNumFactions and GetNumFactions() or 0
+	end
+	local function info(i)
+		if useC then
+			local d = CR.GetFactionDataByIndex(i)
+			if not d then return end
+			return { name = d.name, header = d.isHeader, collapsed = d.isCollapsed, hasRep = d.isHeaderWithRep, id = d.factionID,
+				standing = d.reaction, min = d.currentReactionThreshold, max = d.nextReactionThreshold, val = d.currentStanding }
+		elseif GetFactionInfo then
+			local name, _, standing, bmin, bmax, val, _, _, isHeader, isCollapsed, hasRep, _, _, fid = GetFactionInfo(i)
+			if not name then return end
+			return { name = name, header = isHeader, collapsed = isCollapsed, hasRep = hasRep, id = fid,
+				standing = standing, min = bmin, max = bmax, val = val }
+		end
+	end
+	local expand = (useC and CR.ExpandFactionHeader) or ExpandFactionHeader
+	local collapse = (useC and CR.CollapseFactionHeader) or CollapseFactionHeader
+	local opened = {}
+	if expand then
+		local i, guard = 1, 0
+		while i <= num() and guard < 400 do
+			guard = guard + 1
+			local d = info(i)
+			if d and d.header and d.collapsed and d.name then
+				if pcall(expand, i) then opened[d.name] = true end
+			end
+			i = i + 1
+		end
+	end
+	local rows = {}
+	for i = 1, num() do
+		local d = info(i)
+		if d and d.name then rows[#rows + 1] = d end
+	end
+	-- 펼쳤던 묶음은 뒤에서부터 다시 접는다 (앞 번호가 밀리지 않게)
+	if collapse and next(opened) then
+		for i = num(), 1, -1 do
+			local d = info(i)
+			if d and d.header and not d.collapsed and opened[d.name] then pcall(collapse, i) end
+		end
+	end
+	return rows
 end
 
 -------------------------------------------------------------------------------
@@ -243,30 +346,138 @@ function M:Collect()
 	local list = {}
 	local skills = Skills()
 	for _, s in ipairs(skills) do
-		if s.kind == "prof" then list[#list + 1] = s end
+		s.pick = s.key
+		if s.kind == "prof" and Pick(s.key) ~= false then list[#list + 1] = s end
 	end
-	if Ink.db.trackerWeapons ~= false then
-		local n = 0
-		for _, s in ipairs(skills) do
-			if s.kind == "weapon" and s.rank < s.max and n < 4 then list[#list + 1] = s; n = n + 1 end
+	local autoW, n = Ink.db.trackerWeapons ~= false, 0
+	for _, s in ipairs(skills) do
+		if s.kind == "weapon" then
+			local p = Pick(s.key)
+			if p == true then
+				list[#list + 1] = s
+			elseif p == nil and autoW and s.rank > 1 and s.rank < s.max and n < 4 then   -- 1 = 한 번도 안 쓴 무기
+				list[#list + 1] = s
+				n = n + 1
+			end
 		end
 	end
-	if Ink.db.trackerReps ~= false then
-		for _, r in ipairs(Reps()) do list[#list + 1] = r end
-	end
+	for _, r in ipairs(Reps()) do list[#list + 1] = r end
 	return list
 end
 
+-- 지금 현황 아이콘에 떠 있는 것 (설정 칩 색칠용 · 바뀌면 다시 셈)
+function M:Shown()
+	if not self.shown then
+		local set = {}
+		local ok, list = pcall(self.Collect, self)
+		if ok then for _, e in ipairs(list) do set[e.pick or e.key] = true end end
+		self.shown = set
+	end
+	return self.shown
+end
+
+local STANDING_SHORT = function(st) return _G["FACTION_STANDING_LABEL" .. (st or 4)] or "" end
+
+-- 설정 칩 목록: sec = "prof" / "weapon" / "rep"
+function M:PickItems(sec)
+	local out = {}
+	if sec == "rep" then
+		for _, d in ipairs(FactionRows()) do
+			if d.header and not d.hasRep then
+				out[#out + 1] = { header = true, name = d.name }
+			else
+				local rank = (d.val or 0) - (d.min or 0)
+				local span = math.max(1, (d.max or 1) - (d.min or 0))
+				out[#out + 1] = { key = RepKey(d), kind = "rep", name = d.name, letter = (d.name or "?"):match("^[%z\1-\127\194-\244][\128-\191]*") or "?",
+					rgb = STANDING_RGB[d.standing or 4] or GOLD, sub = STANDING_SHORT(d.standing), rank = rank, max = span, standing = d.standing }
+			end
+		end
+		-- 빈 묶음 제목은 뺀다
+		local clean = {}
+		for i, it in ipairs(out) do
+			local nextIt = out[i + 1]
+			if not (it.header and (not nextIt or nextIt.header)) then clean[#clean + 1] = it end
+		end
+		return clean
+	end
+	for _, s in ipairs(Skills()) do
+		if s.kind == sec then
+			out[#out + 1] = { key = s.key, kind = s.kind, name = s.name, icon = s.icon or 134400, sub = s.rank .. "/" .. s.max,
+				rank = s.rank, max = s.max, mod = s.mod, maxed = s.rank >= s.max }
+		end
+	end
+	return out
+end
+
+-- 칩 하나의 상태: 떠 있나, 직접 고른 값 (true 고정 / false 뺌 / nil 자동)
+function M:PickState(key)
+	return self:Shown()[key] and true or false, Pick(key)
+end
+
+function M:TogglePick(key, kind)
+	local t = Picks(true)
+	if self:Shown()[key] then
+		t[key] = false
+	elseif kind == "prof" then
+		t[key] = nil
+	else
+		local top = 0
+		for _, v in pairs(t) do if type(v) == "number" and v > top then top = v end end
+		t[key] = top + 1
+	end
+	self.shown = nil
+	pcall(self.Update, self)
+end
+
+-- 기술 키 → 종류 (배운 기술 목록 · 없으면 이름표)
+local function SkillKind(key, cache)
+	if cache[key] == nil then
+		BuildIcons()
+		cache[key] = KIND[key:sub(3)] or false
+		for _, s in ipairs(cache.list or {}) do if s.key == key then cache[key] = s.kind end end
+	end
+	return cache[key]
+end
+
+local function InSec(key, sec, cache)
+	if sec == "rep" then return key:find("^f:") or key:find("^r:") end
+	return key:find("^s:") and SkillKind(key, cache) == sec
+end
+
+function M:PickChanged(sec)
+	local cache = { list = Skills() }
+	for k, v in pairs(Picks()) do
+		if v ~= nil and InSec(k, sec, cache) then return true end
+	end
+	return false
+end
+
+function M:ClearPicks(sec)
+	local t = Picks()
+	local cache = { list = Skills() }
+	local drop = {}
+	for k in pairs(t) do if InSec(k, sec, cache) then drop[#drop + 1] = k end end
+	for _, k in ipairs(drop) do t[k] = nil end
+	self.shown = nil
+	pcall(self.Update, self)
+end
+
+local PER_ROW = 12   -- 한 줄에 이만큼 넘으면 아래 줄로
+
 function M:Update()
+	local list = self.Collect and self:Collect() or {}
+	local set = {}
+	for _, e in ipairs(list) do set[e.pick or e.key] = true end
+	self.shown = set
 	local f = self.frame
 	if not f then return end
-	local list = self.Collect and self:Collect() or {}
 	self.last = self.last or {}
 	for i, e in ipairs(list) do
 		local b = f.chips[i] or NewChip(f)
 		f.chips[i] = b
 		b:ClearAllPoints()
-		b:SetPoint("TOPLEFT", (i - 1) * (SIZE + GAP), 0)
+		local col, row = (i - 1) % PER_ROW, math.floor((i - 1) / PER_ROW)
+		b:SetPoint("TOPLEFT", col * (SIZE + GAP), -row * (SIZE + 24))
 		self:Paint(b, e)
 		b:Show()
 		local prev = self.last[e.key]
@@ -278,7 +489,10 @@ function M:Update()
 		self.last[e.key] = e.rank
 	end
 	for i = #list + 1, #f.chips do f.chips[i]:Hide() end
-	f:SetWidth(math.max(SIZE, #list * (SIZE + GAP) - GAP))
+	local cols = math.min(#list, PER_ROW)
+	local rows = math.max(1, math.ceil(#list / PER_ROW))
+	f:SetWidth(math.max(SIZE, cols * (SIZE + GAP) - GAP))
+	f:SetHeight(SIZE + 14 + (rows - 1) * (SIZE + 24))
 end
 
 function M:Init()

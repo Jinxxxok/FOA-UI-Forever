@@ -274,6 +274,23 @@ local CATS = {
 }
 M.CATS = CATS
 
+-- 현황 아이콘 고르기 줄 (칩 목록 · 캐릭터별로 저장)
+local function TR(fn, ...)
+	local t = Ink.modules.Tracker
+	if not (t and t[fn]) then return end
+	local ok, a, b = pcall(t[fn], t, ...)
+	if ok then return a, b end
+end
+
+local function Picks(id, sec, label, desc, empty)
+	return { kind = "picks", id = id, label = label, desc = desc, empty = empty, dep = "tracker", hud = "tracker",
+		items = function() return TR("PickItems", sec) or {} end,
+		state = function(it) return TR("PickState", it.key) end,
+		toggle = function(it) TR("TogglePick", it.key, it.kind) end,
+		changed = function() return TR("PickChanged", sec) end,
+		set = function() TR("ClearPicks", sec) end }
+end
+
 local function SW(key, label, desc, o)
 	o = o or {}
 	o.kind, o.key, o.label, o.desc = "switch", key, label, desc
@@ -334,8 +351,13 @@ function M:BuildRegistry()
 			} },
 			{ t = "현황 아이콘", rows = {
 				SW("tracker", "현황 아이콘", "전문기술 · 무기 숙련 · 평판을 둥근 아이콘으로 · 오르면 톡 튀어요", { reload = true, hud = "tracker" }),
-				SW("trackerWeapons", "무기 숙련 · 방어", "아직 다 안 올린 것만", { dep = "tracker", apply = function() call("Tracker", "Update") end }),
-				SW("trackerReps", "평판", "추적 중인 평판 + 이번 접속에서 오른 평판", { dep = "tracker", apply = function() call("Tracker", "Update") end }),
+				SW("trackerWeapons", "무기 숙련 자동", "써 본 무기 중 아직 다 안 올린 것 4개까지 알아서", { dep = "tracker", hud = "tracker", apply = function() call("Tracker", "Update") end }),
+				SW("trackerReps", "평판 자동", "추적 중인 평판 + 이번 접속에서 오른 평판", { dep = "tracker", hud = "tracker", apply = function() call("Tracker", "Update") end }),
+			} },
+			{ t = "현황 아이콘 고르기", rows = {
+				Picks("trackerPickProf", "prof", "전문기술", "누르면 켜고 끄기", "배운 전문기술이 없어요"),
+				Picks("trackerPickWeapon", "weapon", "무기 숙련 · 방어", "누르면 고정 · 한 번 더 누르면 빼기", "무기 숙련이 없어요"),
+				Picks("trackerPickRep", "rep", "평판", "고른 평판은 늘 보여요 · 노란 점 = 고정", "아직 만난 진영이 없어요"),
 			} },
 			{ t = "미니맵", rows = {
 				SW("mmArcane", "아케인 미니맵", "금세공 모서리 · 위 나침반 띠 · 아래 지역 이름과 레벨", { reload = true, hud = "minimap" }),
@@ -549,6 +571,7 @@ end
 
 local function Changed(e)
 	if e.kind == "action" then return false end
+	if e.kind == "picks" then return e.changed and e.changed() and true or false end
 	return Get(e) ~= e.def
 end
 
@@ -599,6 +622,154 @@ end
 local function Child(r, w)
 	w:HookScript("OnEnter", function() RowEnter(r) end)
 	w:HookScript("OnLeave", function() RowLeave(r) end)
+end
+
+-- 고르기 칩 (현황 아이콘 고르기): 아이콘/글자 + 이름 + 작은 값 · 켜지면 노랗게
+local PICK_H = 30
+local function NewPickChip(r, parent)
+	local c = CreateFrame("Button", nil, parent)
+	c:SetHeight(PICK_H)
+	c:RegisterForClicks("LeftButtonUp")
+	c.bg = Pill(c, "BACKGROUND", 2, PICK_H)
+	c.icon = c:CreateTexture(nil, "ARTWORK")
+	c.icon:SetSize(18, 18)
+	c.icon:SetPoint("LEFT", 7, 0)
+	c.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	if c.CreateMaskTexture and c.icon.AddMaskTexture and Ink.tex and Ink.tex.mask then
+		c.mask = c:CreateMaskTexture()
+		c.mask:SetTexture(Ink.tex.mask, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+		c.mask:SetAllPoints(c.icon)
+		c.icon:AddMaskTexture(c.mask)
+	end
+	c.disc = c:CreateTexture(nil, "ARTWORK")
+	c.disc:SetTexture(DISC)
+	c.disc:SetTexCoord(K, 1 - K, K, 1 - K)
+	c.disc:SetSize(18, 18)
+	c.disc:SetPoint("LEFT", 7, 0)
+	c.letter = Ink:Text(c, F.bold, 10, C.text, "CENTER")
+	c.letter:SetPoint("CENTER", c.disc, "CENTER", 0, 0)
+	c.text = Ink:Text(c, F.semi, 13, C.soft, "LEFT")
+	c.text:SetPoint("LEFT", 32, 0)
+	c.text:SetWordWrap(false)
+	c.sub = Ink:Text(c, F.numR, 11, C.muted, "LEFT")
+	c.pin = c:CreateTexture(nil, "OVERLAY")
+	c.pin:SetTexture(DISC)
+	c.pin:SetSize(5, 5)
+	c.pin:SetPoint("TOPRIGHT", -7, -6)
+	c.pin:Hide()
+
+	function c:Set(it, maxW)
+		self.it = it
+		local isRep = it.kind == "rep"
+		self.icon:SetShown(not isRep)
+		self.disc:SetShown(isRep)
+		self.letter:SetShown(isRep)
+		if isRep then
+			local q = it.rgb or C.accent
+			self.disc:SetVertexColor(q[1], q[2], q[3], 0.22)
+			self.letter:SetText(it.letter or "?")
+			self.letter:SetTextColor(q[1], q[2], q[3])
+		else
+			self.icon:SetTexture(it.icon or 134400)
+		end
+		self.text:SetWidth(0)
+		self.text:SetText(it.name or "?")
+		self.sub:SetText(it.sub or "")
+		local nw = math.ceil(self.text:GetStringWidth() or 0)
+		local sw = (it.sub and it.sub ~= "") and math.ceil(self.sub:GetStringWidth() or 0) or 0
+		local fixed = 32 + (sw > 0 and (7 + sw) or 0) + 14
+		if maxW and nw + fixed > maxW then nw = math.max(30, maxW - fixed) end
+		self.text:SetWidth(nw)
+		self.sub:ClearAllPoints()
+		self.sub:SetPoint("LEFT", self.text, "RIGHT", 7, 0)
+		self.sub:SetShown(sw > 0)
+		self:SetWidth(nw + fixed)
+	end
+
+	function c:Paint(animate)
+		local it = self.it
+		if not it then return end
+		local e = r.e
+		local on, pick = false, nil
+		if e.state then on, pick = e.state(it) end
+		local ok = DepOK(e)
+		local a, hot = C.accent, self.hot and ok
+		local to = on and 1 or 0
+		local from = self.p or to
+		local function paint(p)
+			self.p = p
+			self.bg:Color(lerp(1, a[1], p), lerp(1, a[2], p), lerp(1, a[3], p), lerp(hot and 0.09 or 0.05, hot and 0.24 or 0.17, p))
+			local tc = on and a or (hot and C.text or C.soft)
+			self.text:SetTextColor(tc[1], tc[2], tc[3])
+			self.sub:SetTextColor(on and a[1] * 0.8 or C.muted[1], on and a[2] * 0.8 or C.muted[2], on and a[3] * 0.8 or C.muted[3])
+			self.icon:SetDesaturated(p < 0.5)
+			self.icon:SetAlpha(lerp(0.45, 1, p))
+			self.disc:SetAlpha(lerp(0.5, 1, p))
+			self.letter:SetAlpha(lerp(0.55, 1, p))
+		end
+		if animate and from ~= to then
+			Tween(self, "on", 0.24, E.out, function(p) paint(lerp(from, to, p)) end, function() paint(to) end)
+		else
+			Cancel(self, "on")
+			paint(to)
+		end
+		-- 직접 고정한 칩엔 작은 노란 점
+		self.pin:SetVertexColor(a[1], a[2], a[3])
+		self.pin:SetShown(pick == true and it.kind ~= "prof")
+	end
+
+	c:SetScript("OnEnter", function(self)
+		self.hot = true
+		self:Paint()
+		RowEnter(r)
+		local it, e = self.it, r.e
+		if not it then return end
+		local on, pick = false, nil
+		if e.state then on, pick = e.state(it) end
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:AddLine(it.name or "?", 1, 1, 1)
+		if it.kind == "rep" then
+			local q = it.rgb or C.accent
+			GameTooltip:AddDoubleLine(it.sub or "", (it.rank or 0) .. " / " .. (it.max or 0), q[1], q[2], q[3], 1, 1, 1)
+		else
+			GameTooltip:AddDoubleLine(it.kind == "weapon" and "무기 숙련" or "숙련", (it.rank or 0) .. " / " .. (it.max or 0), 0.7, 0.72, 0.75, 1, 1, 1)
+		end
+		local g = { 0.56, 0.58, 0.61 }
+		local line
+		if not DepOK(e) then
+			line, g = "현황 아이콘을 켜야 쓸 수 있어요", C.orange
+		elseif on and pick == true then
+			line = "고정했어요 · 누르면 빼요"
+		elseif on then
+			line = it.kind == "prof" and "보여 주는 중 · 누르면 빼요"
+				or (it.kind == "weapon" and "자동으로 보여 주는 중 (아직 덜 올림) · 누르면 빼요"
+				or "자동으로 보여 주는 중 (추적 · 방금 오름) · 누르면 빼요")
+		elseif pick == false then
+			line = "뺐어요 · 누르면 다시 보여요"
+		elseif it.kind == "weapon" then
+			line = it.maxed and "다 올려서 자동에선 숨겨요 · 누르면 고정해요"
+				or ((it.rank or 0) <= 1 and "아직 안 써 본 무기라 자동에선 숨겨요 · 누르면 고정해요" or "자동 칸(4개)이 찼어요 · 누르면 고정해요")
+		else
+			line = "누르면 고정해요"
+		end
+		GameTooltip:AddLine(line, g[1], g[2], g[3], true)
+		GameTooltip:Show()
+	end)
+	c:SetScript("OnLeave", function(self)
+		self.hot = nil
+		self:Paint()
+		GameTooltip:Hide()
+		RowLeave(r)
+	end)
+	c:SetScript("OnClick", function(self)
+		local e = r.e
+		if not DepOK(e) or not self.it or not e.toggle then return end
+		e.toggle(self.it)
+		Sound()
+		M:Changed(e)
+		if self:IsMouseOver() then self:GetScript("OnEnter")(self) end
+	end)
+	return c
 end
 
 -- 프레임 메타테이블은 건드리지 않고 Row 함수들을 프레임 테이블에 직접 붙인다
@@ -789,6 +960,21 @@ local function NewRow(parent, e)
 		Child(r, b)
 		r.act = b
 		r.ctrl = b
+	elseif e.kind == "picks" then
+		r.pk = CreateFrame("Frame", nil, r.c)
+		r.pk.chips, r.pk.heads = {}, {}
+		r.pk.empty = Ink:Text(r.pk, F.sans, 13, C.muted, "LEFT")
+		r.pk.empty:SetPoint("TOPLEFT", 2, -4)
+		local b = Btn(r.c, "자동으로", "text", nil, function()
+			if not DepOK(e) then return end
+			Set(e, nil)
+			Sound()
+			M:Changed(e)
+		end)
+		b:SetHeight(28)
+		Child(r, b)
+		r.act = b
+		r.ctrl = b
 	end
 
 	r:SetScript("OnEnter", RowEnter)
@@ -828,6 +1014,14 @@ function Row:Layout(gw)
 		self.ctrl:ClearAllPoints()
 		self.ctrl:SetPoint("TOPLEFT", self, "TOPLEFT", 12, -(lineH - 4))
 		h = lineH + 36 + 10
+	elseif e.kind == "picks" then
+		self.ctrl:ClearAllPoints()
+		self.ctrl:SetPoint("RIGHT", self, "TOPRIGHT", -12, cy)
+		local ph = self:LayoutPicks(cw)
+		self.pk:ClearAllPoints()
+		self.pk:SetPoint("TOPLEFT", self, "TOPLEFT", 12, -(lineH - 2))
+		self.pk:SetSize(cw, ph)
+		h = lineH + ph + 14
 	elseif e.kind == "slider" then
 		self.val:ClearAllPoints()
 		self.val:SetPoint("RIGHT", self, "TOPRIGHT", -12, cy)
@@ -838,6 +1032,64 @@ function Row:Layout(gw)
 	end
 	self.h = h
 	return h
+end
+
+-- 칩을 폭 cw 안에서 줄바꿈하며 놓고 높이를 돌려준다 (열 때마다 지금 캐릭터 자료로 다시)
+function Row:LayoutPicks(cw)
+	local e, pk = self.e, self.pk
+	local ok, items = pcall(e.items or function() return {} end)
+	if not ok or type(items) ~= "table" then items = {} end
+	for _, c in ipairs(pk.chips) do c:Hide(); c.it = nil end
+	for _, t in ipairs(pk.heads) do t:Hide() end
+	local GX, GY = 6, 6
+	local x, y, ci, hi, open = 0, 0, 0, 0, false
+	for _, it in ipairs(items) do
+		if it.header then
+			if open then y = y + PICK_H + GY; x = 0; open = false end
+			hi = hi + 1
+			local t = pk.heads[hi]
+			if not t then
+				t = Ink:Text(pk, F.semi, 12, C.muted, "LEFT")
+				pk.heads[hi] = t
+			end
+			if hi > 1 or ci > 0 then y = y + 6 end
+			t:SetText(it.name or "")
+			t:ClearAllPoints()
+			t:SetPoint("TOPLEFT", pk, "TOPLEFT", 4, -y)
+			t:Show()
+			y = y + 22
+		else
+			ci = ci + 1
+			local c = pk.chips[ci]
+			if not c then
+				c = NewPickChip(self, pk)
+				pk.chips[ci] = c
+			end
+			c:Set(it, cw)
+			local w = c:GetWidth()
+			if open and x + w > cw then x = 0; y = y + PICK_H + GY end
+			c:ClearAllPoints()
+			c:SetPoint("TOPLEFT", pk, "TOPLEFT", x, -y)
+			c:Show()
+			x = x + w + GX
+			open = true
+		end
+	end
+	if open then y = y + PICK_H end
+	pk.empty:SetShown(ci == 0)
+	if ci == 0 then
+		pk.empty:SetText(e.empty or "아직 없어요")
+		y = math.max(y, 24)
+	end
+	self:PaintPicks(false)
+	return y
+end
+
+function Row:PaintPicks(animate)
+	for _, c in ipairs(self.pk.chips) do
+		if c:IsShown() and c.it then c:Paint(animate) end
+	end
+	if self.act then self.act:SetShown(Changed(self.e)) end
 end
 
 function Row:PaintSwitch(p)
@@ -945,6 +1197,8 @@ function Row:Refresh(animate)
 		self:PaintCycle(animate)
 	elseif e.kind == "slider" then
 		self:PaintSlider()
+	elseif e.kind == "picks" then
+		self:PaintPicks(animate)
 	end
 	-- 기본값과 다르면 노란 점 (나타날 때 톡)
 	local ch = Changed(e)
@@ -1001,6 +1255,14 @@ function M:Changed(e, quiet)
 	for _, d in ipairs(self.entries) do
 		if d.dep == e.id or d.dep == e.key then
 			for _, r in ipairs(self:RowsFor(d.id)) do r:Refresh(false) end
+		end
+	end
+	-- 현황 아이콘 설정이 바뀌면 고르기 칩 색도 다시 (자동으로 뜨는 것이 달라짐)
+	if e.id and tostring(e.id):find("^tracker") then
+		for _, d in ipairs(self.entries) do
+			if d.kind == "picks" and d ~= e then
+				for _, r in ipairs(self:RowsFor(d.id)) do r:Refresh(true) end
+			end
 		end
 	end
 	self:PaintFooter()
