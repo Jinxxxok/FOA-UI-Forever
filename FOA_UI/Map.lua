@@ -90,7 +90,8 @@ local CITY = {
 		p185 = { 51, 52 }, p129 = { 30, 22 }, p356 = { 56, 47 }, p202 = { 36, 59 },
 		c11 = { 77.6, 29.0 }, c3 = { 57.6, 88.6 }, c8 = { 22.6, 15.8 }, c5 = { 25.8, 22.0 }, c7 = { 22.8, 19.4 }, c1 = { 57.8, 85.4 } },
 	-- 다르나서스: 직업 상급자 (와우헤드 불성 클래식 다르나서스 상급자 안내 · 같은 자리) / 전문기술 상급자 (장인의 정원 등)
-	[1457] = { bank = { 40.0, 42.0 }, auction = { 55.0, 58.5 }, inn = { 62.5, 29.8 }, mail = { 44.9, 47.7 }, flight = { 36.6, 44.8 },
+	-- 다르나서스 안에는 비행 조련사가 없다 (나무 밑 루테란 마을) → 비행 대신 차원문 표시 (아래 PORTALS)
+	[1457] = { bank = { 40.0, 42.0 }, auction = { 55.0, 58.5 }, inn = { 62.5, 29.8 }, mail = { 44.9, 47.7 },
 		p171 = { 54.9, 24.0 }, p165 = { 64.4, 21.5 }, p393 = { 64.1, 22.3 }, p333 = { 58.4, 13.1 }, p197 = { 63.8, 22.1 }, p182 = { 47.9, 68.0 },
 		p129 = { 54.5, 23.4 }, p185 = { 49.0, 21.2 }, p356 = { 47.9, 56.7 }, p164 = { 57.0, 50.0 },
 		c11 = { 34.8, 7.4 }, c3 = { 40.4, 8.6 }, c5 = { 39.5, 81.2 }, c4 = { 37.0, 21.9 }, c1 = { 58.7, 34.9 } },
@@ -258,6 +259,49 @@ local PORTS = {
 	{ map = 1434, x = 31.6, y = 29.1, fac = 1, zep = true, title = "그롬골 비행선 탑", to = { "오그리마 (듀로타)", "언더시티 (티리스팔 숲)" } },
 }
 M.PORTS = PORTS
+
+-- 차원문 (도시 ↔ 아래 마을) · 진영 2 = 얼라
+--  다르나서스: 비행 조련사 · 배는 나무 밑 루테란 마을에 있고, 도시 서쪽 분홍 차원문으로 오르내린다
+--  자리는 대략 값으로 시작해서, 한 번 타면 탄 자리로 바뀐다 (Ink.db.portalSpots)
+local PORTAL_RGB = Ink.hex("F08BD6")
+local NO_FLIGHT_CITY = { [1457] = true }
+local PORTALS = {
+	{ map = 1457, x = 30.9, y = 41.4, to = 1438, fac = 2, title = "루테란 마을 차원문", short = "차원문 · 비행",
+		sub = "나무 밑 루테란 마을로 순간이동\n→ 비행 조련사 (히포그리프)\n→ 아우버다인행 배",
+		note = "다르나서스 안에는 비행 조련사가 없어요 · 이 차원문으로 내려가세요",
+		arrive = function(x, y) return y > 0.8 end },
+	{ map = 1438, x = 55.9, y = 89.7, to = 1457, fac = 2, title = "다르나서스 차원문", short = "차원문 · 다르나서스",
+		sub = "나무 위 다르나서스로 순간이동",
+		leave = function(x, y) return y > 0.8 end },
+}
+M.PORTALS = PORTALS
+
+-- 차원문 자리 배우기: 0.5초마다 위치를 적어 두다가 지도가 다르나서스 ↔ 텔드랏실로 순간 바뀌면 바로 전 자리를 차원문으로
+function M:WatchPortals()
+	if self.portalTicker then return end
+	local watch = {}
+	for _, pt in ipairs(PORTALS) do watch[pt.map] = true end
+	local last
+	self.portalTicker = C_Timer.NewTicker(0.5, function()
+		local m = C_Map.GetBestMapForUnit("player")
+		if not (m and watch[m]) then last = nil return end
+		local pos = C_Map.GetPlayerMapPosition(m, "player")
+		local x, y = pos and pos:GetXY()
+		if not x then return end
+		local now = GetTime()
+		if last and last.m ~= m and now - last.t < 2 then
+			for _, pt in ipairs(PORTALS) do
+				if pt.map == last.m and pt.to == m
+					and (not pt.arrive or pt.arrive(x, y)) and (not pt.leave or pt.leave(last.x, last.y))
+					and math.abs(last.x * 100 - pt.x) < 10 and math.abs(last.y * 100 - pt.y) < 10 then
+					Ink.db.portalSpots = Ink.db.portalSpots or {}
+					Ink.db.portalSpots[pt.map] = { math.floor(last.x * 1000 + 0.5) / 1000, math.floor(last.y * 1000 + 0.5) / 1000 }
+				end
+			end
+		end
+		last = { m = m, x = x, y = y, t = now }
+	end)
+end
 local FLIGHT_OFF = { 0.55, 0.57, 0.60 }
 
 function M:CityPin(i)
@@ -328,7 +372,7 @@ end
 -- kind: "svc" / "prof" / "cls" / "flight"
 local function StylePin(p, kind, key, off)
 	local a = p.art
-	local size = (kind == "svc" or kind == "boat") and 26 or 22
+	local size = (kind == "svc" or kind == "boat" or kind == "portal") and 26 or 22
 	p:SetSize(size, size); a:SetSize(size, size)
 	a.icon:RemoveMaskTexture(a.mask)
 	a.icon:SetTexCoord(0, 1, 0, 1)
@@ -350,6 +394,17 @@ local function StylePin(p, kind, key, off)
 			a.pill:SetWidth(a.pill.t:GetStringWidth() + 12)
 			a.pill:Show()
 		end
+	elseif kind == "portal" then
+		-- 차원문: 분홍 반짝임 + 행선지 글자
+		col = PORTAL_RGB
+		a.icon:SetTexture(Ink.icon("Sparkles"))
+		a.icon:SetSize(size * 0.58, size * 0.58)
+		a.icon:SetVertexColor(col[1], col[2], col[3])
+		a.pill.t:SetText(key or "")
+		a.pill.t:SetTextColor(col[1], col[2], col[3])
+		a.pill:SetWidth(a.pill.t:GetStringWidth() + 12)
+		a.pill:Show()
+		off = nil
 	elseif kind == "boat" then
 		-- 배 · 비행선: 아이콘 + 행선지 글자
 		col = BOAT_RGB
@@ -379,7 +434,7 @@ local function StylePin(p, kind, key, off)
 		a.icon:SetVertexColor(1, 1, 1)
 	end
 	a.ring:SetVertexColor(col[1], col[2], col[3], off and 0.5 or 1)
-	a.glow:SetVertexColor(col[1], col[2], col[3], off and 0 or ((kind == "svc" or kind == "flight" or kind == "boat") and 0.26 or 0.14))
+	a.glow:SetVertexColor(col[1], col[2], col[3], off and 0 or ((kind == "svc" or kind == "flight" or kind == "boat" or kind == "portal") and 0.26 or 0.14))
 	p.tipR, p.tipG, p.tipB = col[1], col[2], col[3]
 end
 
@@ -514,6 +569,7 @@ function M:Refresh()
 				or sp.sub:find("^대가 ") or sp.sub:find("^장인 ") or sp.sub:find("상급자") or sp.sub:find("지도자"))
 			if sp.role == "trainer" or (ranked and TrainerKey(sp.sub)) then k = TrainerKey(sp.sub)
 			elseif KEY_ROLE[sp.role] then k = sp.role end
+			if k == "flight" and NO_FLIGHT_CITY[mapID] then k = nil end
 			if k then
 				local cur = pick[k]
 				local q = sp.d or 0   -- 0 = 말을 걸어 본 자리, 1 · 2 = 지나가며 본 자리 (작을수록 정확)
@@ -601,6 +657,22 @@ function M:Refresh()
 					local lines = {}
 					for _, d in ipairs(b.to) do lines[#lines + 1] = "→ " .. d end
 					put(x, y, "boat", short, b.title, table.concat(lines, "\n"), b.note)
+				end
+			end
+		end
+	end
+	-- 4) 차원문 (비행 묶음으로 켜고 끈다 · 다르나서스는 비행 조련사 대신 이것)
+	if mapID and cat.flight ~= false and not wide then
+		local fac = UnitFactionGroup("player")
+		local facN = fac == "Horde" and 1 or (fac == "Alliance" and 2 or 0)
+		for _, pt in ipairs(PORTALS) do
+			if pt.fac == 0 or pt.fac == facN then
+				local sp = Ink.db.portalSpots and Ink.db.portalSpots[pt.map]
+				local x, y = ToMap(pt.map, sp and sp[1] or pt.x / 100, sp and sp[2] or pt.y / 100, mapID)
+				if x then
+					local note = pt.note
+					if not sp then note = (note and (note .. "\n") or "") .. "대략적인 자리 · 한 번 타면 정확한 자리로 바뀌어요" end
+					put(x, y, "portal", pt.short, pt.title, pt.sub, note)
 				end
 			end
 		end
@@ -1821,6 +1893,7 @@ function M:Init()
 	for _, ev in ipairs({ "GOSSIP_SHOW", "ADDON_LOADED", "TAXI_NODE_STATUS_CHANGED", "BAG_UPDATE_DELAYED", "QUEST_TURNED_IN", "DYNAMIC_GOSSIP_POI_UPDATED",
 		"UI_INFO_MESSAGE", "CHAT_MSG_SYSTEM", "UPDATE_MOUSEOVER_UNIT", "PLAYER_TARGET_CHANGED", "SKILL_LINES_CHANGED" }) do pcall(e.RegisterEvent, e, ev) end
 	C_Timer.NewTicker(2, function() Ink.Prof("지도 상급자 배우기", M.ScanPlates, M) end)
+	pcall(self.WatchPortals, self)
 	C_Timer.After(5, function() pcall(M.ScanBagsForBooks, M, "bags") end)
 	e:SetScript("OnEvent", function(_, event, a1, a2)
 		-- "새 비행 경로를 발견했습니다!" → 서 있는 곳의 비행 지점을 가 본 곳으로

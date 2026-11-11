@@ -452,17 +452,28 @@ function M:BuildPopup()
 	-- BIS 탭으로
 	p.more = CreateFrame("Button", nil, p)
 	p.more:SetSize(140, 20)
+	-- 화살표는 글꼴 기호(›) 대신 FOA 아이콘 (한글 글꼴에 › 가 없어서 네모로 깨졌다)
+	p.more.chev = p.more:CreateTexture(nil, "ARTWORK")
+	p.more.chev:SetTexture(Ink.icon("Chevron"))
+	p.more.chev:SetSize(10, 10)
+	p.more.chev:SetPoint("RIGHT", 0, 0)
+	p.more.chev:SetRotation(math.rad(90))
+	p.more.chev:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
 	p.more.text = Ink:Text(p.more, F.semi, 10, C.accent, "RIGHT")
-	p.more.text:SetPoint("RIGHT", 0, 0)
-	p.more.text:SetText("BIS 탭에서 자세히  ›")
+	p.more.text:SetPoint("RIGHT", p.more.chev, "LEFT", -3, 0)
+	p.more.text:SetText("BIS 탭에서 자세히")
 	p.more:SetScript("OnClick", function() M:OpenBis(p.inv) end)
-	p.more:SetScript("OnEnter", function(self) self.text:SetTextColor(1, 1, 1) end)
-	p.more:SetScript("OnLeave", function(self) self.text:SetTextColor(C.accent[1], C.accent[2], C.accent[3]) end)
-	-- 열릴 때: 살짝 미끄러지며 나타난다
+	p.more:SetScript("OnEnter", function(self) self.text:SetTextColor(1, 1, 1); self.chev:SetVertexColor(1, 1, 1) end)
+	p.more:SetScript("OnLeave", function(self)
+		self.text:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
+		self.chev:SetVertexColor(C.accent[1], C.accent[2], C.accent[3])
+	end)
+	-- 열릴 때: 제자리에서 부드럽게 (투명 → 선명 + 아주 살짝 커지며 자리잡기)
+	--  위치 이동 애니메이션은 끝나는 순간 원래 자리로 "툭" 돌아가서 튕기는 느낌이 났다 → 크기 · 투명도만
 	local ag = p:CreateAnimationGroup()
-	local fa = ag:CreateAnimation("Alpha"); fa:SetFromAlpha(0); fa:SetToAlpha(1); fa:SetDuration(0.16)
-	local ft = ag:CreateAnimation("Translation"); ft:SetOffset(0, 0); ft:SetDuration(0.18); ft:SetSmoothing("OUT")
-	p.ag, p.agT = ag, ft
+	local fa = ag:CreateAnimation("Alpha"); fa:SetFromAlpha(0); fa:SetToAlpha(1); fa:SetDuration(0.18); fa:SetSmoothing("OUT")
+	local fs = ag:CreateAnimation("Scale"); fs:SetScaleFrom(0.97, 0.97); fs:SetScaleTo(1, 1); fs:SetDuration(0.22); fs:SetSmoothing("OUT")
+	p.ag, p.agS = ag, fs
 	-- 밖을 누르면 닫힘 · ESC
 	tinsert(UISpecialFrames, "FOAGearPopup")
 	p:SetScript("OnUpdate", function(self)
@@ -476,6 +487,12 @@ function M:BuildPopup()
 	return p
 end
 
+-- 화면 기준 가로 위치 (틀마다 배율이 달라서 실제 화면 픽셀로 비교)
+local function ScreenX(f, edge)
+	local v = f and (edge == "L" and f:GetLeft() or f:GetRight())
+	return v and v * f:GetEffectiveScale() or nil
+end
+
 function M:TogglePopup(btn)
 	if Ink.db.gearPopup == false or not btn then return end
 	local inv = btn:GetID()
@@ -483,15 +500,39 @@ function M:TogglePopup(btn)
 	local p = self:BuildPopup()
 	if p:IsShown() and p.inv == inv then p:Hide() return end
 	p.inv, p.owner = inv, btn
-	p:ClearAllPoints()
-	-- 왼쪽 줄 칸이면 오른쪽으로, 오른쪽 줄이면 왼쪽으로
-	local cx = btn:GetCenter()
-	local cf = CharacterFrame
-	local mid = cf and cf:GetCenter()
-	local right = not (cx and mid and cx > mid)
-	if right then p:SetPoint("TOPLEFT", btn, "TOPRIGHT", 14, 6) else p:SetPoint("TOPRIGHT", btn, "TOPLEFT", -14, 6) end
-	p.agT:SetOffset(right and -10 or 10, 0)
 	self:Paint()
+	p:ClearAllPoints()
+	-- 캐릭터 창 바깥(오른쪽 우선, 자리가 없으면 왼쪽)에 그 칸 높이로 붙인다
+	--  (창 안쪽에 열면 장비 칸 · 능력치를 가렸다) · 오른쪽 세로 탭 · BIS 판까지 피해서
+	local cf = CharacterFrame
+	local ps = p:GetEffectiveScale()
+	local sw = (UIParent:GetWidth() or 1920) * UIParent:GetEffectiveScale()
+	local pw = PW * ps
+	local outR, outL = ScreenX(cf, "R"), ScreenX(cf, "L")
+	local d = D()
+	for _, x in ipairs({ cf and cf.ModeTabs, _G.FOABisTab, d and d.bisPanel }) do
+		if type(x) == "table" and x.IsShown and x:IsShown() then
+			local r, l = ScreenX(x, "R"), ScreenX(x, "L")
+			if r and outR and r > outR then outR = r end
+			if l and outL and l < outL then outL = l end
+		end
+	end
+	local bR, bL = ScreenX(btn, "R"), ScreenX(btn, "L")
+	local gap = 10 * ps
+	local side
+	if outR and bR and outR + gap + pw <= sw then
+		side = "R"
+		p:SetPoint("TOPLEFT", btn, "TOPRIGHT", (outR - bR + gap) / ps, 6)
+	elseif outL and bL and outL - gap - pw >= 0 then
+		side = "L"
+		p:SetPoint("TOPRIGHT", btn, "TOPLEFT", -(bL - outL + gap) / ps, 6)
+	else
+		-- 둘 다 자리가 없으면 칸 바로 옆
+		local cx, mid = btn:GetCenter(), cf and cf:GetCenter()
+		side = (cx and mid and cx > mid) and "L" or "R"
+		if side == "R" then p:SetPoint("TOPLEFT", btn, "TOPRIGHT", 14, 6) else p:SetPoint("TOPRIGHT", btn, "TOPLEFT", -14, 6) end
+	end
+	p.agS:SetOrigin(side == "R" and "LEFT" or "RIGHT", 0, 0)
 	p:Show()
 	p.ag:Stop(); p.ag:Play()
 end

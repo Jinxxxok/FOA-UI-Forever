@@ -743,11 +743,65 @@ function M:Skin()
 	end)
 end
 
+-- 캐릭터 창 옮기기: 위쪽 제목 줄을 끌면 옮겨지고, 다음에 열 때도 그 자리 · 제목 줄 오른쪽 클릭 = 원래 자리
+--  (블리자드 창 관리자가 왼쪽 기본 자리에 다시 붙이면 바로 내 자리로 되돌린다 · 지도 창과 같은 방식)
+function M:MakeMovable()
+	local f = CharacterFrame
+	if not f or self.moveHandle then return end
+	f:SetMovable(true)
+	f:SetClampedToScreen(true)
+	local h = CreateFrame("Frame", nil, f)
+	h:SetPoint("TOPLEFT", f, "TOPLEFT", 50, 0)
+	h:SetPoint("TOPRIGHT", f, "TOPRIGHT", -34, 0)
+	h:SetHeight(26)
+	h:SetFrameLevel(f:GetFrameLevel() + 40)
+	h:EnableMouse(true)
+	h:RegisterForDrag("LeftButton")
+	local busy
+	local function place()
+		local pos = Ink.db.charPos
+		if busy or not pos or (f:IsProtected() and InCombatLockdown()) then return end
+		busy = true
+		local sc = f:GetScale() or 1
+		f:ClearAllPoints()
+		f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pos[1] / sc, pos[2] / sc)
+		busy = false
+	end
+	h:SetScript("OnDragStart", function()
+		if f:IsProtected() and InCombatLockdown() then return end
+		f:StartMoving()
+	end)
+	h:SetScript("OnDragStop", function()
+		f:StopMovingOrSizing()
+		local l, t = f:GetLeft(), f:GetTop()
+		local sc = f:GetScale() or 1
+		if l and t then Ink.db.charPos = { l * sc, t * sc } end
+		place()
+	end)
+	h:SetScript("OnMouseUp", function(_, button)
+		if button ~= "RightButton" or not Ink.db.charPos then return end
+		-- 블리자드 창 관리자를 애드온이 부르면 오염될 수 있어서, 기억만 지우고 다음에 열 때 원래 자리로
+		Ink.db.charPos = nil
+		print("|cffFFF468FOA|r 캐릭터 창 위치를 지웠어요 · 다시 열면 원래 자리로 돌아가요")
+	end)
+	h:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:AddLine("끌어서 캐릭터 창 옮기기", 1, 1, 1)
+		if Ink.db.charPos then GameTooltip:AddLine("오른쪽 클릭: 원래 자리로 (다시 열면 적용)", 0.56, 0.58, 0.61) end
+		GameTooltip:Show()
+	end)
+	h:SetScript("OnLeave", GameTooltip_Hide)
+	hooksecurefunc(f, "SetPoint", function() if not busy and f:IsShown() then place() end end)
+	f:HookScript("OnShow", function() place(); C_Timer.After(0, place) end)
+	self.moveHandle = h
+end
+
 -- 장비 도우미(GearAdvisor)가 지금 발린 마법부여를 읽을 때 쓴다
 M.ScanSlot = ScanSlot
 M.ShortStats = ShortStats
 
 function M:Init()
+	if CharacterFrame then pcall(self.MakeMovable, self) end
 	if Ink.db.charSheet == false then return end
 	local e = CreateFrame("Frame")
 	e:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
@@ -758,6 +812,7 @@ function M:Init()
 	e:SetScript("OnEvent", function(_, event)
 		if event == "ADDON_LOADED" then
 			if CharacterFrame and not S[CharacterFrame] then M:Skin() end
+			if CharacterFrame and not M.moveHandle then pcall(M.MakeMovable, M) end
 			return
 		end
 		if CharacterFrame and CharacterFrame:IsShown() then
