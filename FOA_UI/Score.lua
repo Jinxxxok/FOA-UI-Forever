@@ -897,8 +897,18 @@ local function Line(tt, r)
 		if r.old and r.old > 0 and not r.empty then sc = sc .. string.format(" |cff5E636B(지금 %d)|r", math.floor(r.old + 0.5)) end
 		sc = sc .. "  "
 	end
+	-- 칸 순위: 이 칸에서 몇 점짜리인지 (지금 레벨 최고템 = 100 · 장비 도우미)
+	local rk = ""
+	if r.slotRank then
+		if r.slotRank >= 100 then
+			rk = "|cffFFD24D칸 최고|r  "
+		else
+			local c = (r.slotRank >= 80 and "6FD39A") or (r.slotRank >= 60 and "DCE0E6") or "D9776B"
+			rk = string.format("|cff%s칸 %d|r|cff5E636B/100|r  ", c, r.slotRank)
+		end
+	end
 	-- 한 줄로 붙여서 (오른쪽 정렬이면 툴팁이 넓을 때 가운데가 크게 빈다)
-	tt:AddLine(txt .. "   " .. sc .. string.format("|cff5E636B%s|r", right or ""))
+	tt:AddLine(txt .. "   " .. sc .. rk .. string.format("|cff5E636B%s|r", right or ""))
 end
 
 function M:HookTooltip()
@@ -919,7 +929,10 @@ function M:OnTooltip(tt)
 		if not link then return end
 		for s = 1, 19 do if Equipped(s) == link then return end end
 		local r = M:Compare(link)
-		if r then Line(tt, r) end
+		if r then
+			r.slotRank = FOREVER and ns.GearSlotRank and ns.GearSlotRank(link) or nil
+			Line(tt, r)
+		end
 		-- 아직 안 배운 무기 종류: 무기 전문가에게 배우면 쓸 수 있다
 		if ReadTooltip(link).skill then
 			tt:AddLine("|cffE3C07A무기 전문가에게 배우면 쓸 수 있어요|r |cff8E939B· P(주문책) 옆 목록에서 위치|r")

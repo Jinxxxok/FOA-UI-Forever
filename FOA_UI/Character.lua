@@ -743,6 +743,10 @@ function M:Skin()
 	end)
 end
 
+-- 장비 도우미(GearAdvisor)가 지금 발린 마법부여를 읽을 때 쓴다
+M.ScanSlot = ScanSlot
+M.ShortStats = ShortStats
+
 function M:Init()
 	if Ink.db.charSheet == false then return end
 	local e = CreateFrame("Frame")

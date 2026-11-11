@@ -439,6 +439,11 @@ function M:BuildRegistry()
 						if ns.Score and ns.Score.Invalidate then pcall(ns.Score.Invalidate, ns.Score) end
 					end },
 			} },
+			{ t = "장비 도우미", rows = {
+				SW("gearPopup", "칸 업그레이드 창", "캐릭터 창 장비 칸을 오른쪽 클릭 · 지금 레벨 후보 순위 · 내 특성 추천 마법부여"),
+				SW("gearSlotRank", "툴팁에 칸 순위", "그 칸에서 몇 점짜리인지 · 지금 레벨 최고템 = 100"),
+				SW("gearToast", "최고 장비 획득 알림", "칸 1순위 템이나 착용보다 15% 넘게 좋은 템을 얻으면 화면 위에 알림 · 누르면 캐릭터 창"),
+			} },
 		},
 		grow = {
 			{ t = "포에버 안내", rows = {

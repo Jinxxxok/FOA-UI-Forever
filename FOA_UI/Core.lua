@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.64.0"
+Ink.version = "0.65.0"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1241,6 +1241,9 @@ local defaults = {
 	tracker = true,       -- 현황 아이콘 (전문기술 · 무기 숙련 · 평판)
 	unitPortrait = false, -- 플레이어 · 대상 초상화 (기본 끔)
 	bossSound = true,     -- 보스 시전 경고 소리
+	gearPopup = true,     -- 장비 칸 오른쪽 클릭: 업그레이드 후보 · 추천 마법부여
+	gearSlotRank = true,  -- 아이템 툴팁에 칸 순위 (지금 레벨 최고템 = 100)
+	gearToast = true,     -- 최고 장비 · 큰 업그레이드 획득 알림
 	trackerWeapons = true,
 	trackerReps = true,
 	combatHide = true,
