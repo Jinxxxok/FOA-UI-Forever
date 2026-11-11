@@ -154,7 +154,7 @@ local function SortItems(a, b)
 	if a.classID ~= b.classID then return (a.classID or 99) < (b.classID or 99) end
 	if a.subID ~= b.subID then return (a.subID or 99) < (b.subID or 99) end
 	if a.itemID ~= b.itemID then return a.itemID < b.itemID end
-	if a.count ~= b.count then return a.count > b.count end
+	-- 같은 아이템끼리는 가방 자리 순서 그대로 (개수로 줄 세우면 물약 하나만 써도 두 묶음이 자리를 바꿨다)
 	if a.bag ~= b.bag then return a.bag < b.bag end
 	return a.slot < b.slot
 end
@@ -329,7 +329,7 @@ local function Paint(h)
 	SetCount(b, info.stackCount)
 	SetItemButtonDesaturated(b, info.isLocked)
 
-	local q = info.quality or 1
+	local q = Quality(info)
 	local quest = C_Container.GetContainerItemQuestInfo and C_Container.GetContainerItemQuestInfo(bag, slot)
 	local qn = NeedOf(info.itemName or C_Item.GetItemInfo(info.itemID))
 	if (quest and (quest.isQuestItem or quest.questID)) or qn then
@@ -790,7 +790,27 @@ local function SubLabel(f, i)
 	return l
 end
 
+-- 등급: 아이템 정보가 아직 안 받아진 순간엔 등급이 비어 오는데, 그때 "일반"으로 보면
+--  회색 잡동사니가 다른 분류로 갔다가 정보가 오면 돌아오며 칸이 출렁인다 → 마지막으로 본 등급을 기억해 쓴다
+local qcache = {}
+local function Quality(info)
+	local q = plain(info.quality)
+	if type(q) == "number" and q >= 0 then
+		qcache[info.itemID] = q
+		return q
+	end
+	q = qcache[info.itemID]
+	if q then return q end
+	if C_Item.GetItemQualityByID then
+		local ok, v = pcall(C_Item.GetItemQualityByID, info.itemID)
+		if ok and type(v) == "number" and v >= 0 then qcache[info.itemID] = v; return v end
+	end
+	M.missingQ = true   -- 정보가 오면(GET_ITEM_INFO_RECEIVED) 한 번 더 정리
+	return 1
+end
+
 local function Gather()
+	M.missingQ = nil
 	local byCat = {}
 	for _, c in ipairs(CATS) do byCat[c.key] = {} end
 	local firstFree, free, total = nil, 0, 0
@@ -802,7 +822,7 @@ local function Gather()
 			if info and info.itemID then
 				local _, _, _, _, _, classID, subID = C_Item.GetItemInfoInstant(info.itemID)
 				local it = {
-					bag = bag, slot = slot, itemID = info.itemID, quality = info.quality or 1,
+					bag = bag, slot = slot, itemID = info.itemID, quality = Quality(info),
 					count = info.stackCount or 1, classID = classID, subID = subID,
 				}
 				it.cat = Category(info.itemID, it.quality, bag)
@@ -962,11 +982,13 @@ function M:Refresh()
 end
 
 -- 지연 갱신 (가방 이벤트는 한 번에 여러 개 온다)
-function M:Schedule()
-	if self.pending then return end
-	self.pending = true
-	C_Timer.After(0.05, function()
-		self.pending = nil
+--  가방 변화가 잠잠해진 뒤 한 번만 다시 배치한다 (이벤트가 올 때마다 기다림을 새로 시작)
+--  예전엔 첫 이벤트 0.05초 뒤에 바로 배치해서, 가방 사이로 옮기는 도중(한쪽에서 빠지고 아직 안 들어온 순간)을
+--  그려 칸이 한 번 밀렸다가 돌아오곤 했다
+function M:Schedule(delay)
+	if self.pendingTimer then self.pendingTimer:Cancel() end
+	self.pendingTimer = C_Timer.NewTimer(delay or 0.15, function()
+		self.pendingTimer = nil
 		self:Refresh()
 	end)
 end
@@ -1127,7 +1149,8 @@ function M:Init()
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({ "BAG_CONTAINER_UPDATE", "BAG_UPDATE_DELAYED", "BAG_UPDATE", "ITEM_LOCK_CHANGED", "BAG_UPDATE_COOLDOWN",
 		"INVENTORY_SEARCH_UPDATE", "BAG_NEW_ITEMS_UPDATED", "PLAYER_MONEY", "PLAYER_REGEN_ENABLED",
-		"QUEST_ACCEPTED", "UNIT_QUEST_LOG_CHANGED", "PLAYER_EQUIPMENT_CHANGED", "QUEST_LOG_UPDATE", "QUEST_REMOVED", "QUEST_TURNED_IN" }) do
+		"QUEST_ACCEPTED", "UNIT_QUEST_LOG_CHANGED", "PLAYER_EQUIPMENT_CHANGED", "QUEST_LOG_UPDATE", "QUEST_REMOVED", "QUEST_TURNED_IN",
+		"GET_ITEM_INFO_RECEIVED" }) do
 		pcall(e.RegisterEvent, e, ev)
 	end
 	e:SetScript("OnEvent", function(_, event)
@@ -1152,7 +1175,17 @@ function M:Init()
 			M:UpdateBagBar()
 			if event == "BAG_CONTAINER_UPDATE" then M:Schedule() return end
 		end
-		if event == "BAG_UPDATE" or event == "BAG_UPDATE_DELAYED" then
+		if event == "GET_ITEM_INFO_RECEIVED" then
+			-- 등급을 몰라 임시로 놓은 아이템이 있을 때만
+			if M.missingQ then M:Schedule(0.3) end
+			return
+		end
+		if event == "BAG_UPDATE" then
+			-- 한 묶음의 가방 변화 도중: 모양(개수 · 쿨다운)만 바로, 자리는 BAG_UPDATE_DELAYED 뒤에
+			M:Paint()
+			return
+		end
+		if event == "BAG_UPDATE_DELAYED" then
 			M:Schedule()
 			-- 정리 중이면 가방 변화가 잠잠해진 뒤 완료 표시
 			if M.sortState == "busy" and event == "BAG_UPDATE_DELAYED" then
