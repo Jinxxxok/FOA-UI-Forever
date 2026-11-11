@@ -458,7 +458,27 @@ function M:FallbackOn()
 	return not self.blizzActive
 end
 
-function M:OnBossCast(unit, channel)
+-- 보스 타이머를 만들 수 있는지 조사: 포에버가 전투 중 보스 기술 번호 · 이름을 감추는지 조용히 기록 (Ink.db.bossProbe)
+--  감추지 않으면 → 기술별 사용 간격을 배워서 "다음 패턴까지 N초" 막대를 만들 수 있다
+function M:Probe(unit, spellID, name)
+	local p = Ink.db.bossProbe
+	if type(p) ~= "table" or p.v ~= 1 then
+		p = { v = 1, plainID = 0, secretID = 0, plainName = 0, secretName = 0, list = {} }
+		Ink.db.bossProbe = p
+	end
+	local isSecret = issecretvalue or function() return false end
+	local sidS, nameS = isSecret(spellID), isSecret(name)
+	if sidS then p.secretID = p.secretID + 1 else p.plainID = p.plainID + 1 end
+	if nameS then p.secretName = p.secretName + 1 else p.plainName = p.plainName + 1 end
+	if #p.list >= 300 then return end
+	local okB, bn = pcall(UnitName, unit)
+	if not okB or isSecret(bn) or type(bn) ~= "string" then bn = "?" end
+	local zone = GetRealZoneText and GetRealZoneText() or ""
+	p.list[#p.list + 1] = string.format("%s|%s|%.1f|%s|%s|%s|%s", date("%m-%d %H:%M:%S"), zone,
+		GetTime() - (self.pullAt or GetTime()), bn, sidS and "S" or tostring(spellID), nameS and "S" or tostring(name), unit)
+end
+
+function M:OnBossCast(unit, channel, spellID)
 	if not self:FallbackOn() or not self:IsBossUnit(unit) then return end
 	local now = GetTime()
 	if now - (self.lastCastAt or 0) < 0.3 then return end -- 같은 시전이 boss1 · 대상 · 이름표로 겹쳐 오는 것
@@ -472,6 +492,7 @@ function M:OnBossCast(unit, channel)
 	end
 	if not ok then return end
 	if not (issecretvalue and issecretvalue(name)) and name == nil then return end
+	pcall(self.Probe, self, unit, spellID, name)
 	local dur = 3
 	pcall(function()
 		local d = (endMS - startMS) / 1000
@@ -496,16 +517,19 @@ end
 function M:InitFallback(e)
 	for _, ev in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START", "RAID_BOSS_EMOTE",
 		"CHAT_MSG_RAID_BOSS_EMOTE", "ENCOUNTER_START", "ENCOUNTER_END", "ENCOUNTER_WARNING",
-		"ENCOUNTER_TIMELINE_EVENT_ADDED", "PLAYER_ENTERING_WORLD", "NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED" }) do
+		"ENCOUNTER_TIMELINE_EVENT_ADDED", "PLAYER_ENTERING_WORLD", "NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED",
+		"PLAYER_REGEN_DISABLED" }) do
 		pcall(e.RegisterEvent, e, ev)
 	end
 end
 
-function M:FallbackEvent(event, a1, a2)
+function M:FallbackEvent(event, a1, a2, a3)
 	if event == "UNIT_SPELLCAST_START" then
-		self:OnBossCast(a1, false)
+		self:OnBossCast(a1, false, a3)
 	elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
-		self:OnBossCast(a1, true)
+		self:OnBossCast(a1, true, a3)
+	elseif event == "PLAYER_REGEN_DISABLED" then
+		self.pullAt = GetTime()
 	elseif event == "RAID_BOSS_EMOTE" or event == "CHAT_MSG_RAID_BOSS_EMOTE" then
 		local now = GetTime()
 		if now - (self.lastEmoteAt or 0) < 0.5 then return end -- 두 알림이 같이 온다
@@ -515,6 +539,7 @@ function M:FallbackEvent(event, a1, a2)
 		self.blizzActive = true
 	elseif event == "ENCOUNTER_START" then
 		self.blizzActive = nil
+		self.pullAt = GetTime()
 		if self:FallbackOn() and type(a2) == "string" then
 			self:ShowWarning({ duration = 2.5, noIcon = true, tag = "보스 전투 시작" }, a2)
 		end
@@ -540,7 +565,7 @@ function M:Init()
 		self:BuildWarnings()
 		local e = CreateFrame("Frame")
 		self:InitFallback(e)
-		e:SetScript("OnEvent", function(_, event, a1, a2) pcall(M.FallbackEvent, M, event, a1, a2) end)
+		e:SetScript("OnEvent", function(_, event, a1, a2, a3) pcall(M.FallbackEvent, M, event, a1, a2, a3) end)
 		e:SetScript("OnUpdate", function() M:TickWarnings() end)
 		return
 	end
@@ -560,9 +585,9 @@ function M:Init()
 		pcall(e.RegisterEvent, e, ev)
 	end
 	self:InitFallback(e)
-	e:SetScript("OnEvent", function(_, event, a1, a2)
-		pcall(M.FallbackEvent, M, event, a1, a2)
-		if event:find("^UNIT_SPELLCAST") or event:find("BOSS_EMOTE") then return end
+	e:SetScript("OnEvent", function(_, event, a1, a2, a3)
+		pcall(M.FallbackEvent, M, event, a1, a2, a3)
+		if event:find("^UNIT_SPELLCAST") or event:find("BOSS_EMOTE") or event == "PLAYER_REGEN_DISABLED" then return end
 		if event == "ENCOUNTER_WARNING" then
 			pcall(M.OnWarning, M, a1)
 		elseif event == "PLAYER_ENTERING_WORLD" or event == "ENCOUNTER_TIMELINE_VIEW_ACTIVATED" then

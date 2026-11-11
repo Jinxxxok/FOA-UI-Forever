@@ -1270,6 +1270,14 @@ function M:SkinChat()
 	for _, n in ipairs({ "ChatFrameMenuButton", "ChatFrameChannelButton", "QuickJoinToastButton", "ChatFrameToggleVoiceDeafenButton", "ChatFrameToggleVoiceMuteButton", "TextToSpeechButton", "ChatAlertFrame" }) do
 		if _G[n] and n ~= "ChatAlertFrame" then Ink:KeepHidden(_G[n]) end
 	end
+	-- 채팅 위 알림(게임 이용 시간 알림 · 친구 접속 등)은 원래 채팅 왼쪽 버튼 줄에 붙어 있는데
+	--  FOA 는 그 버튼 줄을 숨기고 채팅을 화면 왼쪽 끝에 붙여서 알림이 화면 밖으로 반쯤 잘렸다 → 채팅 판 왼쪽 끝에 맞춘다
+	if ChatAlertFrame and ChatFrame1 then
+		safe(function()
+			ChatAlertFrame:ClearAllPoints()
+			ChatAlertFrame:SetPoint("BOTTOMLEFT", ChatFrame1, "TOPLEFT", -10, 30)
+		end)
+	end
 	for i = 1, (NUM_CHAT_WINDOWS or 10) do SkinChatFrame(_G["ChatFrame" .. i]) end
 	if not self.chatHooked then
 		self.chatHooked = true
