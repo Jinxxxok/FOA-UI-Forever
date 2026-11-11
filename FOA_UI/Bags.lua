@@ -51,6 +51,25 @@ local function PinOrder(itemID)
 	return Pins()[itemID]
 end
 
+-- 등급: 아이템 정보가 아직 안 받아진 순간엔 등급이 비어 오는데, 그때 "일반"으로 보면
+--  회색 잡동사니가 다른 분류로 갔다가 정보가 오면 돌아오며 칸이 출렁인다 → 마지막으로 본 등급을 기억해 쓴다
+local qcache = {}
+local function Quality(info)
+	local q = plain(info.quality)
+	if type(q) == "number" and q >= 0 then
+		qcache[info.itemID] = q
+		return q
+	end
+	q = qcache[info.itemID]
+	if q then return q end
+	if C_Item.GetItemQualityByID then
+		local ok, v = pcall(C_Item.GetItemQualityByID, info.itemID)
+		if ok and type(v) == "number" and v >= 0 then qcache[info.itemID] = v; return v end
+	end
+	M.missingQ = true   -- 정보가 오면(GET_ITEM_INFO_RECEIVED) 한 번 더 정리
+	return 1
+end
+
 -------------------------------------------------------------------------------
 -- 분류
 -------------------------------------------------------------------------------
@@ -788,25 +807,6 @@ local function SubLabel(f, i)
 	l.count:SetPoint("LEFT", l.text, "RIGHT", 5, 0)
 	f.subs[i] = l
 	return l
-end
-
--- 등급: 아이템 정보가 아직 안 받아진 순간엔 등급이 비어 오는데, 그때 "일반"으로 보면
---  회색 잡동사니가 다른 분류로 갔다가 정보가 오면 돌아오며 칸이 출렁인다 → 마지막으로 본 등급을 기억해 쓴다
-local qcache = {}
-local function Quality(info)
-	local q = plain(info.quality)
-	if type(q) == "number" and q >= 0 then
-		qcache[info.itemID] = q
-		return q
-	end
-	q = qcache[info.itemID]
-	if q then return q end
-	if C_Item.GetItemQualityByID then
-		local ok, v = pcall(C_Item.GetItemQualityByID, info.itemID)
-		if ok and type(v) == "number" and v >= 0 then qcache[info.itemID] = v; return v end
-	end
-	M.missingQ = true   -- 정보가 오면(GET_ITEM_INFO_RECEIVED) 한 번 더 정리
-	return 1
 end
 
 local function Gather()
