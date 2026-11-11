@@ -1607,7 +1607,7 @@ function M:ToggleMenu()
 	local f = self.sidebar
 	if not (f and f.menu) then return end
 	if f.menu:IsShown() then f.menu:Hide() return end
-	self:PaintMenu()
+	self:PaintMenu(true)
 	f.menu:Show()
 end
 
@@ -1637,7 +1637,8 @@ local function MenuRow(body)
 	return r
 end
 
-function M:PaintMenu()
+-- toSel: 처음 펼칠 때만 고른 던전 쪽으로 스크롤 (열어 둔 채 다시 그릴 때는 보던 자리 그대로)
+function M:PaintMenu(toSel)
 	local f = self.sidebar
 	local m = f and f.menu
 	if not m then return end
@@ -1711,11 +1712,13 @@ function M:PaintMenu()
 			y = y + 4
 		end
 	end
+	-- 열려 있는 동안 아이템 · 퀘스트 갱신으로 다시 그려도 스크롤이 고른 던전으로 튀지 않게 지금 자리를 지킨다
+	local keep = m.sf:GetVerticalScroll() or 0
 	m.body:SetHeight(y + 4)
-	-- 고른 던전이 보이게
 	C_Timer.After(0, function()
 		local range = m.sf:GetVerticalScrollRange() or 0
-		m.sf:SetVerticalScroll(math.max(0, math.min(range, (selY or 0) - 80)))
+		local want = toSel and ((selY or 0) - 80) or keep
+		m.sf:SetVerticalScroll(math.max(0, math.min(range, want)))
 	end)
 end
 
