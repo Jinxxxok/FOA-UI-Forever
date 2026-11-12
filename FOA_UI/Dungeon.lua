@@ -2044,6 +2044,8 @@ function M:PaintRoute(route, data, W, hidden)
 		h = y + 18
 	end
 	route:SetHeight(math.max(1, h))
+	-- 큰 던전 화면의 경로 틀은 왼쪽 위 한 점에만 붙어 있어 폭이 0 이었다 → 지도 없는 던전에서 경로가 안 보임
+	if route.big then route:SetWidth(math.max(1, W)) end
 	return h
 end
 
@@ -2455,7 +2457,7 @@ function M:BuildBoard()
 	b.hint = Ink:Text(b, F.sans, 10, C.dim, "LEFT")
 	b.hint:SetPoint("BOTTOMLEFT", 28, 20)
 	b.hint:SetText("보스를 누르면 오른쪽 목록이 그 보스로 · 잡으면 자동으로 체크 · 처치 기록은 오른쪽 위 \"보스 n\" 줄을 오른쪽 클릭해서 지우기")
-	b:SetScript("OnHide", function() M.boardOn = nil end)
+	b:SetScript("OnHide", function() M.boardOn = nil; if M.FadeWorldMap then M.FadeWorldMap(false) end end)
 	self.board = b
 end
 
@@ -2844,6 +2846,30 @@ function M:BuildBoardMap(b)
 	return mf
 end
 
+-- 던전 화면을 펴 두는 동안 뒤의 세계 지도는 투명하게:
+--  지도 창(왼쪽 정렬)과 던전 화면(가운데)이 자리가 달라 지도 가장자리가 옆으로 삐져나와 보였다.
+--  지도 창은 애드온 코드로 닫지 않는다(오염) → 투명도만. 움직이면 지도를 흐리게 하는 블리자드 기능이
+--  투명도를 다시 올려도 던전 화면이 떠 있는 동안은 0으로 되돌린다.
+local wmFaded, wmAlphaHook, wmFading
+local function FadeWorldMap(on)
+	local wm = WorldMapFrame
+	if not wm then return end
+	if on and not wmAlphaHook then
+		wmAlphaHook = true
+		hooksecurefunc(wm, "SetAlpha", function(self, a)
+			if wmFaded and not wmFading and a and a > 0 then
+				wmFading = true; self:SetAlpha(0); wmFading = nil
+			end
+		end)
+	end
+	if on == wmFaded then return end
+	wmFaded = on
+	wmFading = true
+	pcall(wm.SetAlpha, wm, on and 0 or 1)
+	wmFading = nil
+end
+M.FadeWorldMap = FadeWorldMap
+
 function M:ShowBoard(key)
 	if not self.board then self:BuildBoard() end
 	if not self.sidebar then self:BuildSidebar() end
@@ -2852,6 +2878,7 @@ function M:ShowBoard(key)
 	self.showing = key
 	self:SizeBoard()
 	b:Show()
+	FadeWorldMap(true)
 	f:ClearAllPoints()
 	f:SetFrameStrata("DIALOG")
 	f:SetFrameLevel(b:GetFrameLevel() + 10)
@@ -2881,6 +2908,7 @@ end
 function M:HideBoard()
 	self.boardOn = nil
 	if self.board then self.board:Hide() end
+	FadeWorldMap(false)
 	if self.sidebar then self.sidebar:SetFrameStrata("HIGH") end
 end
 
