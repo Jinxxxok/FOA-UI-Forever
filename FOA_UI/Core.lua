@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.65.26"
+Ink.version = "0.65.27"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1308,6 +1308,30 @@ do
 			if ok and type(s) == "string" and s ~= "" then return s end
 		end
 	end
+	-- 숨겨 둔 블리자드 기본 단축바 버튼의 "비밀 값" 쿨다운 오류인가
+	--  FOA 단축바를 쓰면 블리자드 1~8번 바는 숨긴 채 남는데, 실행이 한 번 꼬이면(레벨업 뒤 등)
+	--  그 숨은 버튼들이 전투 중 쿨다운을 그릴 때마다 오류를 낸다. 보이지도 않는 버튼이라 기능엔 영향이 없다.
+	local function HiddenBarNoise(msg)
+		if type(msg) ~= "string" or (Ink.db and Ink.db.actionBars == false) then return false end
+		if not msg:find("Secret values are only allowed during untainted execution", 1, true) then return false end
+		return msg:find("Blizzard_ActionBar/", 1, true) ~= nil or msg:find("Blizzard_GamepadActionBars/", 1, true) ~= nil
+	end
+	-- 처음 한 번만: 전투가 끝나면 채팅에 알림 (/reload 하면 깨끗해진다)
+	local noted
+	local function NoteBarNoise()
+		if noted then return end
+		noted = true
+		local function say()
+			print("|cffFFF468FOA|r 숨겨 둔 블리자드 기본 단축바에 오류가 생겨서 오류 창은 막아 뒀어요 · FOA 단축바는 정상이에요 · 깨끗하게 하려면 전투 밖에서 /reload")
+		end
+		if InCombatLockdown() then
+			local f = CreateFrame("Frame")
+			f:RegisterEvent("PLAYER_REGEN_ENABLED")
+			f:SetScript("OnEvent", function(self) self:UnregisterAllEvents(); say() end)
+		else
+			say()
+		end
+	end
 	-- 블리자드가 나중에 오류 처리기를 갈아 끼우면 FOA 기록이 빠지므로, 접속 · 화면 전환 때 다시 씌운다
 	function Ink:HookErrors()
 		if not (geterrorhandler and seterrorhandler) then return end
@@ -1319,6 +1343,11 @@ do
 			local loc
 			if type(msg) == "string" and (msg:find("FOA_UI", 1, true) or (st and st:find("FOA_UI", 1, true))) then loc = Locals() end
 			pcall(ErrRecord, msg, st, loc)
+			-- 숨은 블리자드 단축바 소음은 기록만 하고 오류 창에는 띄우지 않는다
+			if HiddenBarNoise(msg) then
+				pcall(NoteBarNoise)
+				return
+			end
 			if orig then return orig(msg, ...) end
 		end
 		seterrorhandler(mine)

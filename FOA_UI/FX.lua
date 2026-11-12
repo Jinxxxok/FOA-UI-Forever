@@ -958,13 +958,15 @@ end
 
 -- 블리자드 레벨업 알림(가운데 큰 글자 / 알림 띠)은 FOA 효과와 겹치니 그동안만 투명하게
 local BLIZZ_LEVELUP = { "LevelUpDisplay", "EventToastManagerFrame" }
+-- 걸어 둔 표시는 FOA 쪽 표에만 (블리자드 틀에 값을 써 넣으면 그 틀을 읽는 블리자드 코드가 FOA 로 오염된다)
+local muteHooked = setmetatable({}, { __mode = "k" })
 function M:MuteBlizzLevelUp()
 	self.muteUntil = GetTime() + 5
 	for _, n in ipairs(BLIZZ_LEVELUP) do
 		local fr = _G[n]
 		if fr then
-			if not fr.foaMuteHook then
-				fr.foaMuteHook = true
+			if not muteHooked[fr] then
+				muteHooked[fr] = true
 				fr:HookScript("OnShow", function(self) if (M.muteUntil or 0) > GetTime() then self:SetAlpha(0) end end)
 			end
 			fr:SetAlpha(0)
