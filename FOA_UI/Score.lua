@@ -46,7 +46,9 @@ local K = {
 --  우선순위(같은 아이템 예산일 때 어느 능력치가 나은가)를 클래식 환산(힘 → 공격력, 민첩 → 치명 등)으로 숫자로 옮겼다.
 --  포에버는 적중 · 치명타가 물리 · 주문 공통이라 시전자도 hit / crit 를 shit / scrit 과 같은 값으로 친다.
 --  상한: 근접 · 원거리 적중 8% · 주문 적중 17% · 숙련 6.5% → 이미 채웠으면 적중 가치를 낮춘다 (CapAdjust).
-local function Caster(t) t.hit = t.hit or t.shit; t.crit = t.crit or t.scrit; return t end
+-- 시전자: 주문 적중 · 치명 = 적중 · 치명
+--  rdps(마법봉 초당 공격력): 레벨업 중엔 마나를 아끼려고 마법봉을 많이 쓴다 (마법사 · 흑마법사 · 사제만 마법봉을 낀다)
+local function Caster(t) t.hit = t.hit or t.shit; t.crit = t.crit or t.scrit; t.rdps = t.rdps or 0.6; return t end
 local W = {
 	-- 전사: 무기 공격력 > 적중(8%) > 숙련(6.5%) > 치명타 > 힘 · 힘 1 = 공격력 2, 민첩 20 = 치명 1%
 	["WARRIOR:arms"] = { dps = 16, hit = 26, exp = 24, crit = 22, str = 2.0, agi = 1.15, ap = 1, haste = 13, sta = 0.2, armor = 0.01 },
@@ -100,6 +102,28 @@ local W = {
 	-- 복원: 치유량 > 치명타 > 지능 > 정신력 > 마나 회복
 	["SHAMAN:resto"] = Caster({ heal = 1, sp = 1, scrit = 10, int = 0.65, spi = 0.4, mp5 = 1.2, haste = 6, sta = 0.1 }),
 }
+-- 특정 계열 주문 공격력 ("비전 주문 효과에 의한 공격력이 최대 9만큼 증가")
+--  주 계열은 일반 주문 공격력만큼 · 가끔 쓰는 계열은 조금만 (예: 냉기 마법사의 신비한 폭발 · 비전 화살)
+local SCHOOL_W = {
+	["MAGE:arcane"] = { sch_arcane = 1, sch_fire = 0.15, sch_frost = 0.15 },
+	["MAGE:fire"] = { sch_fire = 1, sch_arcane = 0.3, sch_frost = 0.15 },
+	["MAGE:frost"] = { sch_frost = 1, sch_arcane = 0.3, sch_fire = 0.15 },
+	["WARLOCK:aff"] = { sch_shadow = 1, sch_fire = 0.3 },
+	["WARLOCK:demo"] = { sch_shadow = 1, sch_fire = 0.3 },
+	["WARLOCK:destro"] = { sch_shadow = 0.8, sch_fire = 0.8 },
+	["PRIEST:shadow"] = { sch_shadow = 1, sch_holy = 0.1 },
+	["PRIEST:disc"] = { sch_holy = 0.15 },
+	["PRIEST:holy"] = { sch_holy = 0.15 },
+	["DRUID:balance"] = { sch_nature = 1, sch_arcane = 0.8 },
+	["SHAMAN:ele"] = { sch_nature = 1, sch_fire = 0.4, sch_frost = 0.3 },
+	["PALADIN:retshock"] = { sch_holy = 1.3 },
+	["PALADIN:holy"] = { sch_holy = 0.15 },
+	["PALADIN:ret"] = { sch_holy = 0.4 },
+	["PALADIN:prot"] = { sch_holy = 0.5 },
+}
+for key, sw in pairs(SCHOOL_W) do
+	if W[key] then for k, v in pairs(sw) do W[key][k] = v end end
+end
 M.W = W
 M.K = K
 
@@ -480,8 +504,26 @@ local function Positive(text, low)
 		or low:find("against you") or low:find("you are hit") then return false end
 	return text:find("증가") or text:find("향상") or low:find("increas") or low:find("improv")
 end
+-- 계열 주문 공격력: 한글 "비전 주문 효과에 의한 공격력이 최대 9만큼" · 영어 "damage done by Arcane spells and effects by up to 9"
+local SCHOOLS = { { "비전", "arcane" }, { "화염", "fire" }, { "냉기", "frost" }, { "자연", "nature" }, { "암흑", "shadow" }, { "신성", "holy" } }
+local function ParseSchool(text, low, out)
+	local ko = text:find("주문") and (text:find("공격력") or text:find("피해")) and not text:find("치유")
+	local en = low:find("damage done by %a+ spells")
+	if not (ko or en) or not Positive(text, low) then return false end
+	for _, sc in ipairs(SCHOOLS) do
+		if (ko and text:find(sc[1] .. "%s*주문")) or (en and low:find("by " .. sc[2] .. " spells", 1, true)) then
+			local n = tonumber(text:match("(%d+)"))
+			if n then
+				out["sch_" .. sc[2]] = (out["sch_" .. sc[2]] or 0) + n
+				return true
+			end
+		end
+	end
+	return false
+end
 local function ParseEffect(text, out)
 	local low = text:lower()
+	if ParseSchool(text, low, out) then return end
 	for _, e in ipairs(EFFECTS) do
 		if (text:find(e[1]) or low:find(e[2])) and (not e[4] or Positive(text, low)) then
 			-- "0.3%" 같은 소수도 그대로 (예전엔 "3%"로 읽어서 10배가 됐다)
