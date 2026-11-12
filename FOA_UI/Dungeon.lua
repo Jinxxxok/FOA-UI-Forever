@@ -1377,10 +1377,47 @@ function M:MarkKill(key, npc)
 	if changed and self.sidebar and self.sidebar:IsShown() then self:PaintSidebar() end
 end
 
+-- 새 던전(가라앉은 도시 · 크롤도크 보루 등)은 게임 자료에 던전 번호 · 이름이 아직 없어서
+--  들어가도 어느 던전인지 모른다 → 그 던전 보스를 보거나(대상 · 마우스) 던전 목록에서 직접 고르면
+--  "이 던전 번호 = 이 던전"으로 기억해 두고 다음부터 바로 알아본다 (계정 공유)
+function M:LearnInstance(key)
+	if not (key and FLoot(key) and IsInInstance()) then return end
+	local instID = select(8, GetInstanceInfo())
+	if type(instID) ~= "number" or not Ink.db then return end
+	Ink.db.instLearn = Ink.db.instLearn or {}
+	Ink.db.instLearn[instID] = key
+end
+
+-- 아직 모르는 던전 안에서 그 던전 보스를 보면 배운다
+local bossOwner
+function M:LearnHere(unit)
+	if self.hereKey or not IsInInstance() or self:MatchInstance() then return end
+	local ok, guid = pcall(UnitGUID, unit)
+	guid = ok and plain(guid)
+	if type(guid) ~= "string" then return end
+	local npc = tonumber((select(6, strsplit("-", guid))))
+	if not npc then return end
+	if not bossOwner then
+		bossOwner = {}
+		for _, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
+			if not d.soon then
+				for _, b in ipairs(d.bosses or {}) do if b[3] then bossOwner[b[3]] = d.key end end
+			end
+		end
+	end
+	local key = bossOwner[npc]
+	if not key then return end
+	self:LearnInstance(key)
+	self.lastToast = nil
+	self:OnForeverEnter()
+end
+
 -- 지금 들어와 있는 포에버 던전 (인스턴스 번호 · 지도 번호 · 이름. 날개가 여러 개면 마지막에 고른 날개 → 레벨)
 function M:MatchInstance()
 	if not IsInInstance() then return end
 	local name, _, _, _, _, _, _, instID = GetInstanceInfo()
+	local learned = Ink.db and Ink.db.instLearn and instID and Ink.db.instLearn[instID]
+	if learned and FLoot(learned) then return learned end
 	local ui = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
 	local list = ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}
 	local byUi, cands = {}, {}
@@ -1408,6 +1445,11 @@ function M:SelectForever(key)
 	if Ink.cdb then Ink.cdb.fDungeon = key end
 	self.showing = key
 	self.manualIn = IsInInstance() and (GetInstanceInfo()) or nil
+	-- 모르는 던전 안에서 직접 고르면: 여기가 그 던전이라고 배운다 (처치 체크 · 입장 알림이 바로 동작)
+	if IsInInstance() and not self.hereKey and not self:MatchInstance() then
+		self:LearnInstance(key)
+		self.hereKey = key
+	end
 	if self.sidebar then
 		self.sidebar.sf:SetVerticalScroll(0)
 		if self.sidebar.menu then self.sidebar.menu:Hide() end
@@ -4583,12 +4625,14 @@ function M:Init()
 			elseif event == "LOOT_OPENED" then
 				if M.hereKey then pcall(M.CheckLoot, M) end
 			elseif event == "UPDATE_MOUSEOVER_UNIT" then
+				if not M.hereKey and IsInInstance() then pcall(M.LearnHere, M, "mouseover") end
 				if M.hereKey and not InCombatLockdown() then pcall(M.CheckDead, M, "mouseover") end
 			elseif event == "PLAYER_REGEN_ENABLED" then
 				-- 전투 중엔 사망 여부가 비공개라 못 읽은 것: 전투가 끝나면 대상을 다시 본다
 				if M.hereKey then C_Timer.After(0.3, function() pcall(M.CheckDead, M, "target") end) end
-			elseif M.hereKey then
-				pcall(M.CheckDead, M, "target")
+			else
+				if not M.hereKey and IsInInstance() then pcall(M.LearnHere, M, "target") end
+				if M.hereKey then pcall(M.CheckDead, M, "target") end
 			end
 		end)
 		local pending
