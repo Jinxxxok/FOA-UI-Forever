@@ -25,7 +25,10 @@ local INV2EJ = { [1] = 0, [2] = 1, [3] = 2, [15] = 3, [5] = 4, [9] = 5, [10] = 6
 	[11] = 12, [12] = 12, [13] = 13, [14] = 13, [16] = 10, [17] = 11 }
 local INV_ORDER = { 1, 2, 3, 15, 5, 9, 10, 6, 7, 8, 11, 12, 13, 14, 16, 17 }
 local SLOT_KO = { [1] = "머리", [2] = "목", [3] = "어깨", [15] = "등", [5] = "가슴", [9] = "손목", [10] = "손", [6] = "허리",
-	[7] = "다리", [8] = "발", [11] = "반지", [12] = "반지", [13] = "장신구", [14] = "장신구", [16] = "주장비", [17] = "보조장비" }
+	[7] = "다리", [8] = "발", [11] = "반지", [12] = "반지", [13] = "장신구", [14] = "장신구", [16] = "주장비", [17] = "보조장비",
+	[18] = "원거리" }
+-- 원거리 칸(총 · 활 · 석궁 · 투척 · 성물): 던전 순위 자료에는 칸이 없어서 "1순위"는 모르고 착용 대비로만 알린다
+local RANGED_LOC = { INVTYPE_RANGED = true, INVTYPE_RANGEDRIGHT = true, INVTYPE_THROWN = true, INVTYPE_RELIC = true }
 local LOC2EJ = {
 	INVTYPE_HEAD = 0, INVTYPE_NECK = 1, INVTYPE_SHOULDER = 2, INVTYPE_CLOAK = 3, INVTYPE_CHEST = 4, INVTYPE_ROBE = 4,
 	INVTYPE_WRIST = 5, INVTYPE_HAND = 6, INVTYPE_WAIST = 7, INVTYPE_LEGS = 8, INVTYPE_FEET = 9,
@@ -897,7 +900,9 @@ end
 function M:CheckNew(link, tries)
 	local id, _, _, loc = C_Item.GetItemInfoInstant(link)
 	local ej, inv = loc and LOC2EJ[loc], loc and LOC2INV[loc]
-	if not (id and ej) then return end
+	local ranged = loc and RANGED_LOC[loc]
+	if ranged then inv = 18 end
+	if not (id and (ej or ranged)) then return end
 	local new = ScoreOf(link, ej == 11)
 	if new == nil and (tries or 0) < 2 then
 		-- 아이템 정보가 아직 안 왔으면 잠깐 뒤 다시
@@ -914,12 +919,12 @@ function M:CheckNew(link, tries)
 	if minLv and minLv > (UnitLevel("player") or 1) then return end
 	-- 착용 대비: 아이템 툴팁과 똑같은 비교 (Score:Compare)
 	--  반지 · 장신구는 약한 쪽, 양손 무기는 주장비 + 보조장비 합, 쌍수는 약한 손과 비교
-	local pct, better
+	local pct, better, empty
 	local okC, r = false, nil
 	if sc and sc.Compare then okC, r = pcall(sc.Compare, sc, link) end
 	if okC and r and not r.trinket and type(r.pct) == "number" then
 		if r.empty then
-			better = true
+			better, empty = true, true
 		else
 			pct = math.floor(r.pct + (r.pct >= 0 and 0.5 or -0.5))
 			better = pct > 0
@@ -938,13 +943,15 @@ function M:CheckNew(link, tries)
 		pct = curScore > 0 and UpPct(new, curScore) or nil
 	end
 	if not better then return end
-	local list = self:SlotList(ej)
+	local list = ej and self:SlotList(ej) or {}
 	local top = list[1]
 	local where = SLOT_KO[inv] or ""
 	if top and top.it and top.it.id == id then
 		self:ShowToast(link, "best", where .. "  ·  지금 레벨 1순위" .. (pct and ("  ·  착용 대비 +" .. pct .. "%") or ""))
 	elseif pct and pct >= (Ink.db.gearToastPct or 15) then
 		self:ShowToast(link, "up", where .. "  ·  착용 대비 +" .. pct .. "%")
+	elseif empty then
+		self:ShowToast(link, "up", where .. "  ·  빈 칸에 바로 착용 가능")
 	end
 end
 
