@@ -755,6 +755,18 @@ function M:SlotBaseline()
 	return baseCache
 end
 
+-- 착용 대비 % : 툴팁 · 좋은 장비 알림 · 장비 칸 팝업이 모두 이 계산 하나를 쓴다
+--  (예전엔 툴팁만 "착용 장비 한 칸 평균"을 기준으로 나눠서 손목 · 허리처럼 점수가 작은 칸은
+--   툴팁 +9% · 알림 +29% 처럼 서로 달랐다)
+--  기본: 점수 비율 그대로 → 점수 18 · 지금 14 = +29% (툴팁에 같이 보이는 점수와 맞는다)
+--  지금 점수가 아주 작은 칸(원거리 무기 등)만 조금 좋아져도 수천 % 가 나와서,
+--  한 칸 평균의 1/4 보다 작으면 그 1/4 을 기준으로 잰다
+function M:PctOf(new, old)
+	if type(new) ~= "number" or type(old) ~= "number" or old <= 0 then return end
+	local floor = FOREVER and self:SlotBaseline() * 0.25 or 0
+	return (new - old) / math.max(old, floor, 1) * 100
+end
+
 -- 결과: { pct, new, old, level, empty } 또는 nil (비교할 수 없음)
 function M:Compare(link)
 	if not link or Ink.db.itemCompare == false or self:Mode() == "off" then return end
@@ -834,9 +846,7 @@ function M:Compare(link)
 	if empty then pct = 100
 	elseif old <= 0 then pct = (new > 0) and 100 or 0 -- 둘 다 점수 0 (예: 방어도만 다른 천 장갑) → 비슷
 	else
-		-- 원거리 칸처럼 원래 점수가 아주 작은 칸은 조금만 좋아도 수천 % 가 나와서,
-		--  착용 장비 한 칸 평균 점수보다 작으면 그 평균을 기준으로 잰다
-		pct = (new - old) / math.max(math.abs(old), self:SlotBaseline(), 1) * 100
+		pct = self:PctOf(new, old) or 0
 	end
 	local lvl = tip.level
 	if lvl and lvl <= (UnitLevel("player") or 0) then lvl = nil end

@@ -62,6 +62,17 @@ local function ScoreOf(link, offhand)
 	return ok and v or nil
 end
 
+-- 착용 대비 % (반올림한 정수) · 아이템 툴팁과 같은 계산 (Score:PctOf)
+local function UpPct(new, old)
+	local sc = ns.Score
+	if not (sc and sc.PctOf) then
+		return (old and old > 0 and new) and math.floor((new / old - 1) * 100 + 0.5) or nil
+	end
+	local ok, p = pcall(sc.PctOf, sc, new, old)
+	if not (ok and p) then return nil end
+	return math.floor(p + (p >= 0 and 0.5 or -0.5))
+end
+
 local function ItemLink(it)
 	if it.link then return it.link end
 	local _, link = C_Item.GetItemInfo(it.id)
@@ -624,7 +635,7 @@ function M:Paint()
 				if top and (not curScore or not sc or sc > curScore) then
 					r.pill:Set("최고", GOLD, 0.2)
 				elseif sc and curScore and curScore > 0 then
-					local pct = math.floor((sc / curScore - 1) * 100 + 0.5)
+					local pct = UpPct(sc, curScore) or 0
 					if pct > 0 then r.pill:Set("+" .. pct .. "%", UP)
 					elseif pct < 0 then r.pill:Set(pct .. "%", DOWN)
 					else r.pill:Set("비슷", { 0.7, 0.72, 0.75 }) end
@@ -901,19 +912,34 @@ function M:CheckNew(link, tries)
 	end
 	local minLv = select(5, C_Item.GetItemInfo(link))
 	if minLv and minLv > (UnitLevel("player") or 1) then return end
-	-- 반지 · 장신구는 두 칸 중 약한 쪽과 비교
-	local curScore
-	local pair = (inv == 11 and { 11, 12 }) or (inv == 13 and { 13, 14 }) or { inv }
-	for _, s in ipairs(pair) do
-		local l = GetInventoryItemLink("player", s)
-		local v = l and ScoreOf(l, s == 17) or 0
-		if not curScore or v < curScore then curScore = v end
+	-- 착용 대비: 아이템 툴팁과 똑같은 비교 (Score:Compare)
+	--  반지 · 장신구는 약한 쪽, 양손 무기는 주장비 + 보조장비 합, 쌍수는 약한 손과 비교
+	local pct, better
+	local okC, r = false, nil
+	if sc and sc.Compare then okC, r = pcall(sc.Compare, sc, link) end
+	if okC and r and not r.trinket and type(r.pct) == "number" then
+		if r.empty then
+			better = true
+		else
+			pct = math.floor(r.pct + (r.pct >= 0 and 0.5 or -0.5))
+			better = pct > 0
+		end
+	else
+		-- 비교 기능을 끈 경우: 같은 칸(반지 · 장신구는 약한 쪽)과 점수로
+		local curScore
+		local pair = (inv == 11 and { 11, 12 }) or (inv == 13 and { 13, 14 }) or { inv }
+		for _, s in ipairs(pair) do
+			local l = GetInventoryItemLink("player", s)
+			local v = l and ScoreOf(l, s == 17) or 0
+			if not curScore or v < curScore then curScore = v end
+		end
+		curScore = curScore or 0
+		better = new > curScore
+		pct = curScore > 0 and UpPct(new, curScore) or nil
 	end
-	curScore = curScore or 0
-	if new <= curScore then return end
+	if not better then return end
 	local list = self:SlotList(ej)
 	local top = list[1]
-	local pct = curScore > 0 and math.floor((new / curScore - 1) * 100 + 0.5) or nil
 	local where = SLOT_KO[inv] or ""
 	if top and top.it and top.it.id == id then
 		self:ShowToast(link, "best", where .. "  ·  지금 레벨 1순위" .. (pct and ("  ·  착용 대비 +" .. pct .. "%") or ""))
