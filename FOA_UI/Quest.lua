@@ -762,6 +762,29 @@ function M:UpdateMode()
 				if InCombatLockdown() then M.modeDirty = true end
 			end
 		end)
+		-- 블리자드가 추적기 자리를 다시 잡으면 곧바로 다시 화면 밖으로:
+		--  추적기는 블리자드 "오른쪽 관리 틀"이라 퀘스트 갱신 · 파티 변화 · 행동단축바 변화 때마다
+		--  미니맵 아래 화면 오른쪽 끝(세로로 길게)으로 되돌아간다. 투명(알파 0)이어도 클릭은 받아서
+		--  그 자리에 둔 세로 행동단축바를 누르면 단축바 대신 추적기 퀘스트가 눌려 지도가 열렸다 (11-12)
+		hooksecurefunc(otf, "SetPoint", function()
+			if not M.hideOTF or M.otfPlacing or M.otfQueued then return end
+			-- 같은 순간 여러 번 불려도 한 번만 · 1초에 10번 넘게 되돌려지면 잠깐 쉰다 (서로 계속 옮기는 일 방지)
+			local now = GetTime()
+			if (M.otfWin or 0) ~= math.floor(now) then M.otfWin, M.otfN = math.floor(now), 0 end
+			M.otfN = (M.otfN or 0) + 1
+			if M.otfN > 10 then
+				if not M.otfRetry then
+					M.otfRetry = true
+					C_Timer.After(2, function() M.otfRetry = nil; if M.hideOTF then M:PlaceOTF() end end)
+				end
+				return
+			end
+			M.otfQueued = true
+			C_Timer.After(0, function()
+				M.otfQueued = nil
+				if M.hideOTF then M:PlaceOTF() end
+			end)
+		end)
 	end
 	-- 블리자드 목표 추적기는 FOA 코드에서 Show/Hide 하지 않는다:
 	--  Show 를 부르면 추적기가 그 자리에서 다시 그려지면서 블리자드 상태 값이 FOA 로 오염돼
@@ -784,11 +807,17 @@ function M:PlaceOTF()
 	if otf.IsProtected and otf:IsProtected() and InCombatLockdown() then self.modeDirty = true return end
 	local blz = Ink.modules.Blizzard
 	if M.hideOTF then
+		M.otfPlacing = true
 		safe(function()
+			-- 편집 모드 틀은 "화면 안에 묶기"가 켜져 있어서, 화면 밖 자리가 오른쪽 아래 구석으로 끌려 들어와
+			--  투명한 채 화면 오른쪽 아래를 덮고 있었다 → 숨기는 동안은 묶기를 끈다
+			if otf.SetClampedToScreen then otf:SetClampedToScreen(false) end
 			otf:ClearAllPoints()
 			otf:SetPoint("TOPLEFT", UIParent, "BOTTOMRIGHT", 400, -400)
 		end)
+		M.otfPlacing = nil
 	elseif blz and blz.questAnchor then
+		safe(function() if otf.SetClampedToScreen then otf:SetClampedToScreen(true) end end)
 		Ink:Fit(otf, blz.questAnchor, "TOPRIGHT")
 	end
 end
