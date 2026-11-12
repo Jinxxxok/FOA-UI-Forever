@@ -159,6 +159,12 @@ walk(root)
 def ilist(v):
     return [int(x) for x in v] if isinstance(v, list) else []
 
+# 선행 퀘스트 빠진 것 (손으로 바로잡음 · 2026-11)
+#  207 커즌의 수수께끼: 제2의 반란(203) + 나쁜 약(204) 둘 다 끝내야 (QuestieDB 포에버 자료 대조)
+#  95786 남부해안의 지인(수사 니메츠 · 가라앉은 도시 얼라 시작): 니메츠가 "트롤 전설"을 연구하는 친구에게 보내는 퀘스트라
+#        트롤 전설 석판 퀘스트(207) 다음 (퀘스트 글 + 게임에서 203 · 204 전에는 니메츠가 아무것도 안 줌 확인)
+PRE_FIX = {207: [204, 203], 95786: [207]}
+
 rows, skipped = [], {"nocoord": 0, "u": 0, "removed": 0, "event": 0}
 for qid in sorted(quests):
     q = quests[qid]
@@ -183,8 +189,11 @@ for qid in sorted(quests):
         if isinstance(p, list) and len(p) >= 2 and p[0] == "i":
             item = int(p[1]); break
     giver = ilist(q.get("qgs"))[:1]
+    pre = ilist(q.get("sourceQuests"))
+    for p in PRE_FIX.get(qid, []):
+        if p not in pre: pre.append(p)
     rows.append((qid, pts[:3], int(q.get("lvl", 1) or 1), int(q.get("r", 0) or 0), ilist(q.get("races")),
-                 ilist(q.get("c")), ilist(q.get("sourceQuests")), ilist(q.get("altQuests")),
+                 ilist(q.get("c")), pre, ilist(q.get("altQuests")),
                  int(q.get("requireSkill", 0) or 0), rep, int(q.get("awp", 0) or 0), flags, item,
                  giver[0] if giver else 0))
 
