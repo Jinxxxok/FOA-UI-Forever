@@ -3481,6 +3481,26 @@ function M:PaintQuests()
 		local nPre = 0
 		for _, pid in ipairs(q[8]) do if not IsCrumb(pid) then nPre = nPre + 1 end end
 		if nPre > 0 then sub = sub .. "  ·  선행 " .. nPre end
+		if e.state == "pre" then
+			-- 선행이 남았으면 주는 NPC 대신: 무엇을 먼저, 누구에게서, 어디서 (가장 앞에 남은 선행 하나)
+			--  예) 현자 딥스 퀘스트 → "먼저 <보고서 꾸러미 퀘스트> · <반란군 야영지 NPC> · 가시덤불 골짜기"
+			local chain = {}
+			Chain(e.id, chain, {}, 0)
+			for _, pid in ipairs(chain) do
+				if not QDone(pid) and not IsCrumb(pid) then
+					local _, dq, qr = PreOf(pid)
+					local npc = dq and NpcOf(dq[7]) or (qr and NpcOf(qr[14]))
+					local z = ZoneName(dq and dq[4] or (qr and qr[2] and qr[2][1]))
+					local t = QTitle(pid) or "선행 퀘스트"
+					if QInLog(pid) then
+						sub = "먼저 " .. t .. " 끝내기  ·  진행 중"
+					else
+						sub = "먼저 " .. t .. ((npc or z) and ("  ·  " .. (npc or z) .. ((npc and z) and (" · " .. z) or "")) or "")
+					end
+					break
+				end
+			end
+		end
 		if e.crumb and e.nextQ then
 			-- 연결 퀘스트: 어느 던전 퀘스트로 안내하는지
 			local nt = QTitle(e.nextQ)
