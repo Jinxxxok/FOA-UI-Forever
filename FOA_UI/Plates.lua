@@ -480,6 +480,62 @@ local function ScanQuestLines(unit)
 	end
 end
 
+-- 몹 번호 (GUID "Creature-0-…-몹번호-…")
+local function NpcIDOf(unit)
+	local ok, g = pcall(UnitGUID, unit)
+	g = ok and plain(g)
+	if type(g) ~= "string" then return end
+	local kind, _, _, _, _, id = strsplit("-", g)
+	if kind == "Creature" or kind == "Vehicle" then return tonumber(id) end
+end
+
+-- 퀘스트 아이템 이름 (비교용으로 다듬은 것) · 아직 못 불러왔으면 요청만 하고 다음 번에
+local dropName = {}
+local function DropItemNorm(id)
+	local n = dropName[id]
+	if n then return n end
+	local name = (C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)) or (C_Item.GetItemInfo and C_Item.GetItemInfo(id))
+	name = plain(name)
+	if type(name) == "string" and name ~= "" then
+		n = Norm(name); dropName[id] = n
+		return n
+	end
+	if C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+	-- 이름이 오면 한 번 다시 그리기 (1초 뒤 · 여러 아이템이어도 한 번)
+	if not M.dropRetry then
+		M.dropRetry = true
+		C_Timer.After(1, function()
+			M.dropRetry = nil
+			for _, pf in pairs(plates) do
+				if pf.unit and not pf.friendly and not pf.object then pcall(M.ApplyQuest, M, pf) end
+			end
+		end)
+	end
+end
+
+-- 이 몹이 떨구는 퀘스트 아이템이 지금 안 끝난 줍기 목표인지 (자료: QuestDrops.lua · AllTheThings)
+--  "밀림 치료제 1/7" ← 쿠르젠 약사 처럼 몹 이름과 아이템 이름이 전혀 달라도 찾는다
+local function DropQuestInfo(unit)
+	local drops = ns.QUEST_DROP_NPC
+	local items = drops and drops[NpcIDOf(unit) or 0]
+	if not (items and QuestObjectives) then return end
+	for _, it in ipairs(items) do
+		local n = DropItemNorm(it)
+		if n and n ~= "" then
+			for _, o in ipairs(QuestObjectives()) do
+				if o.type ~= "monster" then
+					local on = o.norm
+					if not on then on = Norm(o.text); o.norm = on end
+					if on ~= "" and on:find(n, 1, true) then
+						local have, need = o.numFulfilled, o.numRequired
+						return { kind = "loot", text = (need and need > 0 and have) and (have .. "/" .. need) or "" }
+					end
+				end
+			end
+		end
+	end
+end
+
 local function QuestInfo(unit)
 	if Ink.db.questPlates == false then return end
 	-- 1) 툴팁의 퀘스트 목표 줄 (가장 정확)
@@ -487,7 +543,10 @@ local function QuestInfo(unit)
 	--   예전처럼 그 대답(false)만 보고 건너뛰면 요리 퀘스트 몹에 표시가 안 떴다 → 툴팁은 늘 읽는다
 	local info = ScanQuestLines(unit)
 	if info then return info end
-	-- 2) 퀘스트 목표 글자에 몹 이름이 들어 있으면 (예: "식인독수리 고기" ← 식인독수리) 줍기 퀘스트
+	-- 2) 퀘스트 아이템을 떨구는 몹 (몹 번호 → 아이템 자료)
+	info = DropQuestInfo(unit)
+	if info then return info end
+	-- 3) 퀘스트 목표 글자에 몹 이름이 들어 있으면 (예: "식인독수리 고기" ← 식인독수리) 줍기 퀘스트
 	local okN, name = pcall(UnitName, unit)
 	name = okN and plain(name)
 	if type(name) == "string" and #name >= 4 and QuestObjectives then
