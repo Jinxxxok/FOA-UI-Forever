@@ -2369,6 +2369,9 @@ function M:BuildBoard()
 	local b = CreateFrame("Frame", "FOADungeonBoard", wm)
 	b:SetPoint("CENTER", UIParent, "CENTER")
 	b:SetSize(wm:GetWidth(), wm:GetHeight())
+	-- 지도 창의 자식(ESC · M 으로 같이 닫히게)이지만, 던전 화면을 펴는 동안 지도 창을 투명하게 하므로
+	--  지도 창 투명도는 물려받지 않는다 (안 그러면 던전 화면까지 같이 안 보였다)
+	if b.SetIgnoreParentAlpha then b:SetIgnoreParentAlpha(true) end
 	-- 화면 밖으로 안 나가게 · 빈 곳을 끌어서 옮기기 (자리 기억)
 	b:SetClampedToScreen(true)
 	b:SetMovable(true)
@@ -2878,7 +2881,8 @@ function M:ShowBoard(key)
 	self.showing = key
 	self:SizeBoard()
 	b:Show()
-	FadeWorldMap(true)
+	-- 던전 화면이 지도 창 투명도를 안 물려받을 때만 지도를 투명하게 (아니면 던전 화면도 같이 사라진다)
+	if b.SetIgnoreParentAlpha and b.IsIgnoringParentAlpha and b:IsIgnoringParentAlpha() then FadeWorldMap(true) end
 	f:ClearAllPoints()
 	f:SetFrameStrata("DIALOG")
 	f:SetFrameLevel(b:GetFrameLevel() + 10)
