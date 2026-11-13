@@ -2507,6 +2507,18 @@ SlashCmdList.INKUI = function(msg)
 			print(string.format("  %d. %s · 합계 %.1fms (전투 %.1fms) · %d번 · 최대 %.2fms", i, r.k, r.v.total, r.v.combat, r.v.n, r.v.max))
 		end
 		Ink.perf = {}
+	elseif msg == "where" or msg == "위치" then
+		-- 던전 · 날개 판단 확인용: 게임이 주는 지도 번호 · 위치 · 인스턴스 번호 · 던전 찾기 번호 · FOA 판단
+		local D = Ink.modules.Dungeon
+		local ui, x, y
+		if D and D.PlayerSpot then ui, x, y = D.PlayerSpot() end
+		local name, _, _, _, _, _, _, id, _, lfg = GetInstanceInfo()
+		local key, sure
+		if D and D.MatchInstance then key, sure = D:MatchInstance() end
+		print(string.format("|cffFFF468FOA|r 위치  지도 %s  ·  %s, %s  ·  인스턴스 %s (%s)  ·  던전 찾기 %s  ·  %s",
+			tostring(ui), x and string.format("%.1f", x * 100) or "-", y and string.format("%.1f", y * 100) or "-",
+			tostring(id), tostring(name), tostring(lfg), GetSubZoneText() or ""))
+		print("  FOA 판단: " .. tostring(key) .. (key and (sure and "  (확실)" or "  (추측)") or ""))
 	elseif msg == "taint" or msg == "taint on" or msg == "오염" or msg == "taint off" then
 		-- 오염 추적: 게임이 "어느 줄에서 FOA 때문에 블리자드 실행이 오염됐는지"를 Logs\taint.log 에 직접 적는다
 		local on = msg ~= "taint off"

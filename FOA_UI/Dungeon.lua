@@ -1476,9 +1476,13 @@ function M:LearnHere(unit)
 	self:OnForeverEnter()
 end
 
--- 던전 지도 층 번호 → 던전 (그 층을 쓰는 던전이 하나뿐일 때만)
---  붉은십자군 수도원은 네 날개가 인스턴스 번호 · 이름이 같아서, 층 번호(묘지 302 · 도서관 303 · 무기고 304 · 대성당 305)로만 가려진다
---  (검은바위 첨탑 상 · 하층, 혈투의 전장 세 날개, 스트라솔름 두 쪽은 층을 같이 써서 여기선 못 가린다)
+-- 날개가 여러 개인 던전 (붉은십자군 수도원 네 날개 · 검은바위 첨탑 · 혈투의 전장 · 스트라솔름)
+--  인스턴스 번호와 이름이 같아서 아래 순서로 날개를 가린다. 1~4 는 "확실", 그래도 모르면 추측
+--   1) 던전 지도 층 번호 (그 층을 쓰는 날개가 하나뿐일 때 · 묘지 302 · 도서관 303 · 무기고 304 · 대성당 305)
+--   2) 던전 찾기 번호 (GetInstanceInfo 10번째)
+--   3) 이번 방문에서 본 그 날개 보스 (마우스를 올리거나 대상으로 잡으면)
+--   4) 예전에 확실히 알았던 자리 근처 (확실할 때마다 지도 위 내 자리를 기억해 둔다)
+--   추측: 마지막에 고른 날개 → 레벨  (예전엔 "배운 자리"가 인스턴스 번호로 저장돼 다른 날개에서도 그대로 쓰였다)
 local floorKey
 local function KeyByFloor(ui)
 	if not ui then return end
@@ -1493,16 +1497,52 @@ local function KeyByFloor(ui)
 	local k = floorKey[ui]
 	return k and FLoot(k) and k or nil
 end
+local LFG_WING = { [18] = "sm_gy", [165] = "sm_lib", [163] = "sm_arm", [164] = "sm_cath" }
+M.visit = 0 -- 인스턴스에 들어올 때마다 +1 (본 보스 · 직접 고른 날개는 이번 방문에만)
 
--- 지금 들어와 있는 포에버 던전 (층 번호 → 배운 자리 → 인스턴스 번호 · 지도 번호 · 이름. 날개가 여러 개면 마지막에 고른 날개 → 레벨)
+local function PlayerSpot()
+	local ui = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	if not ui then return end
+	local ok, p = pcall(C_Map.GetPlayerMapPosition, ui, "player")
+	local x, y
+	if ok and p then x, y = p:GetXY() end
+	return ui, x, y
+end
+M.PlayerSpot = PlayerSpot
+
+-- 확실히 아는 날개면 지금 자리를 기억 (다음엔 위치만으로 가린다)
+function M:RememberWingSpot(key)
+	local ui, x, y = PlayerSpot()
+	if not (key and ui and x and y and x > 0 and y > 0 and Ink.db) then return end
+	Ink.db.wingSpots = Ink.db.wingSpots or {}
+	local list = Ink.db.wingSpots[ui] or {}
+	Ink.db.wingSpots[ui] = list
+	for _, sp in ipairs(list) do
+		if math.abs(sp[1] - x) < 0.02 and math.abs(sp[2] - y) < 0.02 then sp[3] = key return end
+	end
+	list[#list + 1] = { math.floor(x * 1000 + 0.5) / 1000, math.floor(y * 1000 + 0.5) / 1000, key }
+	while #list > 80 do table.remove(list, 1) end
+end
+local function WingBySpot(ui, x, y, ok)
+	local list = ui and x and y and Ink.db and Ink.db.wingSpots and Ink.db.wingSpots[ui]
+	if not list then return end
+	local best, bd
+	for _, sp in ipairs(list) do
+		if ok[sp[3]] then
+			local d = (sp[1] - x) ^ 2 + (sp[2] - y) ^ 2
+			if not bd or d < bd then best, bd = sp[3], d end
+		end
+	end
+	if best and bd < 0.06 ^ 2 then return best end
+end
+
+-- 지금 들어와 있는 포에버 던전 · 확실한가 (두 번째 값)
 function M:MatchInstance()
 	if not IsInInstance() then return end
-	local name, _, _, _, _, _, _, instID = GetInstanceInfo()
-	local ui = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	local name, _, _, _, _, _, _, instID, _, lfg = GetInstanceInfo()
+	local ui, px, py = PlayerSpot()
 	local byFloor = KeyByFloor(ui)
-	if byFloor then return byFloor end
-	local learned = Ink.db and Ink.db.instLearn and instID and Ink.db.instLearn[instID]
-	if learned and FLoot(learned) then return learned end
+	if byFloor then return byFloor, true end
 	local list = ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}
 	local byUi, cands = {}, {}
 	for _, d in ipairs(list) do
@@ -1512,24 +1552,70 @@ function M:MatchInstance()
 			if hit then cands[#cands + 1] = d end
 		end
 	end
-	if #byUi == 1 then return byUi[1].key end
-	if #cands <= 1 then return cands[1] and cands[1].key end
+	if #cands == 0 then
+		-- 자료에 인스턴스 번호가 없는 던전: 그 던전 보스를 보고 배운 자리
+		local learned = Ink.db and Ink.db.instLearn and instID and Ink.db.instLearn[instID]
+		if learned and FLoot(learned) then return learned, true end
+		return
+	end
+	if #byUi == 1 then return byUi[1].key, true end
+	if #cands == 1 then return cands[1].key, true end
+	local ok = {}
+	for _, d in ipairs(cands) do ok[d.key] = true end
+	local lk = type(lfg) == "number" and LFG_WING[lfg]
+	if lk and ok[lk] then return lk, true end
+	if self.wingVisit == self.visit and self.wingSeen and ok[self.wingSeen] then return self.wingSeen, true end
+	local sp = WingBySpot(ui, px, py, ok)
+	if sp then return sp, true end
+	-- 추측
 	local sel = Ink.cdb and Ink.cdb.fDungeon
-	for _, d in ipairs(cands) do if d.key == sel then return d.key end end
+	if sel and ok[sel] then return sel, false end
 	local lv, best, bestD = UnitLevel("player") or 1, nil, 999
 	for _, d in ipairs(cands) do
 		local dist = math.abs((d.lo + d.hi) / 2 - lv)
 		if dist < bestD then best, bestD = d.key, dist end
 	end
-	return best
+	return best, false
+end
+
+-- 던전 안에서 보스를 보면: 날개가 여러 개인 던전이면 그 날개로 (이번 방문 동안 · 자리도 기억)
+function M:SeeBoss(unit)
+	if not IsInInstance() then return end
+	local ok, guid = pcall(UnitGUID, unit)
+	guid = ok and plain(guid)
+	if type(guid) ~= "string" then return end
+	local npc = tonumber((select(6, strsplit("-", guid))))
+	if not npc then return end
+	if not bossOwner then
+		bossOwner = {}
+		for _, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
+			if not d.soon then
+				for _, b in ipairs(d.bosses or {}) do if b[3] and b[3] > 0 then bossOwner[b[3]] = d.key end end
+			end
+		end
+	end
+	local key = bossOwner[npc]
+	local d = key and FLoot(key)
+	if not (d and d.group) then return end
+	local cur = self:MatchInstance()
+	local cd = cur and FLoot(cur)
+	if not (cd and cd.group == d.group) then return end
+	self:RememberWingSpot(key)
+	if self.wingSeen == key and self.wingVisit == self.visit then return end
+	self.wingSeen, self.wingVisit = key, self.visit
+	if self.hereKey ~= key then
+		self.hereKey = key
+		self:OnForeverEnter()
+		if self.boardOn and self.board and self.board:IsShown() then self:ShowBoard(self:ForeverCurrent()) end
+	end
 end
 
 function M:SelectForever(key)
 	if not FLoot(key) then return end
 	if Ink.cdb then Ink.cdb.fDungeon = key end
 	self.showing = key
-	-- 직접 고른 날개는 "이 인스턴스 · 이 층"에 있는 동안만 (같은 이름의 다른 날개로 옮기면 실제 날개로)
-	self.manualIn = IsInInstance() and { name = (GetInstanceInfo()), ui = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player") } or nil
+	-- 직접 고른 던전은 이번 방문 동안만 (다른 날개 · 다른 던전에 들어오면 실제 자리로)
+	self.manualIn = IsInInstance() and { name = (GetInstanceInfo()), visit = self.visit } or nil
 	-- 모르는 던전 안에서 직접 고르면: 여기가 그 던전이라고 배운다 (처치 체크 · 입장 알림이 바로 동작)
 	if IsInInstance() and not self.hereKey and not self:MatchInstance() then
 		self:LearnInstance(key)
@@ -3029,8 +3115,11 @@ function M:PaintBoard(data)
 		end
 	end
 	local col = d and LevelColor(d.lo, d.hi) or C.soft
-	b.sub:SetText(string.format("|cff%02x%02x%02x권장 %d–%d 레벨|r   ·   보스 %d%s", math.floor(col[1] * 255), math.floor(col[2] * 255), math.floor(col[3] * 255),
-		d and d.lo or 0, d and d.hi or 0, nMain, nRare > 0 and ("   ·   희귀 " .. nRare) or ""))
+	-- 날개를 아직 추측 중이면 표시 (보스를 보면 자동으로 바뀐다)
+	local guess = d and d.group and self.showing == self.hereKey and self.hereSure == false
+	b.sub:SetText(string.format("|cff%02x%02x%02x권장 %d–%d 레벨|r   ·   보스 %d%s%s", math.floor(col[1] * 255), math.floor(col[2] * 255), math.floor(col[3] * 255),
+		d and d.lo or 0, d and d.hi or 0, nMain, nRare > 0 and ("   ·   희귀 " .. nRare) or "",
+		guess and "   ·   |cffFFB347날개 추측 중 · 보스를 보면 자동으로 · 오른쪽 이름 옆 ∨ 로 고르기|r" or ""))
 	b.prog:SetMinMaxValues(0, math.max(1, nMain))
 	b.prog:SetValue(nDown)
 	b.progT:SetText(nDown >= nMain and nMain > 0 and "|cff6FD39A모두 처치!|r" or (nDown .. " / " .. nMain .. " 처치"))
@@ -3846,8 +3935,7 @@ function M:ForeverCurrent()
 	if here then
 		local iname = GetInstanceInfo()
 		local mi = self.manualIn
-		local curUi = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
-		if not (type(mi) == "table" and mi.name == iname and (not mi.ui or mi.ui == curUi) and sel and FLoot(sel)) then return here end
+		if not (type(mi) == "table" and mi.name == iname and mi.visit == self.visit and sel and FLoot(sel)) then return here end
 	end
 	if sel and FLoot(sel) then return sel end
 	local lv, best, bestD = UnitLevel("player") or 1, nil, 999
@@ -3952,18 +4040,32 @@ end
 
 -- 포에버: 던전에 들어가면 알림 (보스 수 · 내 직업 장비 · 추천) + 오래된 처치 기록 정리
 function M:OnForeverEnter()
-	local key = self:MatchInstance()
+	local key, sure = self:MatchInstance()
 	self.hereKey = key
-	-- 막 들어온 순간엔 층 번호가 아직 안 나와서 날개를 못 가릴 수 있다 → 층 번호가 나올 때까지 잠깐 뒤 다시
-	if IsInInstance() and not (C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")) and (self.enterTries or 0) < 5 then
+	self.hereSure = sure and true or false
+	local d = key and FLoot(key)
+	-- 막 들어온 순간엔 층 번호가 아직 안 나오거나, 날개를 아직 모를 수 있다 → 잠깐 뒤 다시 (최대 6번)
+	local noUi = IsInInstance() and not (C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player"))
+	if (noUi or (d and d.group and not sure)) and (self.enterTries or 0) < 6 then
 		self.enterTries = (self.enterTries or 0) + 1
-		C_Timer.After(2, function() pcall(M.OnForeverEnter, M) end)
+		C_Timer.After(3, function() pcall(M.OnForeverEnter, M) end)
 	else
 		self.enterTries = 0
 	end
 	if not key then self.lastToast, self.manualIn = nil, nil return end
+	if sure and d.group then self:RememberWingSpot(key) end
 	local k = KillSet(key)
 	if k.t and k.t > 0 and time() - k.t > 90 * 60 and Ink.cdb and Ink.cdb.dKills then Ink.cdb.dKills[key] = nil end
+	-- 날개를 아직 모르면 날개 이름 대신 묶음 이름으로 알리고, 알게 되면 그 날개로 한 번 더
+	if d.group and not sure then
+		local tk = "group:" .. d.group
+		if self.lastToast == tk then return end
+		self.lastToast = tk
+		C_Timer.After(2.5, function()
+			M:Toast(d.groupKo, nil, nil, "날개 확인 중  ·  보스를 보면 자동으로  ·  지도(M) 이름 옆 ∨ 로 직접 고르기")
+		end)
+		return
+	end
 	if key == self.lastToast then return end
 	self.lastToast = key
 	C_Timer.After(2.5, function()
@@ -4812,6 +4914,7 @@ function M:Init()
 		pcall(w.RegisterUnitEvent, w, "UNIT_HEALTH", "target")
 		w:SetScript("OnEvent", function(_, event, a1, a2, _, _, a5)
 			if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+				if event == "PLAYER_ENTERING_WORLD" then M.visit = (M.visit or 0) + 1; M.wingSeen = nil; M.enterTries = 0 end
 				C_Timer.After(1, function() pcall(M.OnForeverEnter, M) end)
 			elseif event == "ENCOUNTER_END" then
 				if plain(a5) == 1 then pcall(M.OnBossKilled, M, a2, a1) end
@@ -4820,12 +4923,14 @@ function M:Init()
 			elseif event == "LOOT_OPENED" then
 				if M.hereKey then pcall(M.CheckLoot, M) end
 			elseif event == "UPDATE_MOUSEOVER_UNIT" then
+				if IsInInstance() and not InCombatLockdown() then pcall(M.SeeBoss, M, "mouseover") end
 				if not M.hereKey and IsInInstance() then pcall(M.LearnHere, M, "mouseover") end
 				if M.hereKey and not InCombatLockdown() then pcall(M.CheckDead, M, "mouseover") end
 			elseif event == "PLAYER_REGEN_ENABLED" then
 				-- 전투 중엔 사망 여부가 비공개라 못 읽은 것: 전투가 끝나면 대상을 다시 본다
-				if M.hereKey then C_Timer.After(0.3, function() pcall(M.CheckDead, M, "target") end) end
+				if M.hereKey then C_Timer.After(0.3, function() pcall(M.SeeBoss, M, "target"); pcall(M.CheckDead, M, "target") end) end
 			else
+				if event == "PLAYER_TARGET_CHANGED" and IsInInstance() then pcall(M.SeeBoss, M, "target") end
 				if not M.hereKey and IsInInstance() then pcall(M.LearnHere, M, "target") end
 				if M.hereKey then pcall(M.CheckDead, M, "target") end
 			end
