@@ -1,8 +1,8 @@
 -- FOA UI · 원터치 낚시 (낚싯대를 들었을 때만 켜진다)
---  · 오른쪽 두 번 클릭 (설정에서 끌 수 있음): 찌가 없으면 던지고, 찌가 떠 있으면 낚아챈다
---  · FOA 낚시 단축키 (설정 → 가방 → 편의): 키보드 키나 마우스 가운데 · 4 · 5 버튼
---    낚싯대를 들었을 때만 그 키가 낚시로 바뀌고, 내려놓으면 원래 기능으로 돌아간다
+--  · FOA 낚시 단축키 (기본 F · 설정 → 가방 → 편의에서 바꾸기): 찌가 없으면 던지고, 찌가 떠 있으면 낚아챈다
+--    키보드 키나 마우스 가운데 · 4 · 5 버튼 · 낚싯대를 들었을 때만 그 키가 낚시로 바뀌고, 내려놓으면 원래 기능으로
 --    단축키 저장 방식이 "이 캐릭터만"이면 캐릭터마다 따로 기억
+--  · 단축키를 지운 경우에만 오른쪽 두 번 클릭 (오른쪽 버튼으로 시점을 돌리는 사람이 많아서 기본은 단축키)
 --  · 게임 메뉴 → 단축키 → FOA UI → 원터치 낚시 도 같은 동작
 --  찌 낚아채기는 블리자드 "상호작용 대상" 기능을 쓴다 (찌가 떠 있으면 찌가 상호작용 대상이 된다).
 --  전투 중에는 단축키를 바꿀 수 없어서 쉰다.
@@ -57,19 +57,23 @@ end
 -------------------------------------------------------------------------------
 -- FOA 낚시 단축키 (캐릭터 전용 단축키를 쓰는 캐릭터는 캐릭터마다 · 아니면 계정 공용)
 --  false = 이 캐릭터는 일부러 비워 둠
+--  저장 값: nil = 기본(F) · false = 지움 (그때만 오른쪽 두 번 클릭)
+M.DEFAULT_KEY = "F"
 function M:GetKey()
 	local cdb = Ink.cdb
 	if cdb and Ink.CharBindings and Ink.CharBindings() and cdb.fishKey ~= nil then
 		return cdb.fishKey or nil
 	end
-	return Ink.db.fishKey or nil
+	local k = Ink.db.fishKey
+	if k == nil then return M.DEFAULT_KEY end
+	return k or nil
 end
 
 function M:SetKey(k)
 	if k == "BUTTON1" or k == "BUTTON2" then return end -- 왼쪽 · 오른쪽 클릭 한 번은 막는다 (이동 · 대상 잡기가 안 됨)
 	local cdb = Ink.cdb
 	if cdb and Ink.CharBindings and Ink.CharBindings() then cdb.fishKey = k or false
-	else Ink.db.fishKey = k end
+	else Ink.db.fishKey = k or false end
 	self:ApplyKey()
 end
 
@@ -104,7 +108,8 @@ end
 -- 오른쪽 클릭 한 번 → 잠깐 동안 다음 오른쪽 클릭을 낚시 동작으로 바꿔 둔다
 function M:OnWorldDown(button)
 	if button ~= "RightButton" or not self.active or InCombatLockdown() then return end
-	if Ink.db.fishClick == "off" then return end
+	-- 단축키가 있으면 그 키만 (오른쪽 버튼은 시점 돌리기에 그대로)
+	if self:GetKey() then return end
 	local now = GetTime()
 	if self.armedUntil and now < self.armedUntil then return end
 	self.armedUntil = now + DOUBLE
@@ -143,14 +148,13 @@ function M:Refresh()
 		if not self.told then
 			self.told = true
 			local parts = {}
-			if Ink.db.fishClick ~= "off" then parts[#parts + 1] = "오른쪽 두 번 클릭" end
 			local own = self:GetKey()
-			if own then parts[#parts + 1] = M.KeyLabel(own) end
+			if own then parts[#parts + 1] = M.KeyLabel(own) else parts[#parts + 1] = "오른쪽 두 번 클릭" end
 			local k = GetBindingKey("CLICK FOAFishButton:LeftButton")
 			if k and k ~= own then parts[#parts + 1] = M.KeyLabel(k) end
 			if #parts > 0 then
 				print("|T" .. Ink.tex.logo .. ":14:14|t |cffFFF468FOA|r 원터치 낚시 켜짐  ·  " .. table.concat(parts, " / ") .. "  →  던지기 · 낚아채기" ..
-					(own and "" or "  |cff8E939B(내 단축키: 설정 → 가방 → 편의)|r"))
+					"  |cff8E939B(바꾸기: 설정 → 가방 → 편의)|r")
 			else
 				print("|T" .. Ink.tex.logo .. ":14:14|t |cffFFF468FOA|r 원터치 낚시: 설정 → 가방 → 편의 에서 단축키를 정해 주세요")
 			end

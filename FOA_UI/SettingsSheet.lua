@@ -523,13 +523,10 @@ function M:BuildRegistry()
 				SW("guildRepair", "길드 자금으로 수리", "가능하면 길드 자금 먼저", { dep = "autoRepair" }),
 			} },
 			{ t = "편의", rows = {
-				SW("oneTouchFish", "원터치 낚시", "낚싯대를 들었을 때만 · 같은 동작으로 던지고, 찌가 뜨면 낚아채기",
+				SW("oneTouchFish", "원터치 낚시", "낚싯대를 들었을 때만 · 단축키 한 번에 던지고, 찌가 뜨면 같은 키로 낚아채기",
 					{ apply = function() call("Fishing", "Refresh") end }),
-				{ kind = "seg", key = "fishClick", label = "마우스로", desc = "월드에서 두 번 클릭", dep = "oneTouchFish",
-					opts = { { "right", "오른쪽 두 번" }, { "off", "안 씀" } }, def = "right",
-					apply = function() call("Fishing", "Refresh") end },
-				{ kind = "key", id = "fishKey", label = "낚시 단축키",
-					desc = "키보드 · 마우스 가운데/4/5 · 낚싯대를 들 때만 바뀌어요 · 오른쪽 클릭 = 지우기",
+				{ kind = "key", id = "fishKey", label = "낚시 단축키", def = "F",
+					desc = "기본 F · 키보드 · 마우스 가운데/4/5 · 오른쪽 클릭 = 지우기 (지우면 오른쪽 두 번 클릭)",
 					dep = "oneTouchFish",
 					get = function() local f = mod("Fishing"); return f and f.GetKey and f:GetKey() or nil end,
 					set = function(v) local f = mod("Fishing"); if f and f.SetKey then f:SetKey(v) end end,
@@ -1274,7 +1271,7 @@ function Row:PaintKey()
 		b.text:SetText("키를 누르세요…  ESC 취소")
 	else
 		local v = Get(e)
-		b.text:SetText(v and (e.label2 and e.label2(v) or v) or "지정 안 함")
+		b.text:SetText(v and (e.label2 and e.label2(v) or v) or "지정 안 함 · 오른쪽 두 번 클릭")
 	end
 	b:Fit()
 	b:SetWidth(math.max(196, math.min(260, b:GetWidth())))
