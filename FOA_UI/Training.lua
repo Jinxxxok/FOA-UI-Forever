@@ -44,11 +44,29 @@ end
 -------------------------------------------------------------------------------
 -- 목록 만들기: 상급자 기억 → 없으면 wowf 자료
 -------------------------------------------------------------------------------
+-- 직업 상급자 목록이 맞나: 직업 기술 자료(ClassSpells)와 이름이 3개 넘게 겹쳐야
+--  (탈것 전문가 · 사냥꾼 소환수 조련사 같은 다른 "상급자" 창도 직업 상급자 창과 같은 모양이라,
+--   그 목록(탈것 기술 하나 등)을 직업 기술로 기억하면 배울 기술이 통째로 사라졌다)
+local function LooksLikeClassList(list, cls)
+	if not (list and #list > 0) then return false end
+	local static = ns.CLASS_SPELLS and ns.CLASS_SPELLS[cls]
+	if static and #static > 0 then
+		local names = {}
+		for _, e in ipairs(static) do names[e[2]] = true end
+		local hit = 0
+		for _, e in ipairs(list) do
+			if names[e[2]] then hit = hit + 1 if hit >= 3 then return true end end
+		end
+		return false
+	end
+	return #list >= 10
+end
+
 function M:List()
 	local _, cls = UnitClass("player")
 	local saved = Ink.db.classTrainer and Ink.db.classTrainer[cls]
-	-- 예전 버전이 무기 전문가 목록을 직업 기술로 기억했으면 버린다
-	if saved and saved.list and IsWeaponList and IsWeaponList(saved.list) then
+	-- 예전 버전이 무기 전문가 · 탈것 전문가 목록을 직업 기술로 기억했으면 버린다
+	if saved and saved.list and ((IsWeaponList and IsWeaponList(saved.list)) or not LooksLikeClassList(saved.list, cls)) then
 		Ink.db.classTrainer[cls] = nil
 		saved = nil
 	end
@@ -166,6 +184,8 @@ function M:ReadTrainer()
 		if key then Ink.db.profTrainer[key] = { t = time(), list = list } end
 	else
 		local _, cls = UnitClass("player")
+		-- 직업 상급자가 아닌 창(탈것 전문가 등)은 기억하지 않는다
+		if not LooksLikeClassList(list, cls) then self:Paint() return end
 		Ink.db.classTrainer = Ink.db.classTrainer or {}
 		table.sort(list, function(a, b) if a[1] ~= b[1] then return a[1] < b[1] end return a[2] < b[2] end)
 		-- "used"/"available" 상태는 이 캐릭터 기준이라 목록에는 레벨 · 비용만 남기고, 상태는 캐릭터별로
