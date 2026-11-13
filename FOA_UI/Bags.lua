@@ -774,7 +774,7 @@ function M:Build()
 	f.freeCount:SetPoint("TOPLEFT", f.freeLabel, "BOTTOMLEFT", 0, -3)
 	f.hint = Ink:Text(f, F.sans, 10, C.dim, "CENTER")
 	f.hint:SetPoint("BOTTOM", f, "BOTTOM", 0, 22)
-	f.hint:SetText("휠 클릭으로 고정 / 해제")
+	f.hint:SetText("휠 클릭: 고정 / 해제 (자동 판매 제외)")
 	f.gold = Ink:Text(f, F.latin, 12, C.text, "RIGHT")
 	f.gold:SetPoint("BOTTOMRIGHT", -PAD, 22)
 

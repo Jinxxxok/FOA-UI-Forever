@@ -1,5 +1,5 @@
 -- FOA UI · 상인 편의 기능
---  상인 창을 열면 잡동사니(회색 아이템) 자동 판매 + 자동 수리 (길드 수리 가능하면 길드 자금 먼저)
+--  상인 창을 열면 잡동사니(회색 아이템) 자동 판매 (FOA 가방에서 고정한 것은 빼고) + 자동 수리 (길드 수리 가능하면 길드 자금 먼저)
 --  결과는 채팅창에 한 줄로: "잡동사니 7개 판매 +1골드 · 수리 -45골드 (길드)"
 
 local _, ns = ...
@@ -47,10 +47,15 @@ end
 function M:SellPass()
 	if not (MerchantFrame and MerchantFrame:IsShown()) then return end
 	local sold = 0
+	-- FOA 가방에서 고정(휠 클릭)한 아이템은 회색이어도 팔지 않는다
+	local pins = Ink.db.bagPins or {}
+	local kept = {}
 	for bag = 0, (NUM_BAG_SLOTS or 4) do
 		for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
 			local info = C_Container.GetContainerItemInfo(bag, slot)
-			if info and info.quality == 0 and not info.hasNoValue and not info.isLocked then
+			if info and info.quality == 0 and info.itemID and pins[info.itemID] then
+				kept[info.itemID] = true
+			elseif info and info.quality == 0 and not info.hasNoValue and not info.isLocked then
 				local price = select(11, C_Item.GetItemInfo(info.itemID)) or 0
 				if price > 0 then
 					self.junkGold = (self.junkGold or 0) + price * (info.stackCount or 1)
@@ -65,6 +70,9 @@ function M:SellPass()
 			end
 		end
 	end
+	local nKept = 0
+	for _ in pairs(kept) do nKept = nKept + 1 end
+	self.junkKept = nKept
 	self:Report()
 end
 
@@ -73,13 +81,16 @@ function M:Report()
 	if (self.junkCount or 0) > 0 then
 		parts[#parts + 1] = string.format("잡동사니 %d개 판매 |cff6FD39A+%s|r", self.junkCount, Coins(self.junkGold or 0))
 	end
+	if (self.junkKept or 0) > 0 then
+		parts[#parts + 1] = string.format("|cff8E939B고정한 잡동사니 %d종은 남김|r", self.junkKept)
+	end
 	if self.repairCost then
 		parts[#parts + 1] = string.format("수리 |cffFF6B5E-%s|r%s", Coins(self.repairCost), self.repairGuild and " (길드)" or "")
 	elseif self.repairShort then
 		parts[#parts + 1] = string.format("|cffFF6B5E수리비 부족 (%s 필요)|r", Coins(self.repairShort))
 	end
 	if #parts > 0 then print(PREFIX .. table.concat(parts, "  ·  ")) end
-	self.junkCount, self.junkGold, self.repairCost, self.repairGuild, self.repairShort = nil, nil, nil, nil, nil
+	self.junkCount, self.junkGold, self.junkKept, self.repairCost, self.repairGuild, self.repairShort = nil, nil, nil, nil, nil, nil
 end
 
 function M:OnMerchant()
