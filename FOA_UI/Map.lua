@@ -278,6 +278,126 @@ local PORTALS = {
 }
 M.PORTALS = PORTALS
 
+-- 탈것 전문가 · 탈것 상인 (종족마다)
+--  자리: AllTheThings (MIT) db/Camelot · QuestieDB 포에버 NPC 자료 · warcrafttavern.com 포에버 탈것 안내
+--  포에버 규칙: 40레벨 견습 탈것 기술 100골(첫 탈것 포함) · 탈것 색 추가 20골 · 60레벨 숙련 1000골 · 정예 탈것 200골
+--   다른 종족 것은 그 종족 평판 "확고한 동맹"이 있어야 배우고 살 수 있다 · 내 종족 평판 "존경"이면 10% 할인
+--  { 종족, 진영(1호드 2얼라 0둘다), 평판 번호, 평판 이름, 탈것, 지도, x, y, 전문가 {NPC, 영문}, 상인 {NPC, 영문, x, y} }
+local MOUNT_RGB = Ink.hex("9BD66B")
+local MOUNTS = {
+	{ race = 1, fac = 2, rep = 72, repKo = "스톰윈드", mount = "말", map = 1429, x = 84.3, y = 64.9,
+		trainer = { 4732, "Randal Hunter" }, vendor = { 384, "Katie Hunter", 84.1, 65.4 } },
+	{ race = 3, fac = 2, rep = 47, repKo = "아이언포지", mount = "산양", map = 1426, x = 63.9, y = 50.1,
+		trainer = { 4772, "Ultham Ironhorn" }, vendor = { 1261, "Veron Amberstill", 63.4, 50.6 } },
+	{ race = 4, fac = 2, rep = 69, repKo = "다르나서스", mount = "호랑이", map = 1457, x = 38.6, y = 16.0,
+		trainer = { 4753, "Jartsam" }, vendor = { 4730, "Lelanai", 38.3, 15.3 } },
+	{ race = 7, fac = 2, rep = 54, repKo = "놈리건 망명자", mount = "기계타조", map = 1426, x = 49.2, y = 48.1,
+		trainer = { 7954, "Binjy Featherwhistle" }, vendor = { 7955, "Milli Featherwhistle", 49.1, 48.0 } },
+	{ race = 2, fac = 1, rep = 76, repKo = "오그리마", mount = "늑대", map = 1454, x = 69.4, y = 13.1,
+		trainer = { 4752, "Kildar" }, vendor = { 3362, "Ogunaro Wolfrunner", 69.4, 12.3 } },
+	{ race = 6, fac = 1, rep = 81, repKo = "썬더 블러프", mount = "코도", map = 1412, x = 46.8, y = 62.0,
+		trainer = { 3690, "Kar Stormsinger" }, vendor = { 3685, "Harb Clawhoof", 47.5, 58.6 } },
+	{ race = 8, fac = 1, rep = 530, repKo = "검은창 트롤", mount = "랩터", map = 1411, x = 55.3, y = 75.5,
+		trainer = { 7953, "Xar'Ti" }, vendor = { 7952, "Zjolnir", 55.2, 75.6 } },
+	{ race = 5, fac = 1, rep = 68, repKo = "언더시티", mount = "해골마", map = 1420, x = 60.1, y = 52.6,
+		trainer = { 4773, "Velma Warnam" }, vendor = { 4731, "Zachariah Post", 59.8, 52.6 } },
+	-- 스카이본: 두 진영이 같은 곳 (제프라스 섬 페어웨더 마구간) · 평판은 얼라 하이 오더 / 호드 윈드셰이퍼
+	{ race = 95, race2 = 96, fac = 0, repKo = "하이 오더 스카이본", repKo2 = "윈드셰이퍼 스카이본", mount = "스카이본", map = 2521, x = 53.8, y = 81.2,
+		trainer = { 265756, "Genn Fairweather" }, vendor = { 265756, "Genn Fairweather" } },
+	-- 말 상인 (인간 말 · 스톰윈드 평판)
+	{ race = 1, fac = 2, rep = 72, repKo = "스톰윈드", mount = "말", map = 1437, x = 8.6, y = 54.4, vendorOnly = true,
+		vendor = { 1460, "Unger Statforth" } },
+	{ race = 1, fac = 2, rep = 72, repKo = "스톰윈드", mount = "말", map = 1424, x = 52.2, y = 55.4, vendorOnly = true,
+		vendor = { 2357, "Merideth Carlson" } },
+	{ race = 1, fac = 2, rep = 72, repKo = "스톰윈드", mount = "말", map = 1445, x = 65.2, y = 51.4, vendorOnly = true,
+		vendor = { 4885, "Gregor MacVince" } },
+}
+M.MOUNTS = MOUNTS
+local RACE_KO = { [1] = "인간", [2] = "오크", [3] = "드워프", [4] = "나이트 엘프", [5] = "언데드", [6] = "타우렌", [7] = "노움", [8] = "트롤",
+	[95] = "하이 오더 스카이본", [96] = "윈드셰이퍼 스카이본" }
+local function RaceName(id)
+	if C_CreatureInfo and C_CreatureInfo.GetRaceInfo then
+		local ok, r = pcall(C_CreatureInfo.GetRaceInfo, id)
+		if ok and r and type(r.raceName) == "string" and r.raceName ~= "" then return r.raceName end
+	end
+	return RACE_KO[id] or "?"
+end
+local function RepOf(id)
+	if not id then return end
+	if C_Reputation and C_Reputation.GetFactionDataByID then
+		local ok, d = pcall(C_Reputation.GetFactionDataByID, id)
+		if ok and d and d.name then
+			return { name = d.name, standing = d.reaction, min = d.currentReactionThreshold, max = d.nextReactionThreshold, val = d.currentStanding }
+		end
+	end
+	if GetFactionInfoByID then
+		local ok, name, _, standing, bmin, bmax, val = pcall(GetFactionInfoByID, id)
+		if ok and name then return { name = name, standing = standing, min = bmin, max = bmax, val = val } end
+	end
+end
+local function StandingText(r)
+	if not (r and r.standing) then return nil end
+	local label = _G["FACTION_STANDING_LABEL" .. r.standing] or ""
+	if r.standing >= 8 then return label end
+	local cur, need = (r.val or 0) - (r.min or 0), (r.max or 0) - (r.min or 0)
+	if need > 0 then return string.format("%s %s / %s", label, BreakUpLargeNumbers and BreakUpLargeNumbers(cur) or cur, BreakUpLargeNumbers and BreakUpLargeNumbers(need) or need) end
+	return label
+end
+local function NpcNameOf(e)
+	local Q = Ink.modules.QuestMap
+	local n = e and Q and Q.GiverName and Q:GiverName(e[1])
+	return n or (e and e[2])
+end
+-- 한 곳의 표시 글: 제목 · 누구 · 조건 (내 종족이면 바로, 아니면 평판 확고한 동맹) · 값
+--  돌려주는 값: 제목, 부제, 메모, 못 씀(흐리게)
+function M.MountInfo(m)
+	local _, _, myRace = UnitRace("player")
+	local fac = UnitFactionGroup("player")
+	local facN = fac == "Horde" and 1 or (fac == "Alliance" and 2 or 0)
+	local race = (m.race2 and facN == 1) and m.race2 or m.race
+	local mine = myRace == m.race or (m.race2 and myRace == m.race2)
+	local rname = RaceName(race)
+	local title = m.vendorOnly and (m.mount .. " 상인") or (m.race2 and "스카이본 탈것 · 두 진영 공용") or (rname .. " 탈것 · " .. m.mount)
+	local sub = {}
+	if m.trainer then sub[#sub + 1] = "탈것 기술: " .. (NpcNameOf(m.trainer) or "") end
+	if m.vendor then sub[#sub + 1] = "탈것 상인: " .. (NpcNameOf(m.vendor) or "") end
+	local note = {}
+	local off = false
+	if mine then
+		note[#note + 1] = "|cff6FD39A내 종족 · 40레벨이면 바로 배우고 살 수 있어요|r"
+	else
+		local repName = (m.race2 and facN == 1) and m.repKo2 or m.repKo
+		local r = RepOf(m.rep)
+		if r and r.name then repName = r.name end
+		local ok = r and r.standing and r.standing >= 8
+		if ok then
+			note[#note + 1] = "|cff6FD39A" .. repName .. " 확고한 동맹 · 배우고 살 수 있어요|r"
+		else
+			off = true
+			note[#note + 1] = "|cffFFB347" .. repName .. " 평판 확고한 동맹 필요|r"
+			local st = StandingText(r)
+			if st then note[#note + 1] = "지금: " .. st end
+		end
+	end
+	if m.vendorOnly then
+		note[#note + 1] = "탈것 20골 · 정예 탈것 200골 (60레벨 · 숙련 기술)"
+	else
+		note[#note + 1] = "40레벨 견습 탈것 기술 100골 (첫 탈것 포함) · 색 추가 20골"
+		note[#note + 1] = "60레벨 숙련 기술 1000골 · 정예 탈것 200골"
+	end
+	if mine and m.rep then
+		local r = RepOf(m.rep)
+		local nm = (r and r.name) or m.repKo
+		if r and r.standing and r.standing >= 6 then
+			note[#note + 1] = "|cff6FD39A" .. nm .. " 존경 이상 · 10% 할인 받는 중|r"
+		else
+			local st = StandingText(r)
+			note[#note + 1] = "|cff8E939B" .. nm .. " 존경이면 10% 할인" .. (st and (" · 지금 " .. st) or "") .. "|r"
+		end
+	end
+	return title, table.concat(sub, "\n"), table.concat(note, "\n"), off
+end
+
 -- 차원문 자리 배우기: 0.5초마다 위치를 적어 두다가 지도가 다르나서스 ↔ 텔드랏실로 순간 바뀌면 바로 전 자리를 차원문으로
 function M:WatchPortals()
 	if self.portalTicker then return end
@@ -374,7 +494,7 @@ end
 -- kind: "svc" / "prof" / "cls" / "flight"
 local function StylePin(p, kind, key, off)
 	local a = p.art
-	local size = (kind == "svc" or kind == "boat" or kind == "portal") and 26 or 22
+	local size = (kind == "svc" or kind == "boat" or kind == "portal" or kind == "mount") and 26 or 22
 	p:SetSize(size, size); a:SetSize(size, size)
 	a.icon:RemoveMaskTexture(a.mask)
 	a.icon:SetTexCoord(0, 1, 0, 1)
@@ -407,6 +527,19 @@ local function StylePin(p, kind, key, off)
 		a.pill:SetWidth(a.pill.t:GetStringWidth() + 12)
 		a.pill:Show()
 		off = nil
+	elseif kind == "mount" then
+		-- 탈것 전문가 · 상인: 말 머리 + 짧은 글자 (못 쓰는 곳은 흐리게)
+		col = MOUNT_RGB
+		a.icon:SetTexture(Ink.icon("NpcMount"))
+		a.icon:SetSize(size * 0.6, size * 0.6)
+		a.icon:SetVertexColor(col[1], col[2], col[3])
+		a.icon:SetAlpha(off and 0.6 or 1)
+		if key then
+			a.pill.t:SetText(key)
+			a.pill.t:SetTextColor(col[1], col[2], col[3], off and 0.7 or 1)
+			a.pill:SetWidth(a.pill.t:GetStringWidth() + 12)
+			a.pill:Show()
+		end
 	elseif kind == "boat" then
 		-- 배 · 비행선: 아이콘 + 행선지 글자
 		col = BOAT_RGB
@@ -436,7 +569,7 @@ local function StylePin(p, kind, key, off)
 		a.icon:SetVertexColor(1, 1, 1)
 	end
 	a.ring:SetVertexColor(col[1], col[2], col[3], off and 0.5 or 1)
-	a.glow:SetVertexColor(col[1], col[2], col[3], off and 0 or ((kind == "svc" or kind == "flight" or kind == "boat" or kind == "portal") and 0.26 or 0.14))
+	a.glow:SetVertexColor(col[1], col[2], col[3], off and 0 or ((kind == "svc" or kind == "flight" or kind == "boat" or kind == "portal" or kind == "mount") and 0.26 or 0.14))
 	p.tipR, p.tipG, p.tipB = col[1], col[2], col[3]
 end
 
@@ -659,6 +792,27 @@ function M:Refresh()
 					local lines = {}
 					for _, d in ipairs(b.to) do lines[#lines + 1] = "→ " .. d end
 					put(x, y, "boat", short, b.title, table.concat(lines, "\n"), b.note)
+				end
+			end
+		end
+	end
+	-- 3-2) 탈것 전문가 · 상인 (내 진영 모든 종족 + 스카이본 · 대륙 지도에도, 세계 지도엔 안 그림)
+	if Ink.db.mapMounts ~= false and mapID and cat.mount ~= false and not (mInfo and mInfo.mapType and mInfo.mapType <= 1) then
+		local fac = UnitFactionGroup("player")
+		local facN = fac == "Horde" and 1 or (fac == "Alliance" and 2 or 0)
+		for _, m in ipairs(MOUNTS) do
+			if m.fac == 0 or m.fac == facN then
+				local title, sub, note, off = M.MountInfo(m)
+				local pill = (not wide) and (m.vendorOnly and (m.mount .. " 상인") or ("탈것 · " .. m.mount)) or nil
+				-- 전문가와 상인이 떨어져 있으면 (멀고어 블러드후프 마을) 상인 자리도 따로
+				local spots = { { m.x, m.y } }
+				local v = m.vendor
+				if v and v[3] and (math.abs(v[3] - m.x) > 1.5 or math.abs(v[4] - m.y) > 1.5) then spots[2] = { v[3], v[4], true } end
+				for _, sp in ipairs(spots) do
+					local x, y = ToMap(m.map, sp[1] / 100, sp[2] / 100, mapID)
+					if x then
+						put(x, y, "mount", sp[3] and (not wide and (m.mount .. " 상인") or nil) or pill, title, sub, note, off)
+					end
 				end
 			end
 		end
@@ -1447,7 +1601,7 @@ end
 local CHIPS = {
 	{ "svc", "서비스", "NpcBank", "E3C07A" }, { "cls", "직업 상급자", "NpcTrainer", "F3F2EE" },
 	{ "prof", "전문기술", "Professions", "C9A8FF" }, { "flight", "비행", "NpcFlight", "86DDF2" },
-	{ "boat", "배", "NpcBoat", "7FD8C8" },
+	{ "boat", "배", "NpcBoat", "7FD8C8" }, { "mount", "탈것", "NpcMount", "9BD66B" },
 }
 function M:BuildCityLegend()
 	local wm = WorldMapFrame
