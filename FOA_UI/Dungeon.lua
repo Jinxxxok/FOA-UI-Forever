@@ -2913,27 +2913,41 @@ function M:BuildBoardMap(b)
 	return mf
 end
 
--- 던전 화면을 펴 두는 동안 뒤의 세계 지도는 투명하게:
+-- 던전 화면을 펴 두는 동안 뒤의 세계 지도는 안 보이게:
 --  지도 창(왼쪽 정렬)과 던전 화면(가운데)이 자리가 달라 지도 가장자리가 옆으로 삐져나와 보였다.
---  지도 창은 애드온 코드로 닫지 않는다(오염) → 투명도만. 움직이면 지도를 흐리게 하는 블리자드 기능이
---  투명도를 다시 올려도 던전 화면이 떠 있는 동안은 0으로 되돌린다.
-local wmFaded, wmAlphaHook, wmFading
+--  지도 창은 애드온 코드로 닫지 않는다(오염) → 투명도만.
+--  예전엔 지도 창 자체를 투명하게 하고 던전 화면만 "부모 투명도 무시"로 살렸는데, 포에버에선 그게 안 먹어서
+--  던전 화면까지 같이 사라졌다 (0.65.30 · 0.65.38 "맵이 안 나온다") → 지도 창은 그대로 두고,
+--  던전 화면을 뺀 지도 창의 자식 틀 · 그림만 하나씩 투명하게 했다가 닫을 때 원래 값으로 되돌린다
+local wmFaded
+local wmHidden = {}
 local function FadeWorldMap(on)
 	local wm = WorldMapFrame
 	if not wm then return end
-	if on and not wmAlphaHook then
-		wmAlphaHook = true
-		hooksecurefunc(wm, "SetAlpha", function(self, a)
-			if wmFaded and not wmFading and a and a > 0 then
-				wmFading = true; self:SetAlpha(0); wmFading = nil
-			end
-		end)
-	end
-	if on == wmFaded then return end
+	on = on and true or false
+	if on == (wmFaded or false) then return end
 	wmFaded = on
-	wmFading = true
-	pcall(wm.SetAlpha, wm, on and 0 or 1)
-	wmFading = nil
+	if on then
+		wipe(wmHidden)
+		local board = M.board
+		for _, c in ipairs({ wm:GetChildren() }) do
+			if c ~= board and c.GetAlpha and c.SetAlpha then
+				wmHidden[c] = c:GetAlpha()
+				pcall(c.SetAlpha, c, 0)
+			end
+		end
+		for _, r in ipairs({ wm:GetRegions() }) do
+			if r.GetAlpha and r.SetAlpha then
+				wmHidden[r] = r:GetAlpha()
+				pcall(r.SetAlpha, r, 0)
+			end
+		end
+		-- 예전 방식 때문에 지도 창 자체가 투명하게 남아 있으면 되돌린다
+		if (wm:GetAlpha() or 1) < 0.05 then pcall(wm.SetAlpha, wm, 1) end
+	else
+		for obj, a in pairs(wmHidden) do pcall(obj.SetAlpha, obj, a or 1) end
+		wipe(wmHidden)
+	end
 end
 M.FadeWorldMap = FadeWorldMap
 
@@ -2945,8 +2959,8 @@ function M:ShowBoard(key)
 	self.showing = key
 	self:SizeBoard()
 	b:Show()
-	-- 던전 화면이 지도 창 투명도를 안 물려받을 때만 지도를 투명하게 (아니면 던전 화면도 같이 사라진다)
-	if b.SetIgnoreParentAlpha and b.IsIgnoringParentAlpha and b:IsIgnoringParentAlpha() then FadeWorldMap(true) end
+	b:SetAlpha(1)
+	FadeWorldMap(true)
 	f:ClearAllPoints()
 	f:SetFrameStrata("DIALOG")
 	f:SetFrameLevel(b:GetFrameLevel() + 10)
