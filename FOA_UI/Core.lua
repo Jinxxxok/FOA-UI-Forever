@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.65.41"
+Ink.version = "0.65.42"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1480,8 +1480,10 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
 			local fn = tostring(arg2)
 			-- 지도 표시(핀)의 "오른쪽 클릭 통과" 설정이 막힌 것도 화면에 영향이 없다 (퀘스트 상세를 FOA 목록에서 연 뒤 전투 중 지도를 열 때)
 			if fn:find("SetPassThroughButtons") or fn:find("SetPropagateMouseClicks") then return end
+			-- 블리자드 게임패드 행동단축바(GamepadMainActionBarFrame…)도 같은 경우: 패드를 안 쓰면 화면에 없는 바다
 			if fn:find("^MultiBar") or fn:find("^MainActionBar") or fn:find("^MainMenuBar[:%.]") or fn:find("^StanceBar") or fn:find("^PetActionBar")
-				or fn:find("^ActionButton%d") or fn:find("^StanceButton") or fn:find("^PetActionButton") or fn:find("^MultiCastActionBar") then
+				or fn:find("^ActionButton%d") or fn:find("^StanceButton") or fn:find("^PetActionButton") or fn:find("^MultiCastActionBar")
+				or fn:find("^Gamepad") then
 				return
 			end
 			-- 같은 동작은 30초에 한 번만 알린다 (채팅창 도배 방지)
