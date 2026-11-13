@@ -1,6 +1,9 @@
 -- FOA UI · 원터치 낚시 (낚싯대를 들었을 때만 켜진다)
---  · 오른쪽 두 번 클릭: 찌가 없으면 던지고, 찌가 떠 있으면 낚아챈다
---  · 단축키 (게임 메뉴 → 단축키 → FOA UI → 원터치 낚시) 도 같은 동작
+--  · 오른쪽 두 번 클릭 (설정에서 끌 수 있음): 찌가 없으면 던지고, 찌가 떠 있으면 낚아챈다
+--  · FOA 낚시 단축키 (설정 → 가방 → 편의): 키보드 키나 마우스 가운데 · 4 · 5 버튼
+--    낚싯대를 들었을 때만 그 키가 낚시로 바뀌고, 내려놓으면 원래 기능으로 돌아간다
+--    단축키 저장 방식이 "이 캐릭터만"이면 캐릭터마다 따로 기억
+--  · 게임 메뉴 → 단축키 → FOA UI → 원터치 낚시 도 같은 동작
 --  찌 낚아채기는 블리자드 "상호작용 대상" 기능을 쓴다 (찌가 떠 있으면 찌가 상호작용 대상이 된다).
 --  전투 중에는 단축키를 바꿀 수 없어서 쉰다.
 
@@ -52,22 +55,56 @@ end
 -------------------------------------------------------------------------------
 -- 단축키 바꿔 끼우기
 -------------------------------------------------------------------------------
--- 단축키: 찌가 떠 있는 동안은 같은 키가 "상호작용"(낚아채기)으로 바뀐다
+-- FOA 낚시 단축키 (캐릭터 전용 단축키를 쓰는 캐릭터는 캐릭터마다 · 아니면 계정 공용)
+--  false = 이 캐릭터는 일부러 비워 둠
+function M:GetKey()
+	local cdb = Ink.cdb
+	if cdb and Ink.CharBindings and Ink.CharBindings() and cdb.fishKey ~= nil then
+		return cdb.fishKey or nil
+	end
+	return Ink.db.fishKey or nil
+end
+
+function M:SetKey(k)
+	if k == "BUTTON1" or k == "BUTTON2" then return end -- 왼쪽 · 오른쪽 클릭 한 번은 막는다 (이동 · 대상 잡기가 안 됨)
+	local cdb = Ink.cdb
+	if cdb and Ink.CharBindings and Ink.CharBindings() then cdb.fishKey = k or false
+	else Ink.db.fishKey = k end
+	self:ApplyKey()
+end
+
+-- 단축키: 낚싯대를 들었을 때 FOA 낚시 키 = 던지기, 찌가 떠 있는 동안은 "상호작용"(낚아채기)
+--  게임 메뉴에서 지정한 원터치 낚시 키는 원래 던지기라서 찌가 떠 있는 동안만 바꾼다
 function M:ApplyKey()
 	if InCombatLockdown() then self.keyPending = true return end
 	self.keyPending = nil
 	ClearOverrideBindings(self.keyOwner)
 	local k1, k2 = GetBindingKey("CLICK FOAFishButton:LeftButton")
 	self.keySig = tostring(k1) .. "|" .. tostring(k2)
-	if not (self.active and self.fishing) then return end
-	for _, k in ipairs({ k1, k2 }) do
-		if k then SetOverrideBinding(self.keyOwner, true, k, "INTERACTTARGET") end
+	if not self.active then return end
+	local own = self:GetKey()
+	if own then
+		if self.fishing then SetOverrideBinding(self.keyOwner, true, own, "INTERACTTARGET")
+		else SetOverrideBindingClick(self.keyOwner, true, own, "FOAFishButton", "LeftButton") end
 	end
+	if not self.fishing then return end
+	for _, k in ipairs({ k1, k2 }) do
+		if k and k ~= own then SetOverrideBinding(self.keyOwner, true, k, "INTERACTTARGET") end
+	end
+end
+
+-- 키 이름 (한글: "마우스 가운데 버튼" 등)
+function M.KeyLabel(k)
+	if not k then return nil end
+	local ok, t = pcall(GetBindingText, k, "KEY_")
+	if not (ok and t and t ~= "") then ok, t = pcall(GetBindingText, k) end
+	return (ok and t and t ~= "") and t or k
 end
 
 -- 오른쪽 클릭 한 번 → 잠깐 동안 다음 오른쪽 클릭을 낚시 동작으로 바꿔 둔다
 function M:OnWorldDown(button)
 	if button ~= "RightButton" or not self.active or InCombatLockdown() then return end
+	if Ink.db.fishClick == "off" then return end
 	local now = GetTime()
 	if self.armedUntil and now < self.armedUntil then return end
 	self.armedUntil = now + DOUBLE
@@ -105,9 +142,18 @@ function M:Refresh()
 		end
 		if not self.told then
 			self.told = true
+			local parts = {}
+			if Ink.db.fishClick ~= "off" then parts[#parts + 1] = "오른쪽 두 번 클릭" end
+			local own = self:GetKey()
+			if own then parts[#parts + 1] = M.KeyLabel(own) end
 			local k = GetBindingKey("CLICK FOAFishButton:LeftButton")
-			print("|T" .. Ink.tex.logo .. ":14:14|t |cffFFF468FOA|r 원터치 낚시: 오른쪽 두 번 클릭" ..
-				(k and (" · " .. k) or " (단축키: 게임 메뉴 → 단축키 → FOA UI)") .. " 로 던지고 낚아채기")
+			if k and k ~= own then parts[#parts + 1] = M.KeyLabel(k) end
+			if #parts > 0 then
+				print("|T" .. Ink.tex.logo .. ":14:14|t |cffFFF468FOA|r 원터치 낚시 켜짐  ·  " .. table.concat(parts, " / ") .. "  →  던지기 · 낚아채기" ..
+					(own and "" or "  |cff8E939B(내 단축키: 설정 → 가방 → 편의)|r"))
+			else
+				print("|T" .. Ink.tex.logo .. ":14:14|t |cffFFF468FOA|r 원터치 낚시: 설정 → 가방 → 편의 에서 단축키를 정해 주세요")
+			end
 		end
 	else
 		ClearOverrideBindings(self.mouseOwner)
@@ -160,7 +206,8 @@ function M:Init()
 			ClearOverrideBindings(M.keyOwner)
 		elseif ev == "PLAYER_REGEN_ENABLED" then
 			ClearOverrideBindings(M.mouseOwner)
-			if M.refreshPending then M:Refresh() elseif M.keyPending then M:ApplyKey() end
+			-- 전투 시작 때 걷어 낸 낚시 단축키를 다시 (낚싯대를 들고 있으면)
+			if M.refreshPending then M:Refresh() else M:ApplyKey() end
 		elseif ev == "UPDATE_BINDINGS" then
 			-- 단축키 설정이 바뀐 때만 (덮어쓰기를 할 때도 이 알림이 와서 같은 키면 넘긴다)
 			local k1, k2 = GetBindingKey("CLICK FOAFishButton:LeftButton")

@@ -255,6 +255,18 @@ end
 --  reload = /reload 해야 적용 · hud = 짚어 줄 화면 요소(편집 모드 키) · dep = 이 설정이 켜져야 쓸 수 있음
 -------------------------------------------------------------------------------
 local function mod(name) return Ink.modules[name] end
+
+-- 눌린 키 → 단축키 글자 ("SHIFT-F" 등) · 수식 키만 눌렀으면 nil
+local MODKEY = { LSHIFT = 1, RSHIFT = 1, LCTRL = 1, RCTRL = 1, LALT = 1, RALT = 1, UNKNOWN = 1, LMETA = 1, RMETA = 1 }
+local function KeyString(key)
+	if not key or MODKEY[key] then return end
+	local s = ""
+	if IsAltKeyDown() then s = s .. "ALT-" end
+	if IsControlKeyDown() then s = s .. "CTRL-" end
+	if IsShiftKeyDown() then s = s .. "SHIFT-" end
+	if IsMetaKeyDown and IsMetaKeyDown() then s = s .. "META-" end
+	return s .. key
+end
 local function call(name, fn, ...)
 	local m = mod(name)
 	if m and m[fn] then return pcall(m[fn], m, ...) end
@@ -400,6 +412,29 @@ function M:BuildRegistry()
 			{ t = "바로 가기", rows = {
 				{ kind = "action", id = "act:kb", label = "단축키 지정", desc = "칸에 마우스를 올리고 키를 누르면 끝", btn = "단축키 모드",
 					fn = function() M:Close(); Ink:OpenQuickKeybind() end },
+				{ kind = "seg", id = "kbSet", label = "단축키 저장", desc = "이 캐릭터만 = 지금 단축키를 복사해 따로 저장 · 되돌리면 캐릭터 전용은 지워져요",
+					opts = { { "account", "계정 공용" }, { "char", "이 캐릭터만" } }, def = "account",
+					get = function() return (Ink.CharBindings and Ink.CharBindings()) and "char" or "account" end,
+					set = function(v)
+						if not Ink.UseCharBindings then return end
+						if v == "char" then Ink.UseCharBindings(true) return end
+						-- 계정으로 되돌리기 = 캐릭터 전용 단축키 버리기 → 4초 안에 한 번 더
+						local e = M.byId and M.byId.kbSet
+						local now = GetTime()
+						if not (e and e.confirmAt and now - e.confirmAt < 4) then
+							if e then e.confirmAt = now end
+							for _, r in ipairs(M:RowsFor("kbSet")) do
+								if r.desc then r.desc:SetText("|cffFFB347한 번 더 누르면 계정 공용으로 · 이 캐릭터 전용 단축키는 지워져요|r") end
+							end
+							C_Timer.After(4.1, function()
+								for _, r in ipairs(M:RowsFor("kbSet")) do if r.desc then r.desc:SetText(r.e.desc) end end
+							end)
+							return
+						end
+						e.confirmAt = nil
+						Ink.UseCharBindings(false)
+						for _, r in ipairs(M:RowsFor("kbSet")) do if r.desc then r.desc:SetText(r.e.desc) end end
+					end },
 				{ kind = "action", id = "act:edit", label = "바 모양 바꾸기", desc = "버튼 수 · 줄 · 크기 · 간격 · 빈칸", btn = "편집 모드",
 					fn = function() M:ToEdit() end },
 			} },
@@ -487,8 +522,17 @@ function M:BuildRegistry()
 				SW("guildRepair", "길드 자금으로 수리", "가능하면 길드 자금 먼저", { dep = "autoRepair" }),
 			} },
 			{ t = "편의", rows = {
-				SW("oneTouchFish", "원터치 낚시", "낚싯대를 들었을 때 오른쪽 두 번 클릭으로 던지고 · 찌가 뜨면 같은 동작으로 낚아채기 · 단축키도 가능",
+				SW("oneTouchFish", "원터치 낚시", "낚싯대를 들었을 때만 · 같은 동작으로 던지고, 찌가 뜨면 낚아채기",
 					{ apply = function() call("Fishing", "Refresh") end }),
+				{ kind = "seg", key = "fishClick", label = "마우스로", desc = "월드에서 두 번 클릭", dep = "oneTouchFish",
+					opts = { { "right", "오른쪽 두 번" }, { "off", "안 씀" } }, def = "right",
+					apply = function() call("Fishing", "Refresh") end },
+				{ kind = "key", id = "fishKey", label = "낚시 단축키",
+					desc = "키보드 · 마우스 가운데/4/5 · 낚싯대를 들 때만 바뀌어요 · 오른쪽 클릭 = 지우기",
+					dep = "oneTouchFish",
+					get = function() local f = mod("Fishing"); return f and f.GetKey and f:GetKey() or nil end,
+					set = function(v) local f = mod("Fishing"); if f and f.SetKey then f:SetKey(v) end end,
+					label2 = function(v) local f = mod("Fishing"); return f and f.KeyLabel and f.KeyLabel(v) or v end },
 				SW("speedyLoot", "빠른 자동 줍기", "자동 줍기일 때 전리품 창을 기다리지 않고 한 번에 · 가방이 차면 원래 창이 떠요"),
 			} },
 			{ t = "경매장", rows = {
@@ -962,6 +1006,51 @@ local function NewRow(parent, e)
 		Child(r, b)
 		r.act = b
 		r.ctrl = b
+	elseif e.kind == "key" then
+		-- 키 지정: 누르면 "키를 누르세요" → 키보드 키(수식 키 포함) · 마우스 가운데 / 4 / 5 · ESC 취소 · 오른쪽 클릭 지우기
+		local b = Btn(r.c, "", "outline", "Keyboard", nil)
+		b:SetHeight(34)
+		b.minW = 196
+		b:RegisterForClicks("AnyUp")
+		local MBTN = { MiddleButton = "BUTTON3", Button4 = "BUTTON4", Button5 = "BUTTON5" }
+		local function stop()
+			b.capturing = nil
+			b:SetScript("OnKeyDown", nil)
+			b:EnableKeyboard(false)
+			r:PaintKey()
+		end
+		local function put(v)
+			stop()
+			Set(e, v)
+			Sound()
+			M:Changed(e)
+		end
+		b:SetScript("OnClick", function(self, btn)
+			if not DepOK(e) then return end
+			if self.capturing then
+				if btn == "RightButton" then put(nil)
+				elseif MBTN[btn] then put(KeyString(MBTN[btn]))
+				else stop() end
+				return
+			end
+			if btn == "RightButton" then put(nil) return end
+			if btn ~= "LeftButton" then return end
+			if InCombatLockdown() then return end
+			self.capturing = true
+			self:EnableKeyboard(true)
+			if self.SetPropagateKeyboardInput then pcall(self.SetPropagateKeyboardInput, self, false) end
+			self:SetScript("OnKeyDown", function(_, key)
+				if key == "ESCAPE" then stop() return end
+				local ks = KeyString(key)
+				if ks then put(ks) end
+			end)
+			r:PaintKey()
+		end)
+		b:HookScript("OnHide", function() if b.capturing then stop() end end)
+		Child(r, b)
+		r.key = b
+		r.ctrl = b
+		r:PaintKey()
 	elseif e.kind == "picks" then
 		r.pk = CreateFrame("Frame", nil, r.c)
 		r.pk.chips, r.pk.heads = {}, {}
@@ -1009,7 +1098,7 @@ function Row:Layout(gw)
 		self.desc:SetWidth(textW)
 	end
 	local cy = -lineH / 2
-	if e.kind == "switch" or e.kind == "cycle" or e.kind == "action" or (e.kind == "seg" and not self.stack) then
+	if e.kind == "switch" or e.kind == "cycle" or e.kind == "action" or e.kind == "key" or (e.kind == "seg" and not self.stack) then
 		self.ctrl:ClearAllPoints()
 		self.ctrl:SetPoint("RIGHT", self, "TOPRIGHT", -12, cy)
 	elseif e.kind == "seg" then
@@ -1177,6 +1266,19 @@ function Row:PaintSlider()
 	sl.thumb:SetSize(sl.drag and 20 or 18, sl.drag and 20 or 18)
 end
 
+function Row:PaintKey()
+	local b, e = self.key, self.e
+	if not b then return end
+	if b.capturing then
+		b.text:SetText("키를 누르세요…  ESC 취소")
+	else
+		local v = Get(e)
+		b.text:SetText(v and (e.label2 and e.label2(v) or v) or "지정 안 함")
+	end
+	b:Fit()
+	b:SetWidth(math.max(196, math.min(260, b:GetWidth())))
+end
+
 -- 값 · 점 · 주황 표시 다시 그리기 (animate = 방금 바뀜)
 function Row:Refresh(animate)
 	local e = self.e
@@ -1201,6 +1303,8 @@ function Row:Refresh(animate)
 		self:PaintSlider()
 	elseif e.kind == "picks" then
 		self:PaintPicks(animate)
+	elseif e.kind == "key" then
+		self:PaintKey()
 	end
 	-- 기본값과 다르면 노란 점 (나타날 때 톡)
 	local ch = Changed(e)

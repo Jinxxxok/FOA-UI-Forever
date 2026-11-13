@@ -465,6 +465,37 @@ local function KeyString(key)
 	return s .. key
 end
 
+-- 단축키 저장 방식: 계정 공용 / 이 캐릭터만 (블리자드 설정의 "캐릭터 전용 단축키"와 같은 동작)
+--  캐릭터로 바꿀 때: 지금(계정) 단축키를 저장 → 캐릭터 묶음을 불러오면 계정 것이 복사돼 온다 → 캐릭터로 저장
+--  계정으로 되돌릴 때: 계정 묶음을 불러와 저장 (이 캐릭터 전용 단축키는 버려진다)
+local SET_ACC = (Enum and Enum.BindingSet and Enum.BindingSet.Account) or ACCOUNT_BINDINGS or 1
+local SET_CHAR = (Enum and Enum.BindingSet and Enum.BindingSet.Character) or CHARACTER_BINDINGS or 2
+function Ink.CharBindings()
+	return GetCurrentBindingSet and GetCurrentBindingSet() == SET_CHAR or false
+end
+function Ink.UseCharBindings(on)
+	on = on and true or false
+	if on == Ink.CharBindings() then return true end
+	if InCombatLockdown() then
+		print("|cffFFF468FOA|r 전투 중에는 단축키 저장 방식을 바꿀 수 없어요.")
+		return false
+	end
+	if on then
+		SaveBindings(SET_ACC)
+		LoadBindings(SET_CHAR)
+		SaveBindings(SET_CHAR)
+		-- FOA 낚시 단축키도 이 캐릭터 쪽으로 복사해서 이어 쓴다
+		if Ink.cdb and Ink.cdb.fishKey == nil and Ink.db.fishKey then Ink.cdb.fishKey = Ink.db.fishKey end
+	else
+		LoadBindings(SET_ACC)
+		SaveBindings(SET_ACC)
+	end
+	local fm = Ink.modules.Fishing
+	if fm and fm.ApplyKey then pcall(fm.ApplyKey, fm) end
+	print("|cffFFF468FOA|r 단축키 저장: " .. (on and "|cff6FD39A이 캐릭터만|r (다른 캐릭터에는 영향 없음)" or "계정 공용 (모든 캐릭터가 같이 씀)"))
+	return true
+end
+
 function M:Bind(cmd, key)
 	if InCombatLockdown() or not cmd then return end
 	if key then
@@ -521,7 +552,7 @@ function M:SetKeybindMode(on, force)
 	if not self.kbFrame then
 		local k = CreateFrame("Frame", "FOAKeybindMode", UIParent)
 		k:SetFrameStrata("FULLSCREEN_DIALOG")
-		k:SetSize(700, 46)
+		k:SetSize(720, 84)
 		k:SetPoint("TOP", UIParent, "TOP", 0, -120)
 		k.bg = Ink:Round(k, "BACKGROUND", false, false)
 		k.bg:SetAllPoints()
@@ -530,14 +561,43 @@ function M:SetKeybindMode(on, force)
 		k.bd:SetAllPoints()
 		k.bd:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.6)
 		k.text = Ink:Text(k, F.semi, 13, C.text, "CENTER")
-		k.text:SetPoint("CENTER", 0, 0)
+		k.text:SetPoint("TOP", 0, -14)
 		k.text:SetText("단축키 설정 · 버튼에 마우스를 올리고 키를 누르세요 · 올린 채 ESC = 지우기 · 바깥에서 ESC = 끝")
-		k.text:ClearAllPoints()
-		k.text:SetPoint("CENTER", -34, 0)
+		-- 아랫줄: 저장 방식 (계정 공용 / 이 캐릭터만)
+		k.lab = Ink:Text(k, F.sans, 11, C.muted, "LEFT")
+		k.lab:SetPoint("BOTTOMLEFT", 16, 19)
+		k.lab:SetText("저장")
+		local function SetBtn(label, char)
+			local b = CreateFrame("Button", nil, k)
+			b:SetSize(92, 26)
+			b.bg = Ink:Round(b, "BACKGROUND", true, false)
+			b.bg:SetAllPoints()
+			b.t = Ink:Text(b, F.semi, 12, C.text, "CENTER")
+			b.t:SetPoint("CENTER")
+			b.t:SetText(label)
+			b.char = char
+			b:SetScript("OnClick", function() M:PickBindSet(char) end)
+			b:SetScript("OnEnter", function(self)
+				GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+				GameTooltip:AddLine(char and "이 캐릭터만" or "계정 공용", 1, 1, 1)
+				Ink.TipLine(GameTooltip, char and "지금 단축키를 이 캐릭터 전용으로 복사해서 따로 저장 · 다른 캐릭터 단축키는 그대로"
+					or "모든 캐릭터가 같은 단축키를 써요 · 이 캐릭터 전용 단축키는 지워져요", 0.7, 0.72, 0.75)
+				GameTooltip:Show()
+			end)
+			b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+			return b
+		end
+		k.acc = SetBtn("계정 공용", false)
+		k.acc:SetPoint("LEFT", k.lab, "RIGHT", 10, 0)
+		k.chr = SetBtn("이 캐릭터만", true)
+		k.chr:SetPoint("LEFT", k.acc, "RIGHT", 4, 0)
+		k.note = Ink:Text(k, F.sans, 11, C.muted, "LEFT")
+		k.note:SetPoint("LEFT", k.chr, "RIGHT", 12, 0)
+		k.note:SetWidth(360)
 		-- 마우스로도 끝낼 수 있게 (버튼 위에서 ESC 는 지우기라서)
 		k.done = CreateFrame("Button", nil, k)
 		k.done:SetSize(56, 26)
-		k.done:SetPoint("RIGHT", -10, 0)
+		k.done:SetPoint("BOTTOMRIGHT", -12, 12)
 		k.done.bg = Ink:Round(k.done, "BACKGROUND", true, false)
 		k.done.bg:SetAllPoints()
 		k.done.bg:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.18)
@@ -568,6 +628,8 @@ function M:SetKeybindMode(on, force)
 		self.kbFrame = k
 	end
 	self.kbFrame:SetShown(on)
+	self.bsConfirm = nil
+	if on then self:PaintBindSet() end
 	for _, d in ipairs(self.list or {}) do
 		for _, b in ipairs(d.buttons or {}) do
 			if on then self:KeybindOverlay(b):Show() elseif b.foaKB then b.foaKB:Hide() end
@@ -575,6 +637,46 @@ function M:SetKeybindMode(on, force)
 	end
 	local bz = Ink.modules.Blizzard
 	if bz and bz.SetKeybindMode then bz:SetKeybindMode(on) end
+end
+
+-- 저장 방식 단추 색 · 안내 글
+function M:PaintBindSet()
+	local k = self.kbFrame
+	if not k then return end
+	local isChar = Ink.CharBindings()
+	local a = C.accent
+	for _, b in ipairs({ k.acc, k.chr }) do
+		local on = b.char == isChar
+		b.bg:SetVertexColor(a[1], a[2], a[3], on and 0.24 or 0.06)
+		local c = on and a or C.soft
+		b.t:SetTextColor(c[1], c[2], c[3])
+	end
+	if self.bsConfirm and GetTime() < self.bsConfirm then
+		k.note:SetText("|cffFFB347한 번 더 누르면 계정 공용으로 · 이 캐릭터 전용 단축키는 지워져요|r")
+	else
+		self.bsConfirm = nil
+		k.note:SetText(isChar and ("|cff6FD39A" .. (UnitName("player") or "이 캐릭터") .. "|r 전용으로 저장 중 · 다른 캐릭터 단축키는 그대로")
+			or "모든 캐릭터가 같은 단축키를 써요")
+	end
+end
+
+-- 계정 공용으로 되돌리기는 캐릭터 전용 단축키를 버리는 일이라 4초 안에 한 번 더 눌러야
+function M:PickBindSet(char)
+	if char == Ink.CharBindings() then return end
+	if not char then
+		local now = GetTime()
+		if not (self.bsConfirm and now < self.bsConfirm) then
+			self.bsConfirm = now + 4
+			self:PaintBindSet()
+			C_Timer.After(4.1, function() M:PaintBindSet() end)
+			return
+		end
+	end
+	self.bsConfirm = nil
+	Ink.UseCharBindings(char)
+	self:PaintBindSet()
+	local b = self.kbHover
+	if b and b.foaKB then b.foaKB:GetScript("OnEnter")(b.foaKB) end
 end
 
 -------------------------------------------------------------------------------
