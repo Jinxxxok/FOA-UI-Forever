@@ -1078,7 +1078,9 @@ function M:AddQuestRewards(pool, lvl)
 		local okFac = qfac == 0 or qfac == facN
 		local okCls = #cls == 0
 		if not okCls then for _, c in ipairs(cls) do if c == classID then okCls = true break end end end
-		if okFac and okCls and qlvl <= lvl + 6 and qlvl >= lvl - 22 and not (done and done(qid)) then
+		-- 필요 레벨이 지금 레벨보다 높으면 아직 받을 수 없어서 "지금 레벨 최고"에 넣지 않는다
+		--  (예: 3625 마력이 깃든 아즈샤리트 퇴마검 · 45레벨부터 · 슬픔의 늪부터 14단계 연퀘)
+		if okFac and okCls and qlvl <= lvl and qlvl >= lvl - 22 and not (done and done(qid)) then
 			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
 			local slot = iid and loc and EQUIP_EJ[loc]
 			if slot then
@@ -1110,7 +1112,7 @@ function M:AddQuestRewards(pool, lvl)
 			local okFac = qfac == 0 or qfac == facN
 			local okCls = #cls == 0
 			if not okCls then for _, c in ipairs(cls) do if c == classID then okCls = true break end end end
-			if okFac and okCls and q[12] ~= 1 and qlvl <= lvl + 6 and qlvl >= lvl - 22 and not (done and done(qid)) then
+			if okFac and okCls and q[12] ~= 1 and qlvl <= lvl and qlvl >= lvl - 22 and not (done and done(qid)) then
 				for _, id in ipairs(q[9] or {}) do
 					local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
 					local slot = iid and loc and EQUIP_EJ[loc]
@@ -1254,7 +1256,32 @@ function M:QuestRewardTooltip(it, tt)
 	if info then tt:AddLine(info.name .. string.format("  %.1f, %.1f", it.qx or 0, it.qy or 0), 0.7, 0.72, 0.75) end
 	local inLog = C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(it.quest)
 	if inLog then tt:AddLine("지금 진행 중인 퀘스트예요", 0.44, 0.83, 0.55)
-	else tt:AddLine("선행 퀘스트가 있을 수 있어요", 0.56, 0.58, 0.61) end
+	else
+		-- 선행 퀘스트: 남은 개수와 맨 처음 받을 퀘스트 (누구 · 어디 · 몇 레벨)
+		local chain = M.QuestChain and M.QuestChain(it.quest)
+		if chain and #chain > 0 then
+			local first = chain[1]
+			local f = M.QuestStep and M.QuestStep(first) or {}
+			-- 맨 처음 단계에 자리 정보가 없으면(자료에 없는 퀘스트) 자리를 아는 가장 앞 단계에서
+			local where = f
+			if not (f.npc or f.zone) and M.QuestStep then
+				for _, q in ipairs(chain) do
+					local w = M.QuestStep(q)
+					if w.npc or w.zone then where = w break end
+				end
+			end
+			local lv = f.lvl or where.lvl
+			tt:AddLine("선행 퀘스트 " .. #chain .. "개를 먼저 해야 해요", 1, 0.62, 0.3)
+			tt:AddLine("처음: " .. (f.title or ("#" .. first)) .. (lv and lv > 0 and ("  ·  " .. lv .. "레벨부터") or ""), 0.92, 0.92, 0.9)
+			if where.npc or where.zone then
+				tt:AddLine("      " .. (where.npc or "") .. ((where.npc and where.zone) and " · " or "") .. (where.zone or ""), 0.7, 0.72, 0.75)
+			end
+		elseif chain then
+			tt:AddLine("선행 퀘스트 없이 바로 받을 수 있어요", 0.44, 0.83, 0.55)
+		else
+			tt:AddLine("선행 퀘스트가 있을 수 있어요", 0.56, 0.58, 0.61)
+		end
+	end
 	if info then tt:AddLine("클릭: 퀘스트 주는 곳을 지도에", 0.56, 0.58, 0.61) end
 end
 
@@ -3064,9 +3091,9 @@ end
 -- 위치 종류 (DungeonQuests.lua 14번째): 0 주는 곳 · 1 보고하는 곳 · 2 던전 안 NPC · 3 던전 안 물체 · 4 던전 드랍
 local KIND_TURNIN, KIND_IN_NPC, KIND_IN_OBJ, KIND_DROP = 1, 2, 3, 4
 
--- 선행 퀘스트를 처음부터 순서대로 (깊이 8까지, 갈래는 모두)
+-- 선행 퀘스트를 처음부터 순서대로 (깊이 20까지, 갈래는 모두 · 긴 연퀘도 처음까지)
 local function Chain(id, out, seen, depth)
-	if depth > 8 then return end
+	if depth > 20 then return end
 	for _, p in ipairs((PreOf(id))) do
 		if not seen[p] then
 			seen[p] = true
@@ -3080,6 +3107,22 @@ end
 -- 연결 퀘스트: 다른 NPC 에게 안내만 하는 퀘스트 (선택 · 안 해도 다음 퀘스트를 받을 수 있다)
 local function IsCrumb(id) return ns.DUNGEON_BREADCRUMB and ns.DUNGEON_BREADCRUMB[id] end
 M.IsCrumb = IsCrumb
+
+-- BIS 툴팁용: 아직 안 끝낸 선행 퀘스트 (처음부터 순서대로 · 연결 퀘스트 빼고)
+function M.QuestChain(id)
+	local all, out = {}, {}
+	Chain(id, all, {}, 0)
+	for _, p in ipairs(all) do if not QDone(p) and not IsCrumb(p) then out[#out + 1] = p end end
+	return out
+end
+-- 퀘스트 한 단계 정보: 이름 · 필요 레벨 · 주는 NPC · 지역
+function M.QuestStep(id)
+	local _, dq, qr = PreOf(id)
+	local npc = dq and NpcOf(dq[7]) or (qr and NpcOf(qr[14]))
+	local zone = ZoneName(dq and dq[4] or (qr and qr[2] and qr[2][1]))
+	local lvl = dq and dq[2] or (qr and qr[3])
+	return { title = QTitle(id), npc = npc, zone = zone, lvl = lvl }
+end
 
 -- 내가 받을 수 있는 퀘스트 목록 + 상태
 function M:DungeonQuestList(key)
