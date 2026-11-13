@@ -341,11 +341,17 @@ local function Pump()
 	end
 	if #queue == 0 and pumpTicker then pumpTicker:Cancel(); pumpTicker = nil end
 end
+-- 같은 아이템을 끝없이 다시 묻지 않는다 (게임이 들고 있는 아이템 정보는 개수 한도가 있어서,
+--  수백 개를 계속 돌려 물으면 먼저 받은 것 · 착용 중인 장비 정보가 밀려났다가 다시 오기를 반복했다)
+--  화면에 보이는 것(prio)은 6번, 순위 계산용은 3번까지
+local tries = {}
 local function RequestItem(id, prio)
 	if not id then return end
 	if C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(id) then return end
 	local t = requested[id]
 	if t and GetTime() - t < 8 then return end
+	if (tries[id] or 0) >= (prio and 6 or 3) then return end
+	if not queued[id] then tries[id] = (tries[id] or 0) + 1 end
 	if queued[id] then
 		if not prio then return end
 		for i, q in ipairs(queue) do if q == id then table.remove(queue, i) break end end
@@ -543,7 +549,24 @@ function M:BuildRanksForever()
 	local skey = SpecKey()
 	local key = skey .. ":" .. lvl .. (Ink.db.bisCrafts == false and "" or ":c") .. (Ink.db.bisQuests == false and "" or ":q") .. (Ink.db.bisWorld == false and "" or ":w")
 	if self.rankKey == key and not self.dirty then return end
-	self.rankKey, self.dirty = key, nil
+	-- 아이템이 도착할 때마다(dirty) 곧바로 다시 만들면, 0.2초마다 다시 그려지는 아이템 툴팁이
+	--  수천 개 후보를 계속 훑었다 → 같은 조건이면 2초에 한 번만, 미뤄진 건 잠시 뒤 한 번에
+	local now = GetTime()
+	if self.rankKey == key and self.rankAt and now - self.rankAt < 2 then
+		if not self.rankDefer then
+			self.rankDefer = true
+			C_Timer.After(2.05 - (now - self.rankAt), function()
+				M.rankDefer = nil
+				if not M.dirty then return end
+				if (M.bisPanel and M.bisPanel:IsShown()) or (M.sidebar and M.sidebar:IsShown()) then
+					pcall(M.PaintSidebar, M)
+					pcall(M.PaintBis, M)
+				end
+			end)
+		end
+		return
+	end
+	self.rankKey, self.dirty, self.rankAt = key, nil, now
 	wipe(self.ranks)
 	wipe(self.rankCount)
 	local spec = ns.BIS_FOREVER and ns.BIS_FOREVER.specs[skey]
@@ -968,6 +991,15 @@ local ARMOR_OK = {
 	MAGE = { [1] = true }, PRIEST = { [1] = true }, WARLOCK = { [1] = true },
 }
 local usableCache = {}
+-- 한 번 받은 아이템 정보(이름 · 링크 · 요구 레벨)는 기억 → 나중에 게임이 그 정보를 내려놔도 다시 묻지 않는다
+local basics = {}
+local function ItemBasics(id)
+	local m = basics[id]
+	if m then return m[1], m[2], m[3] end
+	local name, link, _, _, minLv = C_Item.GetItemInfo(id)
+	if name then basics[id] = { name, link, minLv or 0 } end
+	return name, link, minLv
+end
 local function ForMyClass(it)
 	local _, cls = UnitClass("player")
 	local key = it.id .. cls .. (UnitLevel("player") or 0)
@@ -977,6 +1009,11 @@ local function ForMyClass(it)
 	if classID == 4 and loc ~= "INVTYPE_CLOAK" and subID and subID >= 1 and subID <= 4 then
 		ok = (ARMOR_OK[cls] or {})[subID] and true or false
 	end
+	-- 무기: 내 직업이 아예 못 배우는 종류(도적의 지팡이 · 양손 도끼 등)는 정보를 받기 전에 뺀다
+	if ok and classID == 2 and subID and ns.WEAPON_OK and ns.WEAPON_OK[cls] and not ns.WEAPON_OK[cls][subID] then
+		ok = false
+	end
+	if not ok then usableCache[key] = false return false end
 	if ok and ns.Score and ns.Score.Usable then
 		local cached = not C_Item.IsItemDataCachedByID or C_Item.IsItemDataCachedByID(it.id)
 		local good, u = pcall(ns.Score.Usable, ns.Score, "item:" .. it.id)
@@ -1299,13 +1336,13 @@ function M:BuildLevelRanks(pool, lvl)
 		for _, it in ipairs(list) do
 			if not seen[it.id] then
 				seen[it.id] = true
-				local name, link, _, _, minLv = C_Item.GetItemInfo(it.id)
+				local name, link, minLv = ItemBasics(it.id)
 				if not name then
 					self.levelPending = true
 					RequestItem(it.id)
 				elseif (minLv or 0) <= lvl and ForMyClass(it) then
 					local v = sc:Score(link or ("item:" .. it.id), off, FOREVER and ViewKey() or nil)
-					if v == nil then self.levelPending = true end
+					if v == nil then self.levelPending = true; RequestItem(it.id) end
 					if v and v > 0 then out[#out + 1] = { it = it, score = v, minLv = minLv } end
 				end
 			end
@@ -3025,6 +3062,19 @@ local DQ_INST = {
 	drowned = 2970, kroldok = 3039,
 }
 M.DQ_INST = DQ_INST
+-- 붉은십자군 수도원: 네 날개가 던전 번호 하나(316)를 같이 써서 모든 날개에 같은 퀘스트가 떴다
+--  → AllTheThings 날개 묶음(묘지 · 도서관 · 무기고 · 대성당)과 퀘스트 목표 보스가 있는 날개로 나눈다
+--  값: true = 이 날개 퀘스트, { 보스 이름 … } = 목표 일부만 이 날개 (빛의 이름으로! · 붉은십자군 수도원으로)
+local SM_LOKSEY = { "사냥개조련사 록시", "Loksey", short = "사냥개조련사 록시" }
+local SM_HEROD = { "헤로드", "Herod", short = "헤로드" }
+local SM_CATH = { "모그레인", "화이트메인", "Mograine", "Whitemane", short = "모그레인 · 화이트메인" }
+local DQ_WING = {
+	sm_gy = { [1051] = true, [1113] = true },
+	sm_lib = { [1049] = true, [1050] = true, [1951] = true, [1160] = true, [1113] = true, [1048] = SM_LOKSEY, [1053] = SM_LOKSEY },
+	sm_arm = { [1113] = true, [1048] = SM_HEROD, [1053] = SM_HEROD },
+	sm_cath = { [1113] = true, [1048] = SM_CATH, [1053] = SM_CATH },
+}
+M.DQ_WING = DQ_WING
 local DQ_W = 300
 -- 화면 오른쪽 끝까지 남은 폭 (frame 단위)
 local function RoomRight(frame, of)
@@ -3129,6 +3179,12 @@ function M:DungeonQuestList(key)
 	local inst = DQ_INST[key or ""]
 	local list = inst and ns.DUNGEON_QUESTS and ns.DUNGEON_QUESTS[inst]
 	if not list then return {} end
+	local wing = DQ_WING[key or ""]
+	if wing then
+		local only = {}
+		for _, q in ipairs(list) do if wing[q[1]] then only[#only + 1] = q end end
+		list = only
+	end
 	local fac = UnitFactionGroup("player")
 	local facN = fac == "Horde" and 1 or (fac == "Alliance" and 2 or 0)
 	local _, _, classID = UnitClass("player")
@@ -3139,6 +3195,7 @@ function M:DungeonQuestList(key)
 		if not okCls then for _, c in ipairs(q[10]) do if c == classID then okCls = true break end end end
 		if (q[3] == 0 or q[3] == facN) and okCls and q[12] ~= 1 then
 			local e = { q = q, id = q[1], lvl = q[2] }
+			if wing and type(wing[q[1]]) == "table" then e.wingBoss = wing[q[1]] end
 			local miss = 0
 			-- 연결 퀘스트(선택)는 선행으로 세지 않는다
 			for _, p in ipairs(q[8]) do if not QDone(p) and not IsCrumb(p) then miss = miss + 1 end end
@@ -3624,6 +3681,8 @@ function M:PaintQuests()
 			sub = sub .. "  ·  → " .. (nt or "다음 퀘스트") .. " 안내"
 		end
 		if (e.variants or 1) > 1 then sub = sub .. "  ·  " .. e.variants .. "개 묶음" end
+		-- 여러 날개에 걸친 퀘스트: 이 날개에서 잡을 대상을 맨 앞에
+		if e.wingBoss and e.state ~= "done" then sub = "이 날개: " .. e.wingBoss.short .. "  ·  " .. sub end
 		r.sub:SetText(sub)
 		local st = DQ_STATE[e.state]
 		local stText, col, fill, edge, icon = st[1], st[2], 0, 0, nil
@@ -3632,11 +3691,21 @@ function M:PaintQuests()
 			if ready then
 				stText, col, fill, icon = "보고 가능", C.green, 0.18, "Check"
 			else
-				local have, need = 0, 0
+				local have, need, wHave, wNeed = 0, 0, 0, 0
 				for _, ob in ipairs(C_QuestLog.GetQuestObjectives and C_QuestLog.GetQuestObjectives(e.id) or {}) do
 					have = have + (ob.numFulfilled or 0); need = need + (ob.numRequired or 0)
+					-- 이 날개 보스 목표만 따로 (예: 대성당 = 모그레인 · 화이트메인 2개)
+					local txt = type(ob.text) == "string" and ob.text or ""
+					for _, nm in ipairs(e.wingBoss or {}) do
+						if txt:find(nm, 1, true) then
+							wHave = wHave + (ob.numFulfilled or 0); wNeed = wNeed + (ob.numRequired or 0)
+							break
+						end
+					end
 				end
+				if wNeed > 0 then have, need = wHave, wNeed end
 				stText, fill = "진행 중" .. (need > 0 and ("  " .. have .. "/" .. need) or ""), 0.18
+				if wNeed > 0 and wHave >= wNeed then stText, col, icon = "이 날개 끝", C.green, "Check" end
 			end
 		elseif e.state == "ok" then edge = 0.55
 		elseif e.state == "done" then stText, icon, fill = "완료", "Check", 0.08; col = C.green
@@ -3663,6 +3732,12 @@ function M:PaintQuests()
 	for i = #list + 1, #p.rows do p.rows[i]:Hide() end
 	for i = nh + 1, #(p.heads or {}) do p.heads[i]:Hide() end
 	p.body:SetHeight(math.max(10, y))
+	-- 스크롤 위치: 다른 던전으로 바뀌면 맨 위로, 목록이 짧아졌으면 끝을 넘지 않게
+	--  (긴 목록에서 내려 둔 채 짧은 목록을 열면 위쪽 줄 · 진행 중 퀘스트가 화면 위로 밀려 안 보였다)
+	local maxS = math.max(0, y - (p.sf:GetHeight() or 0))
+	if p.lastKey ~= key then p.sf:SetVerticalScroll(0)
+	elseif (p.sf:GetVerticalScroll() or 0) > maxS then p.sf:SetVerticalScroll(maxS) end
+	p.lastKey = key
 	p.empty:SetText(#list == 0 and "이 던전에 내가 받을 수 있는 퀘스트가 없어요" or "")
 end
 

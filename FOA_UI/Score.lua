@@ -538,11 +538,24 @@ end
 
 -- 툴팁 줄: 못 쓰면 "no", 레벨이 모자라면 요구 레벨, 장착 효과 능력치
 local tipCache = {}
+-- 아이템 정보가 게임에 들어와 있나 (번호만 보고 판단 · 서버에 묻지 않음)
+local function ItemCached(link)
+	if not (C_Item and C_Item.IsItemDataCachedByID) then return true end
+	local id = GetItemInfoInstant(link)
+	if not id then return true end
+	local ok, c = pcall(C_Item.IsItemDataCachedByID, id)
+	return not ok or c ~= false
+end
+M.ItemCached = ItemCached
 local function ReadTooltip(link)
 	local c = tipCache[link]
 	if c then return c end
 	local r = { effects = {}, pcts = {} }
-	if not (C_TooltipInfo and C_TooltipInfo.GetHyperlink) then return r end
+	if not (C_TooltipInfo and C_TooltipInfo.GetHyperlink) then r.complete = true return r end
+	-- 정보가 없는 아이템의 툴팁을 만들면 게임이 서버에 그 아이템을 묻는다.
+	--  BIS 순위처럼 수백 개를 훑을 때 그렇게 되면 요청이 폭주해서 착용 중인 장비 정보까지 밀려났다
+	--  (툴팁 착용 대비가 100% ↔ 32% 로 깜빡이고 비교 툴팁이 "아이템 정보 검색"으로 바뀌던 문제)
+	if not ItemCached(link) then M.missed = true return r end
 	local ok, data = pcall(C_TooltipInfo.GetHyperlink, link)
 	if not ok or not data or not data.lines then return r end
 	-- 아이템 정보가 아직 안 왔으면 (줄이 거의 없음) 기억하지 않는다
@@ -585,6 +598,7 @@ local function ReadTooltip(link)
 			end
 		end
 	end
+	r.complete = complete
 	if complete then tipCache[link] = r else M.missed = true end
 	return r
 end
@@ -660,7 +674,9 @@ function M:Score(link, asOffhand, spec)
 	for short, v in pairs(tip.effects) do
 		if not stats[K[short] or ""] then total = total + v * (w[short] or 0) end
 	end
-	scoreCache[key] = total
+	-- 툴팁 줄(장착 효과 · 적중 %)이 덜 왔으면 기억하지 않는다 → 도착 후 다시 계산
+	--  (예전엔 이것 때문에 아이템이 도착할 때마다 점수 기억을 통째로 지웠다)
+	if tip.complete then scoreCache[key] = total end
 	return total
 end
 
@@ -785,14 +801,17 @@ local baseCache, baseAt = 0, -10
 function M:SlotBaseline()
 	local now = GetTime()
 	if now - baseAt < 3 then return baseCache end
-	local sum, n = 0, 0
+	local sum, n, missing = 0, 0, false
 	for slot = 1, 18 do
 		if slot ~= 4 then
 			local l = Equipped(slot)
 			local v = l and FOREVER and self:Score(l, slot == 17)
+			if l and FOREVER and v == nil then missing = true end
 			if type(v) == "number" and v > 0 then sum, n = sum + v, n + 1 end
 		end
 	end
+	-- 착용 장비 정보가 잠깐 비었으면 예전 값을 그대로 (평균이 흔들리면 % 도 흔들린다)
+	if missing and baseCache > 0 then baseAt = now return baseCache end
 	baseCache, baseAt = (n > 0) and (sum / n) or 0, now
 	return baseCache
 end
@@ -825,6 +844,14 @@ function M:Compare(link)
 		return r
 	end
 	local score = FOREVER and function(l, oh) return self:Score(l, oh) end or function(l) return RetailScore(l) end
+	-- 착용 중인 것의 점수: 칸이 비었으면 0, 정보가 아직 없으면 nil (예전엔 nil 도 0 으로 쳐서
+	--  무기 정보가 잠깐 밀려난 순간 "착용 대비 +100%" 로 튀었다) · 내 주 능력치가 아닌 장비(본섭 false)는 0
+	local function Of(l, oh)
+		if not l then return 0 end
+		local v = score(l, oh)
+		if v == false then return 0 end
+		return v
+	end
 	local new
 	local old
 	local emptySlot = false -- 그 칸에 착용한 게 정말 없을 때만 "빈 칸"
@@ -832,22 +859,24 @@ function M:Compare(link)
 		new = score(link)
 		local mh, oh = Equipped(16), Equipped(17)
 		emptySlot = not mh and not oh
-		local a = mh and score(mh) or 0
-		local b = oh and score(oh, true) or 0
+		local a = Of(mh)
+		local b = Of(oh, true)
 		if a == nil or b == nil then return end
-		old = (a or 0) + (FOREVER and (b or 0) or 0)
+		old = a + (FOREVER and b or 0)
 	elseif loc == "INVTYPE_WEAPON" then
 		local mh, oh = Equipped(16), Equipped(17)
 		local mhLoc = mh and select(4, GetItemInfoInstant(mh))
 		if mhLoc == "INVTYPE_2HWEAPON" then
 			-- 양손 → 한손: 한손 + 지금 보조장비 없음
-			new, old = score(link), score(mh)
+			new, old = score(link), Of(mh)
 		else
 			local ohIsWeapon = oh and select(4, GetItemInfoInstant(oh)) == "INVTYPE_WEAPON"
 			local dual = CanDualWield and CanDualWield()
-			local sm = mh and score(mh) or 0
+			local sm = Of(mh)
+			if sm == nil then return end
 			if dual and ohIsWeapon then
-				local so = score(oh, true) or 0
+				local so = Of(oh, true)
+				if so == nil then return end
 				-- 약한 쪽과 비교
 				if FOREVER and so < sm * OFFHAND_FACTOR then new, old = score(link, true), so else new, old = score(link), sm end
 			elseif dual and not oh then
@@ -873,12 +902,12 @@ function M:Compare(link)
 		if mh and select(4, GetItemInfoInstant(mh)) == "INVTYPE_2HWEAPON" then return end
 		new = score(link, loc == "INVTYPE_WEAPONOFFHAND")
 		local oh = Equipped(17)
-		old = oh and score(oh, loc == "INVTYPE_WEAPONOFFHAND") or 0
+		old = Of(oh, loc == "INVTYPE_WEAPONOFFHAND")
 		emptySlot = not oh
 	else
 		new = score(link)
 		local cur = Equipped(slots[1])
-		old = cur and score(cur) or 0
+		old = Of(cur)
 		emptySlot = not cur
 	end
 	if new == false or old == false then return end
@@ -908,13 +937,21 @@ function M:BagUpgrade(bag, slot)
 	end
 end
 
-function M:Invalidate()
-	wipe(scoreCache)
-	specCache.at = -100
+-- 점수는 그대로 두고 화면(가방 화살표 · 퀘스트 보상 화살표)만 다시
+function M:Refresh()
 	self.version = (self.version or 0) + 1
 	local bags = Ink.modules.Bags
 	if bags and bags.Schedule then pcall(bags.Schedule, bags) end
 	pcall(self.UpdateQuestRewards, self)
+end
+
+local lastTip = {}
+function M:Invalidate()
+	wipe(scoreCache)
+	wipe(lastTip)
+	specCache.at = -100
+	baseAt = -10
+	self:Refresh()
 end
 
 -------------------------------------------------------------------------------
@@ -979,12 +1016,26 @@ function M:OnTooltip(tt)
 		local ok, _, link = pcall(tt.GetItem, tt)
 		link = ok and plain(link)
 		if not link then return end
-		for s = 1, 19 do if Equipped(s) == link then return end end
+		local sig = {}
+		for s = 1, 19 do
+			local e = Equipped(s)
+			if e == link then return end
+			sig[#sig + 1] = e or ""
+		end
+		sig = table.concat(sig, ",") .. M:Mode() .. weightSig
 		local r = M:Compare(link)
+		-- 툴팁은 열려 있는 동안 0.2초마다 다시 그려진다. 그 사이 정보가 잠깐 비어도(서버 응답 대기)
+		--  같은 장비 · 같은 가중치면 마지막으로 낸 결과를 그대로 써서 줄이 깜빡이지 않게
+		local last = lastTip[link]
+		if last and last.sig ~= sig then last = nil end
 		if r then
 			r.slotRank = FOREVER and ns.GearSlotRank and ns.GearSlotRank(link) or nil
-			Line(tt, r)
+			if not r.slotRank and last then r.slotRank = last.r.slotRank end
+			lastTip[link] = { r = r, sig = sig }
+		elseif last then
+			r = last.r
 		end
+		if r then Line(tt, r) end
 		-- 아직 안 배운 무기 종류: 무기 전문가에게 배우면 쓸 수 있다
 		if ReadTooltip(link).skill then
 			tt:AddLine("|cffE3C07A무기 전문가에게 배우면 쓸 수 있어요|r |cff8E939B· P(주문책) 옆 목록에서 위치|r")
@@ -1041,16 +1092,30 @@ function M:Init()
 		"TRAIT_CONFIG_UPDATED" }) do
 		pcall(ev.RegisterEvent, ev, e)
 	end
+	local skillN = GetNumSkillLines and GetNumSkillLines() or 0
 	ev:SetScript("OnEvent", function(_, event)
 		if event == "GET_ITEM_INFO_RECEIVED" then
-			-- 아이템 정보가 늦게 와서 점수를 못 낸 칸이 있으면 잠깐 뒤에 다시
+			-- 아이템 정보가 늦게 와서 점수를 못 낸 칸이 있으면 잠깐 뒤에 다시 (못 낸 점수는 기억하지 않아서 지울 것 없음)
 			if M.retryQueued or not M.missed then return end
 			M.missed = nil
 			M.retryQueued = true
-			C_Timer.After(0.5, function() M.retryQueued = nil; M:Invalidate() end)
+			C_Timer.After(0.5, function() M.retryQueued = nil; M:Refresh() end)
 			return
 		end
-		if event == "PLAYER_LEVEL_UP" or event == "SKILL_LINES_CHANGED" then wipe(tipCache) end
+		if event == "PLAYER_EQUIPMENT_CHANGED" then
+			-- 아이템 점수는 장비와 상관없다 (적중 상한은 가중치 서명에 들어 있음) → 평균 · 화살표만 다시
+			baseAt = -10
+			M:Refresh()
+			return
+		end
+		if event == "SKILL_LINES_CHANGED" then
+			-- 무기 숙련이 1 오를 때마다 오는 이벤트라 (전투 중 수십 번) 새 기술을 배웠을 때만 다시 읽는다
+			local n = GetNumSkillLines and GetNumSkillLines() or -1
+			if n == skillN and n >= 0 then return end
+			skillN = n
+			wipe(tipCache)
+		end
+		if event == "PLAYER_LEVEL_UP" then wipe(tipCache) end
 		M:Invalidate()
 	end)
 end
