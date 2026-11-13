@@ -1476,13 +1476,33 @@ function M:LearnHere(unit)
 	self:OnForeverEnter()
 end
 
--- 지금 들어와 있는 포에버 던전 (인스턴스 번호 · 지도 번호 · 이름. 날개가 여러 개면 마지막에 고른 날개 → 레벨)
+-- 던전 지도 층 번호 → 던전 (그 층을 쓰는 던전이 하나뿐일 때만)
+--  붉은십자군 수도원은 네 날개가 인스턴스 번호 · 이름이 같아서, 층 번호(묘지 302 · 도서관 303 · 무기고 304 · 대성당 305)로만 가려진다
+--  (검은바위 첨탑 상 · 하층, 혈투의 전장 세 날개, 스트라솔름 두 쪽은 층을 같이 써서 여기선 못 가린다)
+local floorKey
+local function KeyByFloor(ui)
+	if not ui then return end
+	if not floorKey then
+		floorKey = {}
+		for key, list in pairs(ns.DUNGEON_MAPS and ns.DUNGEON_MAPS.floors or {}) do
+			for _, u in ipairs(list) do
+				if floorKey[u] == nil then floorKey[u] = key elseif floorKey[u] ~= key then floorKey[u] = false end
+			end
+		end
+	end
+	local k = floorKey[ui]
+	return k and FLoot(k) and k or nil
+end
+
+-- 지금 들어와 있는 포에버 던전 (층 번호 → 배운 자리 → 인스턴스 번호 · 지도 번호 · 이름. 날개가 여러 개면 마지막에 고른 날개 → 레벨)
 function M:MatchInstance()
 	if not IsInInstance() then return end
 	local name, _, _, _, _, _, _, instID = GetInstanceInfo()
+	local ui = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	local byFloor = KeyByFloor(ui)
+	if byFloor then return byFloor end
 	local learned = Ink.db and Ink.db.instLearn and instID and Ink.db.instLearn[instID]
 	if learned and FLoot(learned) then return learned end
-	local ui = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
 	local list = ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}
 	local byUi, cands = {}, {}
 	for _, d in ipairs(list) do
@@ -1508,7 +1528,8 @@ function M:SelectForever(key)
 	if not FLoot(key) then return end
 	if Ink.cdb then Ink.cdb.fDungeon = key end
 	self.showing = key
-	self.manualIn = IsInInstance() and (GetInstanceInfo()) or nil
+	-- 직접 고른 날개는 "이 인스턴스 · 이 층"에 있는 동안만 (같은 이름의 다른 날개로 옮기면 실제 날개로)
+	self.manualIn = IsInInstance() and { name = (GetInstanceInfo()), ui = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player") } or nil
 	-- 모르는 던전 안에서 직접 고르면: 여기가 그 던전이라고 배운다 (처치 체크 · 입장 알림이 바로 동작)
 	if IsInInstance() and not self.hereKey and not self:MatchInstance() then
 		self:LearnInstance(key)
@@ -3824,7 +3845,9 @@ function M:ForeverCurrent()
 	local sel = Ink.cdb and Ink.cdb.fDungeon
 	if here then
 		local iname = GetInstanceInfo()
-		if not (self.manualIn and self.manualIn == iname and sel and FLoot(sel)) then return here end
+		local mi = self.manualIn
+		local curUi = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+		if not (type(mi) == "table" and mi.name == iname and (not mi.ui or mi.ui == curUi) and sel and FLoot(sel)) then return here end
 	end
 	if sel and FLoot(sel) then return sel end
 	local lv, best, bestD = UnitLevel("player") or 1, nil, 999
@@ -3855,6 +3878,7 @@ function M:UpdateMap()
 		if not wm or not wm:IsShown() then self:HideBoard() return self:HideSidebar() end
 		-- 던전 안이면 지도 대신 큰 던전 화면 ("지도 보기" 를 누르면 이번에 연 동안만 원래 지도)
 		local here = self:MatchInstance()
+		if here and self.hereKey and here ~= self.hereKey then self.hereKey = here end
 		if here and not self.boardOff and Ink.db.dungeonBoard ~= false then
 			if self.boardOn and self.board and self.board:IsShown() then return end
 			return self:ShowBoard(self:ForeverCurrent())
@@ -3930,6 +3954,13 @@ end
 function M:OnForeverEnter()
 	local key = self:MatchInstance()
 	self.hereKey = key
+	-- 막 들어온 순간엔 층 번호가 아직 안 나와서 날개를 못 가릴 수 있다 → 층 번호가 나올 때까지 잠깐 뒤 다시
+	if IsInInstance() and not (C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")) and (self.enterTries or 0) < 5 then
+		self.enterTries = (self.enterTries or 0) + 1
+		C_Timer.After(2, function() pcall(M.OnForeverEnter, M) end)
+	else
+		self.enterTries = 0
+	end
 	if not key then self.lastToast, self.manualIn = nil, nil return end
 	local k = KillSet(key)
 	if k.t and k.t > 0 and time() - k.t > 90 * 60 and Ink.cdb and Ink.cdb.dKills then Ink.cdb.dKills[key] = nil end
