@@ -2478,10 +2478,11 @@ function M:PaintList(f, data, mode)
 				row:ClearAllPoints()
 				row:SetPoint("TOPLEFT", 0, -y)
 				local r = self.ranks[it.id]
-				row.itemID, row.link = it.id, it.link
+				local bName, bLink = ItemBasics(it.id)
+				row.itemID, row.link = it.id, it.link or bLink
 				row.icon:Set(it.icon, it.quality, SLOT_GLYPH[it.slot or -1])
 				local q = QCOL[it.quality or 1] or QCOL[1]
-				row.name:SetText(it.name or (((self.sbRetry or 0) >= 40) and ("아이템 #" .. it.id .. " (마우스를 올려 보기)") or "불러오는 중…"))
+				row.name:SetText(it.name or bName or (((self.sbRetry or 0) >= 40) and ("아이템 #" .. it.id .. " (마우스를 올려 보기)") or "불러오는 중…"))
 				row.name:SetTextColor(q[1], q[2], q[3])
 				local sub = it.slotText or SLOT_NAME[it.slot or -1] or ""
 				if it.armor and it.armor ~= "" then sub = sub .. " · " .. it.armor end
@@ -4705,10 +4706,14 @@ function M:PaintBis()
 		local r = list[i]
 		if r then
 			local it = r.it
-			row.itemID, row.link, row.it = it.id, it.link, it
-			row.icon:Set(it.icon, it.quality, SLOT_GLYPH[it.slot or -1])
-			local q = QCOL[it.quality or 1] or QCOL[1]
-			row.name:SetText(it.name or "불러오는 중…")
+			-- 이름 · 링크 · 등급은 한 번 받은 값을 기억해 두고 쓴다
+			--  (순위를 다시 만들 때마다 새 표가 되어 이름이 비고, 게임이 아이템 정보를 내려놓으면 "불러오는 중…"과 번갈아 보였다)
+			local bName, bLink = ItemBasics(it.id)
+			local quality = it.quality or (C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(it.id)) or nil
+			row.itemID, row.link, row.it = it.id, it.link or bLink, it
+			row.icon:Set(it.icon or (C_Item.GetItemIconByID and C_Item.GetItemIconByID(it.id)), quality, SLOT_GLYPH[it.slot or -1])
+			local q = QCOL[quality or 1] or QCOL[1]
+			row.name:SetText(it.name or bName or "불러오는 중…")
 			row.name:SetTextColor(q[1], q[2], q[3])
 			row.src:SetText(self:SourceText(it))
 			local isBis = r.rank == 0
