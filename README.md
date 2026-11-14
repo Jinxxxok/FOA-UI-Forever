@@ -44,6 +44,12 @@
 
 ElvUI 같은 통합 UI 와는 함께 쓰지 마세요. 네임플레이트 / 가방 / 미터기 / 보스 알림 애드온을 쓰면 FOA 설정 창에서 해당 기능을 끄세요.
 
+## 라이선스
+
+FOA UI 는 **GNU General Public License v3.0 (또는 그 이후 버전)** 으로 배포됩니다. 전문: [`LICENSE`](LICENSE) · `FOA_UI/LICENSE.txt`
+
+고쳐서 다시 배포할 때도 GPL-3.0 을 따라야 하고, 소스를 함께 공개해야 합니다. 퀘스트 자료 일부가 GPL-3.0 인 QuestieDB 에서 왔기 때문입니다 (아래 자료 출처).
+
 ## 사용한 자료와 라이선스
 
 - 글꼴: IBM Plex Sans KR, Inter, Space Grotesk — SIL Open Font License 1.1
@@ -53,5 +59,6 @@ ElvUI 같은 통합 UI 와는 함께 쓰지 마세요. 네임플레이트 / 가�
 
 - 던전 보스 · 전리품, 퀘스트 · 비행 지점 자료: [AllTheThings](https://github.com/ATTWoWAddon/AllTheThings) (MIT License · `FOA_UI/LICENSE-AllTheThings.txt`)
 - 던전 한글 이름 · 권장 레벨 · 보스 순서, 직업 기술 레벨, 전문기술 빠른 레벨링 경로, 특성 레벨업 순서: [wowf.io](https://wowf.io/ko)
-- 퀘스트 시작 위치 · 진영 대조, 포에버에서 바뀐 지도 경계(스톰윈드 · 동부 역병지대 · 멀고어 · 붉은마루 산맥) 변환식: [QuestieDB](https://github.com/Questie/QuestieDB) 자료와 대조해 확인 (자료 자체는 포함하지 않음 · 고친 목록은 `tools/maps/forever_frame_fixes.json`, `tools/quests/gen_dquests.py`)
+- 퀘스트 선행 · 택일 · 연결 퀘스트 · 조건(숙련도 · 평판 · 레벨) · 보고 NPC 와 자리: [QuestieDB](https://github.com/Questie/QuestieDB) 포에버 합본 자료 (GPL-3.0 · 포에버 실제 플레이 기록으로 확인한 선행 관계 포함 · `FOA_UI/LICENSE-QuestieDB.txt` · 만드는 방법은 `tools/quests/questie_export.py` → `tools/quests/gen_quests.py`)
+- 포에버에서 바뀐 지도 경계(스톰윈드 · 동부 역병지대 · 멀고어 · 붉은마루 산맥) 변환식: QuestieDB 자료와 대조해 확인 (`tools/maps/forever_frame_fixes.json`)
 - 아이콘: [Lucide](https://lucide.dev) (ISC License · `FOA_UI/Media/Icons/LICENSE-lucide.txt`)

@@ -385,6 +385,8 @@ function M:BuildRegistry()
 			{ t = "플레이어 · 대상", rows = {
 				SW("unitPortrait", "초상화", "플레이어는 왼쪽 · 대상은 오른쪽에 둥근 얼굴 · 직업색 고리", { def = false, hud = { "player", "target" },
 					apply = function() call("Units", "UpdateAll") end }),
+				SW("playerDispel", "내 해제 디버프 색", "내가 풀 수 있는 마법 · 저주 · 질병 · 독이 걸리면 내 체력바를 그 색으로", { hud = "player",
+					apply = function() call("Units", "UpdateAll") end }),
 			} },
 			{ t = "파티 · 레이드", rows = {
 				SW("party", "파티 프레임", "FOA 파티 프레임", { reload = true, hud = "party" }),

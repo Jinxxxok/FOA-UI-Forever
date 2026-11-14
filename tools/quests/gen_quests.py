@@ -178,6 +178,51 @@ PRE_FIX = {207: [204, 203], 95786: [207], 94992: [94618], 95562: [95642, 95643],
            95329: [94877], 96081: [94877], 96082: [96081], 96083: [96082], 96084: [96083], 96085: [96084],
            95613: [95603], 95615: [95613]}
 
+# ---------------------------------------------------------------------------
+# QuestieDB 포에버 합본 (GPL-3.0, 있으면): 선행 퀘스트 · 택일 · 연결 퀘스트 · 조건 · 보고 NPC
+#  포에버 실제 플레이 기록(약 91만 세션)으로 확인한 선행 관계(traces)가 들어 있어서 ATT 보다 정확하다
+#  사용: gen_quests.py <Zones.lua> <출력> <QuestieDB 폴더>   (먼저 questie_export.py 로 합본을 만든다)
+# ---------------------------------------------------------------------------
+QQ = QN = QO = QA = None
+if len(sys.argv) > 3:
+    sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.abspath(__file__)))
+    import questie_data
+    QQ, QN, QO, QA = questie_data.load(sys.argv[3])
+
+def part(v, i):
+    if isinstance(v, list): return v[i - 1] if len(v) >= i else None
+    if isinstance(v, dict): return v.get(i)
+    return None
+
+def ids(v):
+    if isinstance(v, list): return [int(x) for x in v if isinstance(x, (int, float))]
+    if isinstance(v, dict): return [int(x) for x in v.values() if isinstance(x, (int, float))]
+    return []
+
+def spot_of(table, eid, near):
+    spawns = (table.get(eid) or {}).get("spawns") or {}
+    best = None
+    items = spawns.items() if isinstance(spawns, dict) else enumerate(spawns, 1)
+    for area, pts in items:
+        m = QA.get(int(area))
+        if not m or not isinstance(pts, list): continue
+        for p in pts:
+            if not isinstance(p, list) or len(p) < 2: continue
+            x, y = float(p[0]), float(p[1])
+            if x <= 0 or y <= 0: continue          # -1,-1 = 던전 안
+            d = (x - near[1]) ** 2 + (y - near[2]) ** 2 if (near and near[0] == m) else 1e9
+            if best is None or d < best[0]: best = (d, m, x, y)
+    return best[1:] if best else None
+
+# 연결 퀘스트 목적지 (Questie: 목적지 퀘스트 쪽에 breadcrumbs 목록)
+crumb_to = {}
+if QQ:
+    for tq, r in QQ.items():
+        for b in ids(r[27]): crumb_to.setdefault(b, set()).add(tq)
+        bf = r[26]
+        if isinstance(bf, (int, float)) and bf: crumb_to.setdefault(tq, set()).add(int(bf))
+
+stat = {"pre": 0, "ender": 0, "ender_same": 0, "skill": 0, "crumb": 0, "alt": 0}
 rows, skipped = [], {"nocoord": 0, "u": 0, "removed": 0, "event": 0}
 for qid in sorted(quests):
     q = quests[qid]
@@ -203,31 +248,91 @@ for qid in sorted(quests):
             item = int(p[1]); break
     giver = ilist(q.get("qgs"))[:1]
     pre = ilist(q.get("sourceQuests"))
-    for p in PRE_FIX.get(qid, []):
-        if p not in pre: pre.append(p)
-    # 조건 더 (없으면 안 씀): {전문기술 숙련도, 연결 퀘스트의 목적지{}, 선행 중 몇 개면 되는지, 평판 이하{}, 이 퀘스트를 깨면 잠김{}, 이 주문을 알면 잠김{}}
+    need = int(q.get("sqreq", 0) or 0)
+    alt = ilist(q.get("altQuests"))
+    skill = int(q.get("requireSkill", 0) or 0)
+    rank = int(q.get("learnedAt", 0) or 0) if skill else 0
+    nxt = ilist(q.get("nextQuests")) if q.get("isBreadcrumb") else []
+    maxlvl, ender = 0, None
+    qq = QQ.get(qid) if QQ else None
     lockQ, lockS = [], []
+    if qq:
+        grp, sgl = ids(qq[11]), ids(qq[12])
+        if grp or sgl:
+            # Questie: 묶음(모두) + 하나만(그중 하나) → 선행 목록 · 필요한 수
+            newpre = grp + [x for x in sgl if x not in grp]
+            newneed = 0 if not sgl or (len(sgl) == 1) else len(grp) + 1
+            if sorted(newpre) != sorted(pre) or newneed != need: stat["pre"] += 1
+            pre, need = newpre, newneed
+        else:
+            for p in PRE_FIX.get(qid, []):
+                if p not in pre: pre.append(p)
+        for a in ids(qq[15]):
+            if a not in alt: alt.append(a); stat["alt"] += 1
+        rs = qq[17]
+        if isinstance(rs, list) and rs and rs[0]:
+            if not skill: skill = int(rs[0]); stat["skill"] += 1
+            if len(rs) > 1 and rs[1]: rank = max(rank, int(rs[1]))
+        if qid in crumb_to:
+            for t in sorted(crumb_to[qid]):
+                if t not in nxt: nxt.append(t)
+            stat["crumb"] += 1
+        spl = qq[29]
+        if isinstance(spl, (int, float)) and spl < 0: lockS.append(int(-spl))
+        for d in ids(qq[35]) if isinstance(qq[35], list) else ([int(qq[35])] if isinstance(qq[35], (int, float)) and qq[35] else []):
+            lockQ.append(d)
+        ml = qq[31]
+        if isinstance(ml, (int, float)) and ml: maxlvl = int(ml)
+        # 보고 NPC: 받은 NPC 와 같으면 0, 다르면 {지도, x, y, NPC}
+        fb = qq[2]
+        cre, obj = ids(part(fb, 1)), ids(part(fb, 2))
+        g0 = giver[0] if giver else 0
+        if g0 and g0 in cre:
+            ender = 0; stat["ender_same"] += 1
+        else:
+            near = pts[0] if pts else None
+            for c in cre:
+                sp = spot_of(QN, c, near)
+                if sp: ender = [sp[0], round(sp[1], 1), round(sp[2], 1), c]; break
+            if ender is None:
+                for o in obj:
+                    sp = spot_of(QO, o, near)
+                    if sp: ender = [sp[0], round(sp[1], 1), round(sp[2], 1), 0]; break
+            if ender is None and cre: ender = [0, 0, 0, cre[0]]
+            if ender is not None: stat["ender"] += 1
+        if not rep:
+            mr = qq[18]
+            if isinstance(mr, list) and len(mr) >= 2 and mr[0]: rep = [int(mr[0]), int(mr[1])]
+    else:
+        for p in PRE_FIX.get(qid, []):
+            if p not in pre: pre.append(p)
+    if nxt: flags |= 2
+    # 조건 더 (없으면 안 씀): {전문기술 숙련도, 연결 퀘스트의 목적지{}, 선행 중 몇 개면 되는지, 평판 이하{}, 이 퀘스트를 깨면 잠김{}, 이 주문을 알면 잠김{}, 최고 레벨}
     lc = q.get("lc")
     if isinstance(lc, list):
         for i in range(1, len(lc) - 1, 2):
-            if lc[i] == "questID": lockQ.append(int(lc[i + 1]))
-            elif lc[i] == "spellID": lockS.append(int(lc[i + 1]))
+            if lc[i] == "questID" and int(lc[i + 1]) not in lockQ: lockQ.append(int(lc[i + 1]))
+            elif lc[i] == "spellID" and int(lc[i + 1]) not in lockS: lockS.append(int(lc[i + 1]))
     mrep = q.get("maxReputation")
     mrep = [int(mrep[0]), int(mrep[1])] if isinstance(mrep, list) and len(mrep) >= 2 else []
-    extra = [int(q.get("learnedAt", 0) or 0) if q.get("requireSkill") else 0,
-             ilist(q.get("nextQuests")) if q.get("isBreadcrumb") else [],
-             int(q.get("sqreq", 0) or 0), mrep, lockQ, lockS]
+    if not mrep and qq:
+        mx = qq[19]
+        if isinstance(mx, list) and len(mx) >= 2 and mx[0]: mrep = [int(mx[0]), int(mx[1])]
+    extra = [rank if skill else 0, nxt, need, mrep, lockQ, lockS, maxlvl]
     while extra and extra[-1] in (0, []): extra.pop()
     rows.append((qid, pts[:3], int(q.get("lvl", 1) or 1), int(q.get("r", 0) or 0), ilist(q.get("races")),
-                 ilist(q.get("c")), pre, ilist(q.get("altQuests")),
-                 int(q.get("requireSkill", 0) or 0), rep, int(q.get("awp", 0) or 0), flags, item,
-                 giver[0] if giver else 0, extra))
+                 ilist(q.get("c")), pre, alt,
+                 skill, rep, int(q.get("awp", 0) or 0), flags, item,
+                 giver[0] if giver else 0, extra, ender))
 
 L = lambda xs: "{" + ",".join(str(x) for x in xs) + "}"
 with open(sys.argv[2], "w", encoding="utf-8") as f:
-    f.write("-- FOA UI · 포에버 퀘스트 시작 위치 (자동 생성: tools/quests/gen_quests.py)\n")
+    f.write("-- FOA UI · 포에버 퀘스트 (자동 생성: tools/quests/gen_quests.py) · GPL-3.0-or-later\n")
     f.write("-- 자료: AllTheThings (MIT License) db/Camelot · https://github.com/ATTWoWAddon/AllTheThings\n")
-    f.write("-- { 퀘스트ID, {지도,x,y,...}, 필요레벨, 진영(1호드 2얼라), 종족{}, 직업{}, 선행{}, 택일{}, 전문기술, 평판{}, 추가패치, 표시(1반복 2연결), 시작아이템, 주는NPC }\n")
+    f.write("--       QuestieDB (GPL-3.0) 포에버 합본: 선행 · 택일 · 연결 · 조건 · 보고 NPC · https://github.com/Questie/QuestieDB\n")
+    f.write("-- { 퀘스트ID, {지도,x,y,...}, 필요레벨, 진영(1호드 2얼라), 종족{}, 직업{}, 선행{}, 택일{}, 전문기술, 평판{}, 추가패치, 표시(1반복 2연결), 시작아이템, 주는NPC, [조건 더], [보고] }\n")
+    f.write("-- [조건 더] = { 전문기술 숙련도, 연결 퀘스트 목적지{}, 선행 중 필요한 수(0=모두), 평판 이하{세력,값}, 깨면 잠기는 퀘스트{}, 알면 잠기는 주문{}, 최고 레벨 } (없으면 false)\n")
+    f.write("-- [보고] = 0 (받은 NPC 에게) · {지도, x, y, NPC} (다른 NPC · 물체면 NPC 0) · 없으면 모름\n")
     f.write("local _, ns = ...\nlocal b = select(4, GetBuildInfo()) or 0\nif not (b >= 16001 and b < 20000) then return end\nns.QUEST_DB = {\n")
     for r in rows:
         p = []
@@ -236,7 +341,11 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
         ex = ""
         if r[14]:
             ex = "," + "{" + ",".join(L(v) if isinstance(v, list) else str(v) for v in r[14]) + "}"
+        if r[15] is not None:
+            if not ex: ex = ",false"
+            ex += ",0" if r[15] == 0 else "," + L(r[15])
         f.write("{%d,%s,%d,%d,%s,%s,%s,%s,%d,%s,%d,%d,%d,%d%s},\n" % (
             r[0], L(p), r[2], r[3], L(r[4]), L(r[5]), L(r[6]), L(r[7]), r[8], L(r[9]), r[10], r[11], r[12], r[13], ex))
     f.write("}\n")
 print("quests:", len(quests), "written:", len(rows), "skipped:", skipped)
+if QQ: print("questie:", stat)

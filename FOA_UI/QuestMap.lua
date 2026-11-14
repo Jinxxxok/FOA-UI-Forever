@@ -206,6 +206,7 @@ local function ExtraBlocked(r)
 	end
 	if x[5] then for _, q in ipairs(x[5]) do if Done(q) then return true end end end
 	if x[6] then for _, s in ipairs(x[6]) do if KnowsSpell(s) then return true end end end
+	if (x[7] or 0) > 0 and (UnitLevel("player") or 1) > x[7] then return true end
 	return false
 end
 M.ExtraBlocked = ExtraBlocked
@@ -790,6 +791,21 @@ function M:Ender(id)
 	if type(e) == "table" and e[1] then return e[4], e, "learned" end
 	local r = QuestRow(id)
 	local giver = r and r[14] or 0
+	-- 퀘스트 자료의 보고 NPC (QuestieDB 포에버 합본): 0 = 받은 NPC, {지도, x, y, NPC}
+	local en = r and r[16]
+	if en == 0 and giver ~= 0 then
+		local sp = NpcSpot(giver)
+		if sp then return giver, sp, "data" end
+	elseif type(en) == "table" then
+		if en[1] and en[1] ~= 0 then
+			local learned = en[4] and en[4] ~= 0 and Ink.db.npcSpot and Ink.db.npcSpot[en[4]]
+			if type(learned) == "table" and learned[1] then return en[4], learned, "data" end
+			return en[4], { en[1], en[2] / 100, en[3] / 100 }, "data"
+		elseif en[4] and en[4] ~= 0 then
+			local sp = NpcSpot(en[4])
+			if sp then return en[4], sp, "data" end
+		end
+	end
 	-- 다음 퀘스트를 주는 NPC (모두 같은 NPC 일 때만 · 받은 NPC 가 그중에 있으면 받은 NPC)
 	local fol = Followers()[id]
 	if fol and #fol > 0 then
@@ -1072,6 +1088,7 @@ end
 
 local SRC_NOTE = {
 	learned = "전에 이 퀘스트를 보고한 자리",
+	data = "퀘스트 자료의 보고 NPC 자리",
 	follow = "다음 퀘스트를 주는 NPC 자리 (보고 받는 NPC)",
 	text = "퀘스트 목표 글에 나온 NPC 자리",
 	giver = "받은 NPC 자리",

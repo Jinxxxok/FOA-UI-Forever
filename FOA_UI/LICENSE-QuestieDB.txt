@@ -1,0 +1,12 @@
+QuestieDB (Questie team) — GNU General Public License v3.0
+https://github.com/Questie/QuestieDB
+
+FOA UI 의 QuestDB.lua 일부(선행 퀘스트 · 택일 퀘스트 · 연결 퀘스트 · 퀘스트 조건 · 보고 NPC 와 그 자리)는
+QuestieDB 의 WoW Forever 합본 자료(tools/export-forever.lua 출력: 기본 자료 + 생성 보정 + 플레이 기록 traces + 직접 고친 보정)를
+tools/quests/gen_quests.py 로 변환한 것입니다.
+
+QuestieDB 는 GPLv3 로 배포됩니다 (QuestieDB LICENSE.md · gpl-3.0.md). QuestieDB 의 안내대로
+Questie 에서 가져온 오래된 자료는 Questie 의 라이선스 안내를 따르며, Questie 팀은 GPLv3 조건으로의 포크 · 복사를 허용합니다.
+"Questie" 이름과 로고는 이 라이선스에 포함되지 않으며 FOA UI 는 쓰지 않습니다.
+
+이 자료를 포함한 FOA UI 전체는 GNU GPL v3 (또는 그 이후 버전) 로 배포됩니다. 전문: LICENSE.txt

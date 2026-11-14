@@ -774,13 +774,37 @@ function M:BuildPlayer()
 	f.status:SetSize(13, 13)
 	f.status:Hide()
 
+	f.hpGlow = f:CreateTexture(nil, "BACKGROUND")
+	f.hpGlow:SetTexture(Ink.tex.glow)
 	f.hp = Ink:Bar(f, P_COL, 6, C.text)
 	f.hp:SetPoint("TOPLEFT", 0, -30)
+	f.hpGlow:SetPoint("TOPLEFT", f.hp, "TOPLEFT", -14, 14)
+	f.hpGlow:SetPoint("BOTTOMRIGHT", f.hp, "BOTTOMRIGHT", 14, -14)
+	f.hpGlow:SetAlpha(0)
 
 	f.auras = ns.AuraBox(f, AURA_SIZE, 10)
 	f.auras:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -44)
 	f.auraFilter = "HARMFUL"
 	self:BuildPortrait(f, "left")
+	-- 내가 해제할 수 있는 디버프(마법 · 저주 · 질병 · 독)가 나한테 걸리면 체력바를 그 종류 색으로 (파티 칸과 같은 모양)
+	--  12.1 오라 컨테이너가 있으면 엔진이 그려 주고, 없으면(포에버 등) 오라를 읽어서 칠한다
+	f.dispelWatch = Ink.db.playerDispel ~= false and ns.DispelWatch(f, function(btn)
+		local fill = btn:CreateTexture(nil, "OVERLAY", nil, 2)
+		fill:SetTexture(Ink.tex.white)
+		fill:SetAllPoints(f.hp:GetStatusBarTexture())
+		fill:SetAlpha(0.9)
+		local track = btn:CreateTexture(nil, "OVERLAY", nil, 1)
+		track:SetTexture(Ink.tex.white)
+		track:SetAllPoints(f.hp)
+		track:SetAlpha(0.18)
+		local glow = btn:CreateTexture(nil, "BACKGROUND")
+		glow:SetTexture(Ink.tex.glow)
+		glow:SetAllPoints(f.hpGlow)
+		glow:SetAlpha(0.55)
+		if ns.FX then ns.FX.DispelBreathe(glow) end
+		return { fill, track, glow }
+	end, f.hp:GetFrameLevel() + 2) or nil
+	if f.dispelWatch then f.dispelWatch:SetUnit("player", true) end
 	self.player = f
 end
 
@@ -1016,6 +1040,66 @@ end
 -------------------------------------------------------------------------------
 -- 갱신
 -------------------------------------------------------------------------------
+-- 나에게 걸린, 내가 해제할 수 있는 디버프의 종류 색 (없으면 nil)
+--  "HARMFUL|RAID" = 내가 해제할 수 있는 해로운 효과
+local DISPEL_IDX = { Magic = 1, Curse = 2, Disease = 3, Poison = 4 }
+local function MyDispelColor(unit)
+	if C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDispelTypeColor and DispelCurve() then
+		local ok, col = pcall(function()
+			local slots = { C_UnitAuras.GetAuraSlots(unit, "HARMFUL|RAID", 1) }
+			if #slots < 2 then return false end
+			local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[2])
+			if not data then return false end
+			return C_UnitAuras.GetAuraDispelTypeColor(unit, data.auraInstanceID, dispelCurve) or false
+		end)
+		if ok and col ~= nil then return col or nil end
+	end
+	local get = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
+	for i = 1, 40 do
+		local kind
+		if get then
+			local ok, data = pcall(get, unit, i, "HARMFUL|RAID")
+			if not (ok and data) then break end
+			kind = plain(data.dispelName)
+		elseif UnitDebuff then
+			local ok, name, _, _, dtype = pcall(UnitDebuff, unit, i, "RAID")
+			if not (ok and name) then break end
+			kind = plain(dtype)
+		else
+			break
+		end
+		local k = DISPEL_IDX[kind or ""]
+		if k then
+			local c = Ink.dispel[k]
+			return CreateColor(c[1], c[2], c[3], 1)
+		end
+	end
+end
+
+function M:UpdateDispel(f)
+	if f ~= self.player or not f.hpGlow then return end
+	if f.dispelWatch then return end -- 엔진이 그린다
+	local col = Ink.db.playerDispel ~= false and not plain(UnitIsDeadOrGhost(f.unit)) and MyDispelColor(f.unit) or nil
+	f.fxDispel = col and true or nil
+	if col then
+		local r, g, b = col:GetRGB()
+		f.hp:SetStatusBarColor(r, g, b)
+		f.hp.bg:SetColorTexture(r, g, b, 0.18)
+		f.hpGlow:SetVertexColor(r, g, b)
+		f.hpGlow:SetAlpha(0.55)
+		if ns.FX and ns.FX.on("dispelPulse") then
+			if not f.hpGlow.fxBreathe then f.hpGlow.fxBreathe = ns.FX.Breathe(f.hpGlow, 0.25, 0.75, 0.7) end
+			if f.hpGlow.fxBreathe and not f.hpGlow.fxBreathe:IsPlaying() then f.hpGlow.fxBreathe:Play() end
+		end
+	else
+		local t = C.track
+		f.hp.bg:SetColorTexture(t[1], t[2], t[3], t[4] or 1)
+		f.hpGlow:SetAlpha(0)
+		if f.hpGlow.fxBreathe then f.hpGlow.fxBreathe:Stop() end
+	end
+	return col ~= nil
+end
+
 function M:UpdateHealth(f)
 	local u = f.unit
 	if not UnitExists(u) then return end
@@ -1049,11 +1133,14 @@ function M:UpdateHealth(f)
 	end
 	if dead then
 		if f.hp then f.hp:SetValue(0) end
+		if f == self.player then self:UpdateDispel(f) end
 		return
 	end
 	if f == self.player then
 		-- 플레이어는 직업별 Ink 색 (자원 색과 겹치지 않게 고른 색). 35% 미만은 빨강.
 		ApplyColor(ns.PlayerTint(u), f.pct, f.hp)
+		-- 해제할 수 있는 디버프가 걸려 있으면 체력바만 그 종류 색으로
+		self:UpdateDispel(f)
 	elseif f == self.tot or f == self.pet then
 		ApplyColor(LowColor(u), f.pct, f.hp)
 	end
@@ -1451,6 +1538,10 @@ function M:Init()
 		elseif event == "UNIT_AURA" then
 			-- 컨테이너는 엔진이 알아서 갱신한다
 			if f.auras and not f.auras:IsLive() then M:UpdateDebuffs(f) end
+			if f == M.player then
+				-- 해제 색이 붙거나 떨어질 때: 체력바 색을 다시 (해제 색이 없어지면 직업 색으로)
+				if f.fxDispel or not f.dispelWatch then M:UpdateHealth(f) end
+			end
 		elseif event:find("^UNIT_SPELLCAST") then
 			if f.cast then
 				local refresh = function() CastUpdate(f.cast, f.unit) end
