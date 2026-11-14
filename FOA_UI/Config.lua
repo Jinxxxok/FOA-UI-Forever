@@ -2519,6 +2519,12 @@ SlashCmdList.INKUI = function(msg)
 			tostring(ui), x and string.format("%.1f", x * 100) or "-", y and string.format("%.1f", y * 100) or "-",
 			tostring(id), tostring(name), tostring(lfg), GetSubZoneText() or ""))
 		print("  FOA 판단: " .. tostring(key) .. (key and (sure and "  (확실)" or "  (추측)") or ""))
+		-- 지도 없는 던전 자동 구조도용: 게임이 세계 좌표를 주는지 · 지나간 길을 몇 군데 모았는지
+		local wx, wy, wz, winst
+		if D and D.WorldPos then wx, wy, wz, winst = D.WorldPos() end
+		local tr = winst and Ink.db.trail and Ink.db.trail[winst]
+		print(wx and string.format("  세계 좌표 %.1f, %.1f, %.1f (인스턴스 %s)  ·  모은 길 %d곳", wx, wy, wz, tostring(winst), tr and #tr.pts or 0)
+			or "  세계 좌표: 게임이 주지 않음 (이 안에서는 자동 구조도를 못 그려요)")
 	elseif msg == "taint" or msg == "taint on" or msg == "오염" or msg == "taint off" then
 		-- 오염 추적: 게임이 "어느 줄에서 FOA 때문에 블리자드 실행이 오염됐는지"를 Logs\taint.log 에 직접 적는다
 		local on = msg ~= "taint off"

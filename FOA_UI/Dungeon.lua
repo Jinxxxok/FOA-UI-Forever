@@ -1429,8 +1429,61 @@ M.KillSet = KillSet
 --  스니드(643)는 스니드의 벌목기(642)가 부서져야 튀어나온다 · 벌목기는 전투 단위가 따로 없고 바로 이어져서 놓치기 쉽다
 local KILL_IMPLIES = { [643] = { 642 } }
 
+-------------------------------------------------------------------------------
+-- 지도 없는 던전의 지나간 길 기록 (포에버 신규 던전: 크롤도크 보루 · 가라앉은 도시 …)
+--  게임 파일에 던전 지도가 없어서, 게임이 세계 좌표를 주면 1초마다 지나간 자리를 적어 둔다 (3야드 넘게 움직였을 때만)
+--  모인 자리로 나중에 자동 구조도를 그린다 · 계정 공용 Ink.db.trail[인스턴스 번호]
+-------------------------------------------------------------------------------
+local function WorldPos()
+	if not UnitPosition then return end
+	local ok, y, x, z, inst = pcall(UnitPosition, "player")
+	if not ok then return end
+	y, x, z, inst = plain(y), plain(x), plain(z), plain(inst)
+	if type(x) ~= "number" or type(y) ~= "number" then return end
+	return x, y, z or 0, inst
+end
+M.WorldPos = WorldPos
+
+function M:TrailTick()
+	if not IsInInstance() then return end
+	-- 게임 지도가 있는 던전은 그 지도를 쓰니까 기록하지 않는다
+	local ui = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	if ui and C_Map.GetPlayerMapPosition and C_Map.GetPlayerMapPosition(ui, "player") then return end
+	local x, y, z, inst = WorldPos()
+	if not x then self.trailNoPos = true return end
+	self.trailNoPos = nil
+	inst = inst or select(8, GetInstanceInfo())
+	if not inst then return end
+	Ink.db.trail = Ink.db.trail or {}
+	local t = Ink.db.trail[inst]
+	if not t then t = { pts = {}, marks = {} }; Ink.db.trail[inst] = t end
+	t.name = GetInstanceInfo()
+	local last = t.pts[#t.pts]
+	if last and (x - last[1]) ^ 2 + (y - last[2]) ^ 2 < 9 and math.abs(z - (last[3] or 0)) < 3 then return end
+	if #t.pts >= 3000 then return end
+	t.pts[#t.pts + 1] = { math.floor(x * 10 + 0.5) / 10, math.floor(y * 10 + 0.5) / 10, math.floor(z * 10 + 0.5) / 10 }
+end
+
+-- 보스를 잡은 자리 (자동 구조도에 보스 표시)
+function M:TrailMark(kind, id)
+	local x, y, z, inst = WorldPos()
+	inst = inst or select(8, GetInstanceInfo())
+	if not (x and inst) then return end
+	Ink.db.trail = Ink.db.trail or {}
+	local t = Ink.db.trail[inst]
+	if not t then t = { pts = {}, marks = {} }; Ink.db.trail[inst] = t end
+	t.marks = t.marks or {}
+	t.marks[#t.marks + 1] = { kind, id or 0, math.floor(x * 10 + 0.5) / 10, math.floor(y * 10 + 0.5) / 10, math.floor(z * 10 + 0.5) / 10 }
+end
+
+function M:TrailStart()
+	if self.trailTicker or not C_Timer.NewTicker then return end
+	self.trailTicker = C_Timer.NewTicker(1, function() pcall(M.TrailTick, M) end)
+end
+
 function M:MarkKill(key, npc)
 	if not (key and npc) then return end
+	pcall(M.TrailMark, M, "boss", npc)
 	local k = KillSet(key)
 	local changed = false
 	local function mark(n)
@@ -4988,6 +5041,7 @@ function M:Init()
 	e:SetScript("OnEvent", function(_, event, arg)
 		if event == "PLAYER_ENTERING_WORLD" then
 			M:OnEnterWorld()
+			if FOREVER then M:TrailStart() end
 		elseif event == "ADDON_LOADED" then
 			if not M.mapHooked then M:HookMap() end
 			if not M.bisTab then M:AttachBisTab() end
