@@ -3,7 +3,7 @@
 ## Notes: FOA (First of All) 통합 UI
 ## Author: hyeokjiny
 ## X-License: GPL-3.0-or-later
-## Version: 0.65.54
+## Version: 0.65.55
 ## SavedVariables: InkUIDB
 ## SavedVariablesPerCharacter: InkUICharDB
 ## IconTexture: Interface\AddOns\FOA_UI\Media\Textures\Logo
@@ -28,6 +28,7 @@ ClassSpellIDs.lua
 Training.lua
 AHPrice.lua
 ProfessionRoutes.lua
+ProfessionTrainers.lua
 RecipeVendors.lua
 Professions.lua
 Group.lua

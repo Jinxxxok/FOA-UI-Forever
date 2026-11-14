@@ -238,11 +238,156 @@ local function Waypoint(x)
 	if C_Map.CanSetUserWaypointOnMap and C_Map.CanSetUserWaypointOnMap(x[2]) then
 		C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(x[2], x[3] / 100, x[4] / 100))
 		if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
-		print(string.format("|cffFFF468FOA|r 지도에 상인 위치를 찍었어요 (%s)", (C_Map.GetMapInfo(x[2]) or {}).name or ""))
+		print(string.format("|cffFFF468FOA|r 지도에 %s 위치를 찍었어요 (%s)", x.label or "상인", (C_Map.GetMapInfo(x[2]) or {}).name or ""))
 	end
 end
 
 M.PickVendor, M.VendorText, M.Waypoint = PickVendor, VendorText, Waypoint
+
+-------------------------------------------------------------------------------
+-- 훈련사 · 단계 (포에버: 수습 → 숙련 → 전문 → 대가, 단계마다 가르치는 훈련사가 따로 · 전문 · 대가는 몇 명뿐)
+--  자료: ProfessionTrainers.lua (AllTheThings 훈련사 · 단계 · 제조법 + QuestieDB 보조 훈련사) + 훈련사 창에서 읽은 것
+-------------------------------------------------------------------------------
+local PROF_ID = { ["가죽세공"] = 165, ["대장기술"] = 164, ["연금술"] = 171, ["재봉술"] = 197, ["기계공학"] = 202, ["마법부여"] = 333,
+	["약초채집"] = 182, ["채광"] = 186, ["무두질"] = 393, ["요리"] = 185, ["낚시"] = 356, ["응급치료"] = 129 }
+local RANK_NAME = { "수습", "숙련", "전문", "대가" }
+local RANK_CAP = { 75, 150, 225, 300 }
+local RANK_REQ = { { 5, 0 }, { 10, 50 }, { 20, 125 }, { 35, 200 } }   -- 단계마다 { 캐릭터 레벨, 숙련 }
+M.PROF_ID, M.RANK_NAME = PROF_ID, RANK_NAME
+
+-- 보조 기술의 전문 · 대가는 훈련사가 아니라 책 · 퀘스트 (진영 0 공통 1 호드 2 얼라)
+local SECONDARY = {
+	[185] = { [3] = { book = 16072, req = { 0, 125 }, who = { { 3955, 2, 1440, 49.5, 67.1, "Shandrina" }, { 12033, 1, 1443, 26.2, 69.7, "Wulan" } } },
+		[4] = { quest = 6610, req = { 35, 225 }, who = { { 8125, 0, 1446, 52.6, 28.1, "Dirge Quikcleave" } } } },
+	[356] = { [3] = { book = 16083, req = { 20, 125 }, who = { { 2626, 0, 1434, 27.4, 77.2, "Old Man Heming" } } },
+		[4] = { quest = 6607, req = { 35, 225 }, who = { { 12919, 0, 1445, 58.6, 60.1, "Nat Pagle" } } } },
+	[129] = { [3] = { book = 16084, req = { 0, 125 }, who = { { 2805, 2, 1417, 27.0, 58.8, "Deneb Walker" }, { 13476, 1, 1445, 36.5, 30.4, "Balai Lok'Wein" } } },
+		[4] = { quest = 6624, req = { 35, 225 }, who = { { 12939, 2, 1445, 67.8, 49.0, "Doctor Gustaf VanHowzen" }, { 12920, 1, 1417, 73.4, 36.9, "Doctor Gregory Victor" } } } },
+}
+-- 찾기 어려운 훈련사 메모
+local TRAINER_NOTE = { [11073] = "울다만 던전 안 · 전갈을 모두 잡아야 나타나요" }
+
+local function ProfID(name)
+	if not name then return end
+	if PROF_ID[name] then return PROF_ID[name] end
+	for k, v in pairs(PROF_ID) do if name:find(k, 1, true) or k:find(name, 1, true) then return v end end
+	if GetProfessions and GetProfessionInfo then
+		for _, idx in ipairs({ GetProfessions() }) do
+			local ok, n, _, _, _, _, _, line = pcall(GetProfessionInfo, idx)
+			if ok and n == name and line then return line end
+		end
+	end
+end
+M.ProfID = ProfID
+local function RankOfMax(max)
+	if (max or 0) <= 75 then return 1 elseif max <= 150 then return 2 elseif max <= 225 then return 3 end
+	return 4
+end
+M.RankOfMax = RankOfMax
+
+local function TrainerName(npc, en)
+	local Q = Ink.modules.QuestMap
+	local n = Q and Q.GiverName and Q:GiverName(npc)
+	if not n then
+		local s = Ink.db.npcSpot and Ink.db.npcSpot[npc]
+		n = type(s) == "table" and s[4] or nil
+	end
+	return n or (en ~= "" and en) or "훈련사"
+end
+local function ZoneName(map) return map and map > 0 and C_Map.GetMapInfo and (C_Map.GetMapInfo(map) or {}).name or "" end
+local function Dist(map, x, y)
+	local Q = Ink.modules.QuestMap
+	if Q and Q.DistTo then
+		local ok, d = pcall(Q.DistTo, Q, { map = map, x = x / 100, y = y / 100, id = 5e6 })
+		if ok and type(d) == "number" then return d end
+	end
+	return 5e6
+end
+
+-- 이 기술의 훈련사 목록 (내 진영) { npc, map, x, y, ranks = {[단계]=true}, recipes = {[주문]=숙련}, name, inside, learned }
+local function Trainers(prof)
+	local out, fac = {}, MyFac()
+	for _, t in ipairs((ns.PROF_TRAINERS or {})[prof] or {}) do
+		if t[2] == 0 or t[2] == fac then
+			local rk = {}
+			for r in pairs(t[4]) do rk[r] = true end
+			local rc = {}
+			local list = t[5]
+			for i = 1, #list, 2 do rc[list[i]] = list[i + 1] end
+			out[#out + 1] = { npc = t[1], map = t[3][1], x = t[3][2], y = t[3][3], ranks = rk, recipes = rc, en = t[6] or "", inside = t[7] == 1, rankData = t[4] }
+		end
+	end
+	for _, t in ipairs((ns.PROF_TRAINERS_EXTRA or {})[prof] or {}) do
+		if t[2] == 0 or t[2] == fac then
+			local rk = {}
+			for r = 1, t[6] do rk[r] = true end
+			out[#out + 1] = { npc = t[1], map = t[3], x = t[4], y = t[5], ranks = rk, recipes = {}, en = t[7] or "", extra = true }
+		end
+	end
+	-- 훈련사 창에서 직접 본 단계 · 자리 (계정 공용)
+	local seen = Ink.db.profTrainerSeen and Ink.db.profTrainerSeen[prof]
+	for npc, v in pairs(seen or {}) do
+		local hit
+		for _, t in ipairs(out) do if t.npc == npc then hit = t end end
+		if not hit and v.map then
+			hit = { npc = npc, map = v.map, x = v.x, y = v.y, ranks = {}, recipes = {}, en = v.name or "", learned = true }
+			out[#out + 1] = hit
+		end
+		if hit then for r in pairs(v.ranks or {}) do hit.ranks[r] = true end end
+	end
+	return out
+end
+M.Trainers = Trainers
+
+-- 다음 단계를 배우는 곳 (가까운 순) · 보조 기술은 책 · 퀘스트
+function M.NextRank(prof, max)
+	local cur = RankOfMax(max)
+	if cur >= 4 then return end
+	local nr = cur + 1
+	local sec = SECONDARY[prof] and SECONDARY[prof][nr]
+	local fac = MyFac()
+	local spots = {}
+	if sec then
+		for _, w in ipairs(sec.who) do
+			if w[2] == 0 or w[2] == fac then
+				spots[#spots + 1] = { npc = w[1], map = w[3], x = w[4], y = w[5], en = w[6], d = Dist(w[3], w[4], w[5]) }
+			end
+		end
+	else
+		for _, t in ipairs(Trainers(prof)) do
+			if t.ranks[nr] then
+				-- 전문 · 대가는 확인된 훈련사(ATT · 직접 본 곳)를 먼저: 이름만 보고 짐작한 보조 훈련사는 뒤로
+				t.d = Dist(t.map, t.x, t.y) + ((nr >= 3 and t.extra and not t.learned) and 1e7 or 0)
+				spots[#spots + 1] = t
+			end
+		end
+	end
+	table.sort(spots, function(a, b) return a.d < b.d end)
+	local req = (sec and sec.req) or RANK_REQ[nr]
+	return { rank = nr, name = RANK_NAME[nr], cap = RANK_CAP[nr], lvl = req[1], skill = req[2], spots = spots, book = sec and sec.book, quest = sec and sec.quest }
+end
+
+-- 한 줄 안내: "전문 → 다르나서스 텔로니스 (64, 22) · 20레벨 · 숙련 125"
+function M.NextRankText(info)
+	if not info then return end
+	local s = info.spots[1]
+	local how = info.book and "책" or (info.quest and "퀘스트" or "훈련사")
+	local where = s and string.format("%s · %s %.0f, %.0f%s", TrainerName(s.npc, s.en), ZoneName(s.map), s.x, s.y, s.inside and " (던전 안)" or "") or "배우는 곳 정보 없음"
+	return info.name .. " 단계 (" .. how .. ")", where
+end
+
+-- 훈련사가 가르치는 제조법: [주문] = { 숙련, 훈련사들 }
+local function TrainerRecipes(prof)
+	local out = {}
+	for _, t in ipairs(Trainers(prof)) do
+		for sid, la in pairs(t.recipes) do
+			local e = out[sid]
+			if not e then e = { la = la, who = {} }; out[sid] = e end
+			e.who[#e.who + 1] = t
+		end
+	end
+	return out
+end
 
 -------------------------------------------------------------------------------
 -- 패널
@@ -425,6 +570,7 @@ function M:Paint()
 	p:SetFrameStrata(host:GetFrameStrata())
 	p:SetFrameLevel(host:GetFrameLevel() + 20)
 	p:Show()
+	local prof = ProfID(name)
 	p.title:SetText((name or "전문기술") .. " 안내")
 	p.skill:SetText(skill .. " / " .. max)
 	p.bar:SetMinMaxValues(0, math.max(1, max))
@@ -492,14 +638,34 @@ function M:Paint()
 		end
 		c:Show()
 	elseif skill >= (max > 0 and max or 300) then
-		c.k:SetText("숙련 최대")
+		-- 이 단계 끝: 다음 단계를 어디서 배우는지 (누르면 지도)
+		local nx = prof and max < 300 and M.NextRank(prof, max)
+		c.k:SetText(max >= 300 and "숙련 최대" or ("숙련 " .. max .. " · 이 단계 끝"))
 		c.icon:SetTexture(134400)
-		c.name:SetText("다음 단계 훈련사에게 배우면 계속 올릴 수 있어요")
-		c.sub:SetText("")
 		for _, m in ipairs(c.mats) do m:Hide() end
 		c.cost:SetText(""); c.src:SetText("")
-		c.vend:Hide()
-		c:SetHeight(70)
+		if nx then
+			local head1, where = M.NextRankText(nx)
+			local lv = UnitLevel("player") or 1
+			c.name:SetText(nx.name .. " 단계를 배워야 " .. nx.cap .. "까지 올라가요")
+			c.sub:SetText((lv < nx.lvl and ("|cffFF6B5E" .. nx.lvl .. "레벨부터|r") or (nx.lvl .. "레벨 · 숙련 " .. nx.skill)) .. "  ·  " .. head1)
+			local sp = nx.spots[1]
+			if sp then
+				c.vend.x = { sp.npc, sp.map, sp.x, sp.y, label = "훈련사" }
+				c.vend.t:SetText(where)
+				c.vend.s:SetText((TRAINER_NOTE[sp.npc] or (#nx.spots > 1 and ("그 밖에 " .. (#nx.spots - 1) .. "곳") or "")) .. "  ·  누르면 지도에 표시")
+				c.vend:Show()
+				c:SetHeight(70 + 34)
+			else
+				c.vend:Hide()
+				c:SetHeight(70)
+			end
+		else
+			c.name:SetText(max >= 300 and "모든 단계를 배웠어요" or "다음 단계 훈련사에게 배우면 계속 올릴 수 있어요")
+			c.sub:SetText("")
+			c.vend:Hide()
+			c:SetHeight(70)
+		end
 	else
 		c.k:SetText("빠른 레벨링 경로가 없는 전문기술")
 		c.icon:SetTexture(134400)
@@ -537,6 +703,25 @@ function M:Paint()
 		r.vendor = nil
 		r:ClearAllPoints(); r:SetPoint("TOPLEFT", 0, -y); r:Show()
 		y = y + ROW + 2
+	end
+	-- 다음 단계: 이 단계 끝이 가까우면 (막히기 전에) 어디서 배우는지
+	if prof and max > 0 and max < 300 and skill >= max - 25 and skill < max then
+		local nx = M.NextRank(prof, max)
+		if nx and nx.spots[1] then
+			head("다음 단계 · " .. nx.name, max .. "에서 막혀요")
+			local lv = UnitLevel("player") or 1
+			for i = 1, math.min(2, #nx.spots) do
+				local sp = nx.spots[i]
+				local _, where = M.NextRankText({ name = nx.name, spots = { sp }, book = nx.book, quest = nx.quest })
+				local tip = { nx.name .. " 단계 (" .. nx.cap .. "까지)", where, nx.lvl .. "레벨 · 숙련 " .. nx.skill .. " 필요",
+					nx.book and "훈련사가 아니라 책으로 배워요 (그 NPC 가 팔아요)" or (nx.quest and "훈련사가 아니라 퀘스트로 배워요" or ""),
+					TRAINER_NOTE[sp.npc] or "", "누르면 지도에 표시" }
+				row(134400, TrainerName(sp.npc, sp.en), ZoneName(sp.map) .. string.format("  %.0f, %.0f", sp.x, sp.y),
+					lv < nx.lvl and ("|cffFF6B5E" .. nx.lvl .. "레벨|r") or (nx.lvl .. "레벨"), GOLD, tip)
+				p.rows[nr].vendor = { sp.npc, sp.map, sp.x, sp.y, label = "훈련사" }
+			end
+			y = y + 6
+		end
 	end
 	-- 숙련이 오르는 아는 제조법
 	local up = {}
@@ -606,30 +791,50 @@ function M:Paint()
 			y = y + 6
 		end
 	end
-	-- 훈련사에게 배울 제조법 (훈련사 창을 열었을 때 기억한 것)
-	local tr
+	-- 훈련사에게 배울 제조법: 훈련사 자료(단계마다 가르치는 제조법이 다름) + 훈련사 창에서 본 비용
+	--  예전엔 마지막으로 연 훈련사 목록만 써서, 수습 훈련사를 열면 수습 제조법에서 멈췄다
+	local costByName, tr = {}, nil
 	for k, v in pairs(Ink.db.profTrainer or {}) do
-		if name and (k == name or k:find(name, 1, true) or name:find(k, 1, true)) then tr = v end
-	end
-	if tr and tr.list then
-		local can = {}
-		for _, e in ipairs(tr.list) do
-			local req = e[8] or 0
-			if not byName[e[2]] and req <= skill + 25 then can[#can + 1] = e end
+		if name and (k == name or k:find(name, 1, true) or name:find(k, 1, true)) then
+			tr = v
+			for _, e in ipairs(v.list or {}) do if e[6] then costByName[e[2]] = e[6] end end
 		end
-		table.sort(can, function(a, b) return (a[8] or 0) < (b[8] or 0) end)
-		if #can > 0 then
-			head("훈련사에게 배울 제조법", "숙련 기준")
-			for i = 1, math.min(8, #can) do
-				local e = can[i]
-				local req = e[8] or 0
-				row(e[4], e[2], "숙련 " .. req .. (req <= skill and "  ·  |cff6FD39A지금 배울 수 있음|r" or ""), e[6] and Money(e[6]) or "", req <= skill and GREEN or nil,
-					{ e[2], "필요 숙련 " .. req, e[6] and ("비용 " .. Money(e[6])) or "" }, req > skill)
+	end
+	if prof then
+		local can = {}
+		for sid, e in pairs(TrainerRecipes(prof)) do
+			local nm = SpellName(sid)
+			local known = (nm and byName[nm]) or (IsPlayerSpell and IsPlayerSpell(sid))
+			if nm and not known and e.la <= skill + 25 and e.la >= skill - 40 and e.la <= (max > 0 and max or 300) then
+				for _, t in ipairs(e.who) do t.d = t.d or Dist(t.map, t.x, t.y) end
+				table.sort(e.who, function(a, b) return a.d < b.d end)
+				can[#can + 1] = { sid = sid, name = nm, la = e.la, who = e.who }
 			end
+		end
+		table.sort(can, function(a, b) if a.la ~= b.la then return a.la < b.la end return a.name < b.name end)
+		if #can > 0 then
+			head("훈련사에게 배울 제조법", "숙련 기준 · 누르면 지도")
+			for i = 1, math.min(10, #can) do
+				local e = can[i]
+				local t = e.who[1]
+				local who = TrainerName(t.npc, t.en)
+				local icon = (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(e.sid)) or (GetSpellTexture and GetSpellTexture(e.sid)) or 134939
+				local tip = { e.name, "필요 숙련 " .. e.la }
+				for k = 1, math.min(3, #e.who) do
+					local w = e.who[k]
+					tip[#tip + 1] = string.format("배우는 곳: %s · %s %.0f, %.0f", TrainerName(w.npc, w.en), ZoneName(w.map), w.x, w.y)
+				end
+				if costByName[e.name] then tip[#tip + 1] = "비용 " .. Money(costByName[e.name]) end
+				tip[#tip + 1] = "누르면 지도에 훈련사 위치"
+				row(icon, e.name, "숙련 " .. e.la .. "  ·  " .. who .. " · " .. ZoneName(t.map),
+					costByName[e.name] and Money(costByName[e.name]) or (e.la <= skill and "|cff6FD39A지금 배움|r" or ""), e.la <= skill and GREEN or nil, tip, e.la > skill)
+				p.rows[nr].vendor = { t.npc, t.map, t.x, t.y, label = "훈련사" }
+			end
+			y = y + 6
 		end
 	end
 	p.body:SetHeight(math.max(10, y))
-	p.foot:SetText((route and "빠른 레벨링: wowf.io · " or "") .. (tr and "훈련사 목록 기억됨" or "훈련사 창을 한 번 열면 배울 제조법 · 비용이 나와요"))
+	p.foot:SetText((route and "빠른 레벨링: wowf.io · " or "") .. "훈련사: AllTheThings" .. (tr and " · 비용 기억됨" or " · 훈련사 창을 열면 비용도"))
 end
 
 function M:Hook()
@@ -643,15 +848,56 @@ function M:Hook()
 	end
 end
 
+-- 숙련이 단계 한도에 가까워지면 다음 단계를 배우는 곳을 채팅으로 한 번 알려 준다
+--  (채집 기술은 창이 없어서 이게 유일한 안내 · 한도마다 캐릭터당 한 번)
+local function SkillMax(id)
+	local SI = C_SkillInfo
+	if SI and SI.GetSkillLineInfoByID then
+		local ok, d = pcall(SI.GetSkillLineInfoByID, id)
+		if ok and type(d) == "table" and not d.isHeader and (d.rank or 0) > 0 then return d.rank, d.maxRank end
+	end
+end
+function M:CapCheck()
+	if Ink.db.profCapNote == false then return end
+	local cdb = Ink.cdb
+	if not cdb then return end
+	cdb.profCapNote = cdb.profCapNote or {}
+	local lvl = UnitLevel("player") or 1
+	for name, id in pairs(PROF_ID) do
+		local rank, max = SkillMax(id)
+		if not rank then rank, max = SkillByName(name) end
+		if rank and max and max < 300 and rank >= max - 10 then
+			local key = id .. ":" .. max
+			if not cdb.profCapNote[key] then
+				local info = M.NextRank(id, max)
+				local head, where = M.NextRankText(info)
+				if head then
+					cdb.profCapNote[key] = time()
+					local need = {}
+					if (info.lvl or 0) > lvl then need[#need + 1] = info.lvl .. "레벨 필요" end
+					local sp = info.spots[1]
+					if sp and TRAINER_NOTE[sp.npc] then need[#need + 1] = TRAINER_NOTE[sp.npc] end
+					print(string.format("|cffFFF468FOA|r %s %d/%d · 다음 %s → %s%s", name, rank, max, head, where,
+						#need > 0 and (" · |cffFF8A80" .. table.concat(need, ", ") .. "|r") or ""))
+				end
+			end
+		end
+	end
+end
+
 function M:Init()
 	if not FOREVER then return end
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({ "ADDON_LOADED", "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_UPDATE", "CRAFT_SHOW", "CRAFT_UPDATE",
 		"SKILL_LINES_CHANGED", "BAG_UPDATE_DELAYED", "TRADE_SKILL_DATA_SOURCE_CHANGED" }) do pcall(e.RegisterEvent, e, ev) end
-	local pending
+	local pending, capPending
 	e:SetScript("OnEvent", function(_, event)
 		pcall(M.Hook, M)
 		if event == "ADDON_LOADED" then return end
+		if event == "SKILL_LINES_CHANGED" and not capPending then
+			capPending = true
+			C_Timer.After(2, function() capPending = nil; pcall(M.CapCheck, M) end)
+		end
 		if pending then return end
 		pending = true
 		C_Timer.After(0.3, function()
@@ -660,4 +906,5 @@ function M:Init()
 		end)
 	end)
 	pcall(M.Hook, M)
+	C_Timer.After(8, function() pcall(M.CapCheck, M) end)
 end

@@ -153,10 +153,11 @@ function M:ReadTrainer()
 			if ok and not v then pcall(SetTrainerServiceTypeFilter, t, 1) end
 		end
 	end
-	local list = {}
+	local list, svc = {}, {}
 	local n = GetNumTrainerServices() or 0
 	for i = 1, n do
 		local ok, name, rankText, kind = pcall(GetTrainerServiceInfo, i)
+		if ok and name then svc[#svc + 1] = { name, type(rankText) == "string" and rankText or "" } end
 		if ok and name and kind ~= "header" then
 			local cost = GetTrainerServiceCost and select(1, GetTrainerServiceCost(i)) or nil
 			local lv = GetTrainerServiceLevelReq and GetTrainerServiceLevelReq(i) or 0
@@ -181,7 +182,40 @@ function M:ReadTrainer()
 			or (GetTrainerGreetingText and "") or "?"
 		local key = (GetTrainerServiceSkillLine and GetTrainerServiceSkillLine(1)) or title
 		Ink.db.profTrainer = Ink.db.profTrainer or {}
-		if key then Ink.db.profTrainer[key] = { t = time(), list = list } end
+		if key then
+			-- 비용 기억: 훈련사마다 가르치는 제조법이 달라서(수습 · 숙련 · 전문 · 대가) 덮어쓰지 않고 합친다
+			local old = Ink.db.profTrainer[key]
+			local merged, seenName = {}, {}
+			for _, e in ipairs(list) do merged[#merged + 1] = e; seenName[e[2]] = true end
+			for _, e in ipairs(old and old.list or {}) do if not seenName[e[2]] then merged[#merged + 1] = e end end
+			Ink.db.profTrainer[key] = { t = time(), list = merged }
+			-- 이 훈련사가 가르치는 단계 · 자리 (다음 단계를 어디서 배우는지 안내에 씀)
+			local P = Ink.modules.Professions
+			local prof = P and P.ProfID and P.ProfID(key)
+			local g = plain and plain(UnitGUID("npc")) or UnitGUID("npc")
+			local npc = type(g) == "string" and tonumber(select(6, strsplit("-", g))) or nil
+			if prof and npc then
+				-- 단계 항목: "가죽세공 (전문)" 처럼 이름 = 기술 · 부제 = 단계, 또는 "전문 가죽세공" 한 줄
+				local ranks = {}
+				for _, sv in ipairs(svc) do
+					local sname, sub = sv[1], sv[2]
+					for r, rn in ipairs(P.RANK_NAME or {}) do
+						if ((sname == key or key:find(sname, 1, true)) and sub:find(rn, 1, true))
+							or (sname:find(rn, 1, true) and sname:find(key, 1, true)) then ranks[r] = true end
+					end
+				end
+				local m = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+				local pos = m and C_Map.GetPlayerMapPosition and C_Map.GetPlayerMapPosition(m, "player")
+				local x, y
+				if pos then x, y = pos:GetXY() end
+				Ink.db.profTrainerSeen = Ink.db.profTrainerSeen or {}
+				Ink.db.profTrainerSeen[prof] = Ink.db.profTrainerSeen[prof] or {}
+				local nm = UnitName("npc")
+				Ink.db.profTrainerSeen[prof][npc] = { t = time(), ranks = ranks, map = (x and m) or nil,
+					x = x and math.floor(x * 1000 + 0.5) / 10 or nil, y = y and math.floor(y * 1000 + 0.5) / 10 or nil,
+					name = type(nm) == "string" and nm or nil }
+			end
+		end
 	else
 		local _, cls = UnitClass("player")
 		-- 직업 상급자가 아닌 창(탈것 전문가 등)은 기억하지 않는다
