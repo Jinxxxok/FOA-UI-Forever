@@ -278,6 +278,16 @@ local PORTALS = {
 }
 M.PORTALS = PORTALS
 
+-- 지하 동굴 입구 (지상 지도에는 안 보이는 곳 · 퀘스트 NPC 가 그 안에 있는 경우)
+--  자리: 게임에서 직접 찾아 /foa where 로 잰 값
+local CAVE_RGB = Ink.hex("E8A35C")
+local CAVES = {
+	{ map = 2548, x = 49.9, y = 46.0, title = "햇살숲 지하 동굴 입구", short = "동굴 입구",
+		sub = "무너진 집 바닥의 지하실 계단으로 내려가요\n→ 수습생 클레어 (흉측한 주술 · 무차별 소탕 …)",
+		note = "지상에서는 클레어가 안 보여요 · 지도 자리 바로 아래층" },
+}
+M.CAVES = CAVES
+
 -- 탈것 전문가 · 탈것 상인 (종족마다)
 --  자리: AllTheThings (MIT) db/Camelot · QuestieDB 포에버 NPC 자료 · warcrafttavern.com 포에버 탈것 안내
 --  포에버 규칙: 40레벨 견습 탈것 기술 100골(첫 탈것 포함) · 탈것 색 추가 20골 · 60레벨 숙련 1000골 · 정예 탈것 200골
@@ -494,7 +504,7 @@ end
 -- kind: "svc" / "prof" / "cls" / "flight"
 local function StylePin(p, kind, key, off)
 	local a = p.art
-	local size = (kind == "svc" or kind == "boat" or kind == "portal" or kind == "mount") and 26 or 22
+	local size = (kind == "svc" or kind == "boat" or kind == "portal" or kind == "mount" or kind == "cave") and 26 or 22
 	p:SetSize(size, size); a:SetSize(size, size)
 	a.icon:RemoveMaskTexture(a.mask)
 	a.icon:SetTexCoord(0, 1, 0, 1)
@@ -526,6 +536,17 @@ local function StylePin(p, kind, key, off)
 		a.pill.t:SetTextColor(col[1], col[2], col[3])
 		a.pill:SetWidth(a.pill.t:GetStringWidth() + 12)
 		a.pill:Show()
+		off = nil
+	elseif kind == "cave" then
+		-- 지하 동굴 입구: 주황 문 + 글자
+		col = CAVE_RGB
+		a.icon:SetTexture(Ink.icon("Door"))
+		a.icon:SetSize(size * 0.56, size * 0.56)
+		a.icon:SetVertexColor(col[1], col[2], col[3])
+		a.pill.t:SetText(key or "")
+		a.pill.t:SetTextColor(col[1], col[2], col[3])
+		a.pill:SetWidth(a.pill.t:GetStringWidth() + 12)
+		a.pill:SetShown(key ~= nil)
 		off = nil
 	elseif kind == "mount" then
 		-- 탈것 전문가 · 상인: 말 머리 + 짧은 글자 (못 쓰는 곳은 흐리게)
@@ -569,7 +590,7 @@ local function StylePin(p, kind, key, off)
 		a.icon:SetVertexColor(1, 1, 1)
 	end
 	a.ring:SetVertexColor(col[1], col[2], col[3], off and 0.5 or 1)
-	a.glow:SetVertexColor(col[1], col[2], col[3], off and 0 or ((kind == "svc" or kind == "flight" or kind == "boat" or kind == "portal" or kind == "mount") and 0.26 or 0.14))
+	a.glow:SetVertexColor(col[1], col[2], col[3], off and 0 or ((kind == "svc" or kind == "flight" or kind == "boat" or kind == "portal" or kind == "mount" or kind == "cave") and 0.26 or 0.14))
 	p.tipR, p.tipG, p.tipB = col[1], col[2], col[3]
 end
 
@@ -831,6 +852,13 @@ function M:Refresh()
 					put(x, y, "portal", pt.short, pt.title, pt.sub, note)
 				end
 			end
+		end
+	end
+	-- 5) 지하 동굴 입구 (지역 지도에서만)
+	if mapID and not wide then
+		for _, cv2 in ipairs(CAVES) do
+			local x, y = ToMap(cv2.map, cv2.x / 100, cv2.y / 100, mapID)
+			if x then put(x, y, "cave", cv2.short, cv2.title, cv2.sub, cv2.note) end
 		end
 	end
 	for i = n + 1, #(self.cityPins or {}) do self.cityPins[i]:Hide() end

@@ -480,9 +480,14 @@ end
 -------------------------------------------------------------------------------
 -- 찾기 어려운 NPC (지도 자리 바로 아래 동굴 안 등)
 local GIVER_NOTE = {
-	[256831] = "지하 동굴 안 (이 자리 바로 아래층) · 위에서는 안 보이고 동굴 입구로 내려가야 해요",
+	[256831] = "지하 동굴 안 (이 자리 바로 아래층) · 햇살숲 49.9, 46.0 무너진 집 지하실로 내려가요",
 }
 M.GIVER_NOTE = GIVER_NOTE
+-- 그런 NPC 는 길 안내를 입구로 {지도, x, y} (0~1)
+local GIVER_ENTRANCE = {
+	[256831] = { 2548, 0.499, 0.460 },
+}
+M.GIVER_ENTRANCE = GIVER_ENTRANCE
 
 function M:Tip(p)
 	GameTooltip:SetOwner(p, "ANCHOR_RIGHT", 4, 0)
@@ -505,13 +510,19 @@ function M:Tip(p)
 		if Ink.TimerTipLine then Ink.TimerTipLine(GameTooltip, r[1], "   ") end
 	end
 	GameTooltip:AddLine(" ")
-	GameTooltip:AddLine("클릭: 길 안내 표시", 0.56, 0.58, 0.61)
+	GameTooltip:AddLine((p.giver and GIVER_ENTRANCE[p.giver]) and "클릭: 동굴 입구로 길 안내" or "클릭: 길 안내 표시", 0.56, 0.58, 0.61)
 	GameTooltip:Show()
 end
 
 function M:Waypoint(p)
 	if not (C_Map.CanSetUserWaypointOnMap and C_Map.CanSetUserWaypointOnMap(p.mapID)) then return end
-	local pt = UiMapPoint.CreateFromCoordinates(p.mapID, p.wx, p.wy)
+	local wx, wy = p.wx, p.wy
+	local ent = p.giver and GIVER_ENTRANCE[p.giver]
+	if ent and M.ToMap then
+		local ex, ey = M.ToMap(ent, p.mapID)
+		if ex then wx, wy = ex, ey end
+	end
+	local pt = UiMapPoint.CreateFromCoordinates(p.mapID, wx, wy)
 	C_Map.SetUserWaypoint(pt)
 	if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
 	PlaySound(SOUNDKIT and SOUNDKIT.UI_MAP_WAYPOINT_CONTROL_CLICK or 170270)
