@@ -927,7 +927,9 @@ function M:BuildList(f)
 	-- 스크롤 범위는 내용 높이로 직접 계산 (블리자드 범위 값이 다시 그리기 직후엔 늦게 바뀌어서 잘 안 내려가던 문제)
 	sf:SetScript("OnMouseWheel", function(self, d)
 		local r = math.max(0, (body:GetHeight() or 0) - (self:GetHeight() or 0))
-		self:SetVerticalScroll(math.max(0, math.min(r, self:GetVerticalScroll() - d * 60)))
+		local v = math.max(0, math.min(r, self:GetVerticalScroll() - d * 60))
+		self:SetVerticalScroll(v)
+		self.want = v -- 사용자가 내려 둔 자리 (다시 그릴 때 목록이 잠깐 짧아져도 이 자리로 돌아온다)
 	end)
 	f:EnableMouseWheel(true)
 	f:SetScript("OnMouseWheel", function(_, d) sf:GetScript("OnMouseWheel")(sf, d) end)
@@ -1676,6 +1678,8 @@ function M:SelectForever(key)
 	end
 	if self.sidebar then
 		self.sidebar.sf:SetVerticalScroll(0)
+		self.sidebar.sf.want = 0
+		self.sbKey = key
 		if self.sidebar.menu then self.sidebar.menu:Hide() end
 	end
 	self:PaintSidebar()
@@ -2091,6 +2095,7 @@ function M:JumpToBoss(bi)
 	if not y then return end
 	local range = f.sf:GetVerticalScrollRange() or 0
 	f.sf:SetVerticalScroll(math.max(0, math.min(range, y)))
+	f.sf.want = f.sf:GetVerticalScroll()
 	local h = f.headFor and f.headFor[bi]
 	if h and h.flash then h.flash:Stop(); h.flash:Play() end
 end
@@ -2581,8 +2586,11 @@ function M:PaintList(f, data, mode)
 	end
 	f.empty:SetText(emptyText)
 	body:SetHeight(math.max(10, y))
+	-- 스크롤: 사용자가 내려 둔 자리를 지키되 목록 끝은 넘지 않게
+	--  (아이템 정보가 오가며 목록이 잠깐 짧아졌을 때 줄인 값을 그대로 두면, 다시 길어져도 위로 올라간 채였다)
 	local maxS = math.max(0, y - (f.sf:GetHeight() or 0))
-	if f.sf:GetVerticalScroll() > maxS then f.sf:SetVerticalScroll(maxS) end
+	local want = f.sf.want or f.sf:GetVerticalScroll() or 0
+	f.sf:SetVerticalScroll(math.min(want, maxS))
 end
 
 -------------------------------------------------------------------------------
@@ -3129,7 +3137,9 @@ function M:ShowBoard(key)
 	f:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -14, 14)
 	f:SetScale(1)
 	f:Show()
-	f.sf:SetVerticalScroll(0)
+	-- 다른 던전일 때만 맨 위로 (지도 갱신 · 퀘스트 갱신으로 다시 불려도 내려 둔 스크롤을 지킨다)
+	if self.sbKey ~= key then f.sf:SetVerticalScroll(0); f.sf.want = 0 end
+	self.sbKey = key
 	self:PaintSidebar()
 end
 
@@ -3508,7 +3518,9 @@ function M:BuildQuestPanel()
 	sf:SetScrollChild(body)
 	sf:SetScript("OnMouseWheel", function(self, d)
 		local max = math.max(0, body:GetHeight() - self:GetHeight())
-		self:SetVerticalScroll(math.max(0, math.min(max, self:GetVerticalScroll() - d * DQ_ROW * 1.5)))
+		local v = math.max(0, math.min(max, self:GetVerticalScroll() - d * DQ_ROW * 1.5))
+		self:SetVerticalScroll(v)
+		self.want = v
 	end)
 	p.sf, p.body, p.rows = sf, body, {}
 	p.empty = Ink:Text(p, F.sans, 11, C.muted, "CENTER")
@@ -3921,9 +3933,15 @@ function M:PaintQuests()
 	-- 스크롤 위치: 다른 던전으로 바뀌면 맨 위로, 목록이 짧아졌으면 끝을 넘지 않게
 	--  (긴 목록에서 내려 둔 채 짧은 목록을 열면 위쪽 줄 · 진행 중 퀘스트가 화면 위로 밀려 안 보였다)
 	local maxS = math.max(0, y - (p.sf:GetHeight() or 0))
-	if p.lastKey ~= key then p.sf:SetVerticalScroll(0)
-	elseif (p.sf:GetVerticalScroll() or 0) > maxS then p.sf:SetVerticalScroll(maxS) end
-	p.lastKey = key
+	if key and p.lastKey ~= key then
+		p.sf:SetVerticalScroll(0)
+		p.sf.want = 0
+		p.lastKey = key
+	elseif (p.sf:GetHeight() or 0) > 20 then
+		-- 내려 둔 자리를 지키되 끝은 넘지 않게 (줄 높이가 아직 안 잡힌 첫 그리기는 건너뜀)
+		local want = p.sf.want or p.sf:GetVerticalScroll() or 0
+		p.sf:SetVerticalScroll(math.min(want, maxS))
+	end
 	p.empty:SetText(#list == 0 and "이 던전에 내가 받을 수 있는 퀘스트가 없어요" or "")
 end
 
@@ -3956,7 +3974,10 @@ function M:ShowFor(jid, anchor)
 		f:SetPoint("RIGHT", Ink.root, "RIGHT", -300, 40)
 	end
 	f:Show()
-	f.sf:SetVerticalScroll(0)
+	-- 다른 던전일 때만 맨 위로: 지도가 바뀌었다는 알림(퀘스트 상세 열기 · 지도 갱신)마다 불려서
+	--  내려 둔 전리품 목록이 계속 맨 위로 튀어 올라갔다
+	if self.sbKey ~= jid then f.sf:SetVerticalScroll(0); f.sf.want = 0 end
+	self.sbKey = jid
 	self:PaintSidebar()
 end
 

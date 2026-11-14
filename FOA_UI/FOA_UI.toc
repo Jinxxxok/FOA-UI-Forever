@@ -3,7 +3,7 @@
 ## Notes: FOA (First of All) 통합 UI
 ## Author: hyeokjiny
 ## X-License: GPL-3.0-or-later
-## Version: 0.65.53
+## Version: 0.65.54
 ## SavedVariables: InkUIDB
 ## SavedVariablesPerCharacter: InkUICharDB
 ## IconTexture: Interface\AddOns\FOA_UI\Media\Textures\Logo
