@@ -3332,6 +3332,11 @@ local function Chain(id, out, seen, depth)
 	end
 end
 
+-- 받는 곳이 아직 확인 안 된 퀘스트 (게임 자료엔 있는데 아무도 받은 기록이 없는 것)
+--  94969 크롤도크는 이제 그만!: 마커스 틸웰 호위 · 공략 사이트 · QuestieDB 포에버 플레이 기록(약 91만 세션)에도 받은 기록 · NPC 위치가 없음 (2026-11-14)
+local DQ_UNCONFIRMED = { [94969] = "아직 받은 기록이 없는 퀘스트 · 마커스 틸웰 위치 미확인" }
+M.DQ_UNCONFIRMED = DQ_UNCONFIRMED
+
 -- 연결 퀘스트: 다른 NPC 에게 안내만 하는 퀘스트 (선택 · 안 해도 다음 퀘스트를 받을 수 있다)
 local function IsCrumb(id) return ns.DUNGEON_BREADCRUMB and ns.DUNGEON_BREADCRUMB[id] end
 M.IsCrumb = IsCrumb
@@ -3380,6 +3385,7 @@ function M:DungeonQuestList(key)
 			local crumb = IsCrumb(q[1])
 			if QDone(q[1]) then e.state, e.order = "done", 5
 			elseif QInLog(q[1]) then e.state, e.order = "log", 1
+			elseif DQ_UNCONFIRMED[q[1]] then e.state, e.order = "unk", 4.5
 			elseif crumb then e.state, e.order = "crumb", 3.5
 			elseif miss > 0 then e.state, e.order, e.miss = "pre", 4, miss
 			elseif q[2] > lvl then e.state, e.order = "soon", 3
@@ -3460,7 +3466,7 @@ end
 
 local DQ_STATE = {
 	log = { "진행 중", C.accent }, ok = { "받을 수 있음", C.green }, crumb = { "선택", C.soft }, soon = { "", C.orange },
-	pre = { "", C.muted }, done = { "완료", C.dim },
+	pre = { "", C.muted }, done = { "완료", C.dim }, unk = { "확인 안 됨", C.muted },
 }
 
 function M:BuildQuestPanel()
@@ -3763,8 +3769,9 @@ function M:PaintQuests()
 	local LC = Ink.modules.Quest and Ink.modules.Quest.LevelColor
 	local y = 0
 	-- 상태별 묶음 제목: 진행 중 · 받을 수 있음 · 아직 못 받음 · 완료
-	local GROUP = { log = "진행 중", ok = "받을 수 있음", crumb = "연결 퀘스트 · 선택 (던전 밖 전달)", soon = "아직 못 받음", pre = "아직 못 받음", done = "완료" }
-	local GCOL = { log = C.accent, ok = C.green, crumb = C.soft, soon = C.muted, pre = C.muted, done = C.dim }
+	local GROUP = { log = "진행 중", ok = "받을 수 있음", crumb = "연결 퀘스트 · 선택 (던전 밖 전달)", soon = "아직 못 받음", pre = "아직 못 받음",
+		unk = "받는 곳 확인 안 됨", done = "완료" }
+	local GCOL = { log = C.accent, ok = C.green, crumb = C.soft, soon = C.muted, pre = C.muted, unk = C.dim, done = C.dim }
 	local gcount = {}
 	for _, e in ipairs(list) do gcount[GROUP[e.state]] = (gcount[GROUP[e.state]] or 0) + 1 end
 	p.heads = p.heads or {}
@@ -3858,6 +3865,7 @@ function M:PaintQuests()
 			local nt = QTitle(e.nextQ)
 			sub = sub .. "  ·  → " .. (nt or "다음 퀘스트") .. " 안내"
 		end
+		if e.state == "unk" then sub = DQ_UNCONFIRMED[e.id] end
 		if (e.variants or 1) > 1 then sub = sub .. "  ·  " .. e.variants .. "개 묶음" end
 		-- 여러 날개에 걸친 퀘스트: 이 날개에서 잡을 대상을 맨 앞에
 		if e.wingBoss and e.state ~= "done" then sub = "이 날개: " .. e.wingBoss.short .. "  ·  " .. sub end
