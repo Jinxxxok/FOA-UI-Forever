@@ -478,10 +478,17 @@ end
 -------------------------------------------------------------------------------
 -- 툴팁 · 길 안내
 -------------------------------------------------------------------------------
+-- 찾기 어려운 NPC (지도 자리 바로 아래 동굴 안 등)
+local GIVER_NOTE = {
+	[256831] = "지하 동굴 안 (이 자리 바로 아래층) · 위에서는 안 보이고 동굴 입구로 내려가야 해요",
+}
+M.GIVER_NOTE = GIVER_NOTE
+
 function M:Tip(p)
 	GameTooltip:SetOwner(p, "ANCHOR_RIGHT", 4, 0)
 	local giver = NpcName(p.giver)
 	GameTooltip:AddLine(giver or (p.state == 2 and "곧 받을 수 있는 퀘스트" or "받을 수 있는 퀘스트"), 1, 0.82, 0.32)
+	if p.giver and GIVER_NOTE[p.giver] then Ink.TipLine(GameTooltip, GIVER_NOTE[p.giver], 1, 0.72, 0.35) end
 	for _, q in ipairs(p.list) do
 		local r = q.r
 		local name = QuestName(r[1]) or ("퀘스트 #" .. r[1] .. " (불러오는 중)")
@@ -1313,6 +1320,76 @@ function M:CheckOffered(event)
 	if changed then M.miniDirty = true; M.poiDirty = true; M:Queue() end
 end
 
+-------------------------------------------------------------------------------
+-- 말을 걸어도 아무 창이 안 뜨는 NPC (지금 줄 퀘스트가 하나도 없을 때)
+--  오른쪽 클릭(짧게) 뒤 1.5초 동안 대화 · 퀘스트 · 상점 창이 안 뜨고 "너무 멀다" 같은 오류도 없으면
+--  자료상 그 NPC 가 지금 줄 퀘스트를 이 캐릭터 · 이 레벨에서 숨긴다 (선행 퀘스트가 자료에 빠진 경우)
+--  레벨이 오르거나, 그 NPC 에게 퀘스트를 보고하거나, 선행이 될 만한 퀘스트를 끝내면 다시 보여 준다
+-------------------------------------------------------------------------------
+local giverSet
+local function IsGiver(npc)
+	if not giverSet then
+		giverSet = {}
+		for _, r in ipairs(ns.QUEST_DB or {}) do if r[14] ~= 0 then giverSet[r[14]] = true end end
+	end
+	return giverSet[npc]
+end
+local function Ctx()
+	local _, _, classID = UnitClass("player")
+	local _, _, raceID = UnitRace("player")
+	local fg = UnitFactionGroup("player")
+	return { level = UnitLevel("player") or 1, race = raceID, class = classID, fac = fg == "Horde" and 1 or (fg == "Alliance" and 2 or 0) }
+end
+
+function M:WorldDown(button)
+	if button ~= "RightButton" then return end
+	self.rdown = { at = GetTime(), guid = plain(UnitGUID("mouseover")) }
+end
+function M:WorldUp(button)
+	if button ~= "RightButton" or InCombatLockdown() then return end
+	local d = self.rdown
+	self.rdown = nil
+	if not d or GetTime() - d.at > 0.35 or type(d.guid) ~= "string" then return end
+	if plain(UnitGUID("mouseover")) ~= d.guid then return end
+	local kind, _, _, _, _, id = strsplit("-", d.guid)
+	id = tonumber(id)
+	if kind ~= "Creature" or not id or not IsGiver(id) then return end
+	if UnitCanAttack and UnitCanAttack("player", "mouseover") then return end
+	local ok, near = pcall(CheckInteractDistance, "mouseover", 3)
+	if not (ok and near) then return end
+	local name = plain(UnitName("mouseover"))
+	local token = GetTime()
+	self.silentTry = token
+	C_Timer.After(1.5, function()
+		if M.silentTry ~= token then return end
+		M.silentTry = nil
+		if (M.lastOpen or 0) >= token or (M.lastErr or 0) >= token then return end
+		M:MarkSilent(id, name)
+	end)
+end
+function M:MarkSilent(npc, name)
+	local ctx = Ctx()
+	Ink.cdb.qNotOffered = Ink.cdb.qNotOffered or {}
+	local t, n = Ink.cdb.qNotOffered, 0
+	for _, r in ipairs(ns.QUEST_DB or {}) do
+		if r[14] == npc and State(r, ctx) == 1 then t[r[1]] = ctx.level; n = n + 1 end
+	end
+	if n == 0 then return end
+	print("|T" .. Ink.tex.logo .. ":14:14|t |cffFFF468FOA|r " .. (type(name) == "string" and name or "이 NPC") ..
+		": 지금 줄 퀘스트가 없어서 지도에서 " .. n .. "개를 숨겼어요 |cff8E939B(먼저 할 퀘스트가 있는 경우 · 조건이 풀리면 다시 보여요)|r")
+	M.miniDirty, M.poiDirty, M.miniAt = true, true, 0
+	M:Queue()
+end
+-- 보고한 뒤: 보고 받은 NPC 가 주는 퀘스트와 이 퀘스트 뒤에 이어지는 퀘스트는 "안 줌" 기록을 지운다
+function M:Unlock(qid, npc)
+	local t = Ink.cdb and Ink.cdb.qNotOffered
+	if not (t and next(t)) then return end
+	for _, r in ipairs(ns.QUEST_DB or {}) do
+		if t[r[1]] and ((npc and npc ~= 0 and r[14] == npc) or Has(r[7], qid)) then t[r[1]] = nil end
+	end
+	for _, fr in ipairs(Followers()[qid] or {}) do t[fr[1]] = nil end
+end
+
 function M:Init()
 	if not ns.QUEST_DB or Ink.db.questMap == false then return end
 	self:Hook()
@@ -1320,8 +1397,13 @@ function M:Init()
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({ "ADDON_LOADED", "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_REMOVED", "QUEST_LOG_UPDATE",
 		"PLAYER_LEVEL_UP", "SKILL_LINES_CHANGED", "QUEST_DATA_LOAD_RESULT", "UPDATE_FACTION",
-		"GOSSIP_SHOW", "QUEST_GREETING", "QUEST_DETAIL", "QUEST_PROGRESS", "QUEST_COMPLETE", "MERCHANT_SHOW", "TRAINER_SHOW" }) do
+		"GOSSIP_SHOW", "QUEST_GREETING", "QUEST_DETAIL", "QUEST_PROGRESS", "QUEST_COMPLETE", "MERCHANT_SHOW", "TRAINER_SHOW",
+		"TAXIMAP_OPENED", "BANKFRAME_OPENED", "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", "UI_ERROR_MESSAGE" }) do
 		pcall(e.RegisterEvent, e, ev)
+	end
+	if WorldFrame and WorldFrame.HookScript then
+		WorldFrame:HookScript("OnMouseDown", function(_, b) pcall(M.WorldDown, M, b) end)
+		WorldFrame:HookScript("OnMouseUp", function(_, b) pcall(M.WorldUp, M, b) end)
 	end
 	e:SetScript("OnEvent", function(_, event, a1, a2)
 		if event == "ADDON_LOADED" then
@@ -1338,8 +1420,14 @@ function M:Init()
 			-- 목표 · 게임 보고 위치가 도착한 뒤에 다시 그린다
 			C_Timer.After(6.5, function() M.miniDirty = true; M.poiDirty = true; M:Queue() end)
 		end
+		if event == "UI_ERROR_MESSAGE" then M.lastErr = GetTime() return end
+		if event == "TAXIMAP_OPENED" or event == "BANKFRAME_OPENED" or event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW" then
+			M.lastOpen = GetTime()
+			return
+		end
 		if event == "GOSSIP_SHOW" or event == "QUEST_GREETING" or event == "QUEST_DETAIL" or event == "QUEST_PROGRESS"
 			or event == "QUEST_COMPLETE" or event == "MERCHANT_SHOW" or event == "TRAINER_SHOW" then
+			M.lastOpen = GetTime()
 			-- 말을 건 NPC 자리 기억 (보고하는 NPC 찾기에 씀)
 			pcall(M.LearnNpc, M)
 			if event == "QUEST_COMPLETE" then pcall(M.NoteTurnIn, M) end
@@ -1350,6 +1438,8 @@ function M:Init()
 			return
 		end
 		if event == "QUEST_TURNED_IN" and type(a1) == "number" then
+			local pe = M.pendingEnd
+			pcall(M.Unlock, M, a1, pe and pe.id == a1 and pe.npc or nil)
 			pcall(M.SaveTurnIn, M, a1)
 			M.turnedAt = M.turnedAt or {}
 			M.turnedAt[a1] = GetTime()
