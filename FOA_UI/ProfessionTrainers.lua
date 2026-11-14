@@ -2,7 +2,7 @@
 -- 자료: AllTheThings (MIT License) db/Camelot · https://github.com/ATTWoWAddon/AllTheThings
 --       NPC 영어 이름: QuestieDB (GPL-3.0) · 게임이 NPC 이름을 아직 모를 때만
 -- [기술 번호] = { { NPC, 진영(0 공통 1 호드 2 얼라), {지도,x,y,...}, 단계{ [단계]={주문, 레벨, 숙련} }, 제조법{ 주문, 숙련, 주문, 숙련, ... }, 영어 이름, [던전 안이면 1] } }
---  단계: 1 수습 · 2 숙련 · 3 전문 · 4 대가
+--  단계: 1 초급 · 2 수습 · 3 숙련 · 4 전문 (게임 이름 · NPC 칭호는 한 칸 위)
 local _, ns = ...
 local b = select(4, GetBuildInfo()) or 0
 if not (b >= 16001 and b < 20000) then return end

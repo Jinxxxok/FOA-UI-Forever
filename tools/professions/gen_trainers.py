@@ -4,7 +4,7 @@
 
 자료: AllTheThings (MIT License) db/Camelot/Categories/Zones.lua
   지역마다 prof(기술번호, { n(NPC, {coords, r=진영, g={ r(단계 주문, {rank=단계, lvl=레벨, learnedAt=숙련}), r(제조법, {learnedAt=숙련}) ... }) })
-  → 훈련사마다: 자리 · 진영 · 가르치는 단계(수습 1 · 숙련 2 · 전문 3 · 대가 4) · 가르치는 제조법(주문 번호 · 필요 숙련)
+  → 훈련사마다: 자리 · 진영 · 가르치는 단계(초급 1 · 수습 2 · 숙련 3 · 전문 4) · 가르치는 제조법(주문 번호 · 필요 숙련)
   + 영어 이름(선택): QuestieDB 포에버 합본 (GPL-3.0) · 게임이 아직 NPC 이름을 모를 때만 씀
 사용: python3 -I gen_trainers.py <Zones.lua> <Instances.lua> <출력 ProfessionTrainers.lua> [QuestieDB 폴더]
 """
@@ -134,7 +134,7 @@ with open(OUT, "w", encoding="utf-8") as f:
     f.write("-- 자료: AllTheThings (MIT License) db/Camelot · https://github.com/ATTWoWAddon/AllTheThings\n")
     f.write("--       NPC 영어 이름: QuestieDB (GPL-3.0) · 게임이 NPC 이름을 아직 모를 때만\n")
     f.write("-- [기술 번호] = { { NPC, 진영(0 공통 1 호드 2 얼라), {지도,x,y,...}, 단계{ [단계]={주문, 레벨, 숙련} }, 제조법{ 주문, 숙련, 주문, 숙련, ... }, 영어 이름, [던전 안이면 1] } }\n")
-    f.write("--  단계: 1 수습 · 2 숙련 · 3 전문 · 4 대가\n")
+    f.write("--  단계: 1 초급 · 2 수습 · 3 숙련 · 4 전문 (게임 이름 · NPC 칭호는 한 칸 위)\n")
     f.write("local _, ns = ...\nlocal b = select(4, GetBuildInfo()) or 0\nif not (b >= 16001 and b < 20000) then return end\nns.PROF_TRAINERS = {\n")
     for prof in sorted(by_prof):
         f.write("\t[%d] = {\n" % prof)

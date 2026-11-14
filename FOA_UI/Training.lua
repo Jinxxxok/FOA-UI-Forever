@@ -182,7 +182,7 @@ function M:ReadTrainer()
 		local key = (GetTrainerServiceSkillLine and GetTrainerServiceSkillLine(1)) or title
 		Ink.db.profTrainer = Ink.db.profTrainer or {}
 		if key then
-			-- 비용 기억: 훈련사마다 가르치는 제조법이 달라서(수습 · 숙련 · 전문 · 대가) 덮어쓰지 않고 합친다
+			-- 비용 기억: 훈련사마다 가르치는 제조법이 달라서(초급 · 수습 · 숙련 · 전문) 덮어쓰지 않고 합친다
 			local old = Ink.db.profTrainer[key]
 			local merged, seenName = {}, {}
 			for _, e in ipairs(list) do merged[#merged + 1] = e; seenName[e[2]] = true end
@@ -194,7 +194,7 @@ function M:ReadTrainer()
 			local g = plain and plain(UnitGUID("npc")) or UnitGUID("npc")
 			local npc = type(g) == "string" and tonumber((select(6, strsplit("-", g)))) or nil
 			if prof and npc then
-				-- 단계 항목: 훈련사 창에는 "초급 · 수습 · 숙련 · 전문 + 기술 이름" 으로 나온다 (예: "전문 채광" = 대가 단계)
+				-- 단계 항목: 훈련사 창에는 "초급 · 수습 · 숙련 · 전문 + 기술 이름" 으로 나온다 (예: "전문 채광" = 300까지)
 				--  비용도 같이 기억 (다음 단계 안내에 씀)
 				local ranks = {}
 				local pn = P.PROF_NAME and P.PROF_NAME[prof] or key
