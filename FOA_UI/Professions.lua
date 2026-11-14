@@ -84,6 +84,7 @@ local function KnownRecipes(kind)
 			local ok2, info = pcall(C_TradeSkillUI.GetRecipeInfo, id)
 			if ok2 and info and info.learned and not info.isDummyRecipe then
 				local r = { name = info.name, icon = info.icon, diff = info.relativeDifficulty or 3, avail = info.numAvailable or 0, id = id, reagents = {} }
+				if C_TradeSkillUI.GetRecipeItemLink then local okL, l = pcall(C_TradeSkillUI.GetRecipeItemLink, id); if okL and type(l) == "string" then r.link = l end end
 				local ok3, sch = pcall(C_TradeSkillUI.GetRecipeSchematic, id, false)
 				for _, slot in ipairs(ok3 and sch and sch.reagentSlotSchematics or {}) do
 					local rg = slot.reagents and slot.reagents[1]
@@ -100,6 +101,7 @@ local function KnownRecipes(kind)
 			local name, t, avail = GetTradeSkillInfo(i)
 			if name and t ~= "header" and t ~= "subheader" then
 				local r = { name = name, icon = GetTradeSkillIcon and GetTradeSkillIcon(i), diff = DIFF_T[t] or 3, avail = avail or 0, reagents = {} }
+				if GetTradeSkillItemLink then local okL, l = pcall(GetTradeSkillItemLink, i); if okL and type(l) == "string" then r.link = l end end
 				for j = 1, (GetTradeSkillNumReagents and GetTradeSkillNumReagents(i) or 0) do
 					local rn, _, need, have = GetTradeSkillReagentInfo(i, j)
 					local link = GetTradeSkillReagentItemLink and GetTradeSkillReagentItemLink(i, j)
@@ -113,9 +115,11 @@ local function KnownRecipes(kind)
 			local name, _, t, avail = GetCraftInfo(i)
 			if name and t ~= "header" then
 				local r = { name = name, icon = GetCraftIcon and GetCraftIcon(i), diff = DIFF_T[t] or 3, avail = avail or 0, reagents = {} }
+				if GetCraftItemLink then local okL, l = pcall(GetCraftItemLink, i); if okL and type(l) == "string" then r.link = l end end
 				for j = 1, (GetCraftNumReagents and GetCraftNumReagents(i) or 0) do
 					local rn, _, need, have = GetCraftReagentInfo(i, j)
-					r.reagents[#r.reagents + 1] = { name = rn, need = need or 1, have = have or 0 }
+					local link = GetCraftReagentItemLink and GetCraftReagentItemLink(i, j)
+					r.reagents[#r.reagents + 1] = { name = rn, need = need or 1, have = have or 0, itemID = type(link) == "string" and tonumber(link:match("item:(%d+)")) or nil }
 				end
 				out[#out + 1] = r
 			end
@@ -186,13 +190,58 @@ local function SpellName(id)
 	if C_Spell and C_Spell.GetSpellName then local ok, n = pcall(C_Spell.GetSpellName, id); if ok and n then return n end end
 	if GetSpellInfo then local n = GetSpellInfo(id); return n end
 end
+-- 그림: 제조법 주문은 게임 자료에 아이콘이 비어 있어서(와우 로고) 만들어지는 아이템 그림을 쓴다 (CraftItems.lua)
+local TEMP_ICON = 136235
+local waitItems = {}
+local function ItemIcon(id)
+	if not id then return end
+	local ic
+	if C_Item and C_Item.GetItemIconByID then local ok, v = pcall(C_Item.GetItemIconByID, id); if ok then ic = v end end
+	if not ic and GetItemIcon then local ok, v = pcall(GetItemIcon, id); if ok then ic = v end end
+	if not ic or ic == TEMP_ICON then
+		-- 게임이 아직 모르는 아이템: 서버에 물어 두고, 받으면 패널을 다시 그린다
+		waitItems[id] = true
+		if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+		return nil
+	end
+	return ic
+end
+local function CraftItem(sid) return sid and ns.CRAFT_ITEM and ns.CRAFT_ITEM[sid] or nil end
+local function SpellIcon(sid)
+	local st
+	if C_Spell and C_Spell.GetSpellTexture then local ok, v = pcall(C_Spell.GetSpellTexture, sid); if ok then st = v end end
+	if not st and GetSpellTexture then local ok, v = pcall(GetSpellTexture, sid); if ok then st = v end end
+	if st and st ~= TEMP_ICON then return st end
+end
+local function CraftIcon(sid)
+	if not sid then return end
+	return ItemIcon(CraftItem(sid)) or SpellIcon(sid)
+end
+-- 만드는 것 이름(주문 이름) → 주문: 경로 자료는 이름만 있어서
+local spellByName
+local function CraftSpellByName(n)
+	if not n then return end
+	if not spellByName then
+		spellByName = {}
+		for sid in pairs(ns.CRAFT_ITEM or {}) do local nm = SpellName(sid); if nm and not spellByName[nm] then spellByName[nm] = sid end end
+		for _, e in pairs(ns.RECIPE_VENDORS or {}) do local nm = SpellName(e[2]); if nm and not spellByName[nm] then spellByName[nm] = e[2] end end
+	end
+	return spellByName[n]
+end
+local function ItemByName(n)
+	if not (n and C_Item and C_Item.GetItemInfoInstant) then return end
+	local ok, id = pcall(C_Item.GetItemInfoInstant, n)
+	if ok and type(id) == "number" then return id end
+end
+M.CraftItem, M.CraftIcon, M.CraftSpellByName = CraftItem, CraftIcon, CraftSpellByName
+
 local function VendorIndex(prof)
 	if vendorIdx[prof] then return vendorIdx[prof] end
 	local idx = {}
 	for item, e in pairs(ns.RECIPE_VENDORS or {}) do
 		if prof and (e[1] == prof or prof:find(e[1], 1, true)) then
 			local n = SpellName(e[2])
-			if n then idx[n] = { item = item, req = e[3], list = e[4] } end
+			if n then idx[n] = { item = item, spell = e[2], req = e[3], list = e[4] } end
 		end
 	end
 	vendorIdx[prof] = idx
@@ -253,7 +302,30 @@ local PROF_ID = { ["가죽세공"] = 165, ["대장기술"] = 164, ["연금술"] 
 local RANK_NAME = { "수습", "숙련", "전문", "대가" }
 local RANK_CAP = { 75, 150, 225, 300 }
 local RANK_REQ = { { 5, 0 }, { 10, 50 }, { 20, 125 }, { 35, 200 } }   -- 단계마다 { 캐릭터 레벨, 숙련 }
-M.PROF_ID, M.RANK_NAME = PROF_ID, RANK_NAME
+-- 이름: NPC 칭호는 수습 · 숙련 · 전문 (가죽세공인) 인데, 훈련사 창 항목은 한 칸씩 밀려 초급 · 수습 · 숙련 · 전문 (가죽세공)
+--  (텔로니스 = "전문 가죽세공인" 이 가르치는 건 "숙련 가죽세공" · 대가 단계는 창에 "전문 가죽세공" 으로 나온다)
+local SERVICE_NAME = { "초급", "수습", "숙련", "전문" }
+local RANK_COST = { 10, 500, 5000, 50000 }   -- 기본 비용 (평판 할인 전 · 실제 값은 훈련사 창에서 본 것을 쓴다)
+local PROF_NAME = {}
+for k, v in pairs(PROF_ID) do PROF_NAME[v] = k end
+M.PROF_ID, M.RANK_NAME, M.SERVICE_NAME, M.PROF_NAME = PROF_ID, RANK_NAME, SERVICE_NAME, PROF_NAME
+
+-- 단계 배우는 비용: 훈련사 창에서 본 값 → 없으면 기본 값 (두 번째 값 = 본 적 있음)
+local function RankCost(prof, r)
+	local c = Ink.db.profRankCost and Ink.db.profRankCost[prof] and Ink.db.profRankCost[prof][r]
+	if c then return c, true end
+	local pn = PROF_NAME[prof]
+	if pn then
+		local want = SERVICE_NAME[r] .. " " .. pn
+		for k, v in pairs(Ink.db.profTrainer or {}) do
+			if k == pn or k:find(pn, 1, true) then
+				for _, e in ipairs(v.list or {}) do if e[2] == want and e[6] then return e[6], true end end
+			end
+		end
+	end
+	return RANK_COST[r], false
+end
+M.RankCost = RankCost
 
 -- 보조 기술의 전문 · 대가는 훈련사가 아니라 책 · 퀘스트 (진영 0 공통 1 호드 2 얼라)
 local SECONDARY = {
@@ -364,7 +436,29 @@ function M.NextRank(prof, max)
 	end
 	table.sort(spots, function(a, b) return a.d < b.d end)
 	local req = (sec and sec.req) or RANK_REQ[nr]
-	return { rank = nr, name = RANK_NAME[nr], cap = RANK_CAP[nr], lvl = req[1], skill = req[2], spots = spots, book = sec and sec.book, quest = sec and sec.quest }
+	local cost, seen
+	if not sec then cost, seen = RankCost(prof, nr) end
+	-- 단계 주문 (그림 · 툴팁용): 훈련사 자료에서
+	local rankSpell
+	for _, t in ipairs((ns.PROF_TRAINERS or {})[prof] or {}) do
+		if t[4][nr] then rankSpell = t[4][nr][1] break end
+	end
+	return { rank = nr, name = RANK_NAME[nr], cap = RANK_CAP[nr], lvl = req[1], skill = req[2], spots = spots, book = sec and sec.book, quest = sec and sec.quest,
+		cost = cost, costSeen = seen, svc = (not sec and PROF_NAME[prof]) and (SERVICE_NAME[nr] .. " " .. PROF_NAME[prof]) or nil, spell = rankSpell }
+end
+
+-- 비용 글: 본 값이면 그대로, 기본 값이면 "약" · 책 · 퀘스트는 따로
+function M.RankCostText(info)
+	if not info then return "" end
+	if info.book then return "책 구입" end
+	if info.quest then return "퀘스트" end
+	if not info.cost then return "" end
+	return (info.costSeen and "" or "약 ") .. Money(info.cost)
+end
+function M.RankIcon(info)
+	if not info then return 134400 end
+	if info.book then return ItemIcon(info.book) or 133741 end
+	return (info.spell and SpellIcon(info.spell)) or 134400
 end
 
 -- 한 줄 안내: "전문 → 다르나서스 텔로니스 (64, 22) · 20레벨 · 숙련 125"
@@ -413,6 +507,44 @@ local function Head(body)
 	return h
 end
 
+-- 툴팁: 아이템(만들어지는 것 · 제조법) · 링크 · 주문이 있으면 게임 툴팁을 먼저, 그 밑에 안내 줄
+--  아이템 정보가 아직 없으면 받아 오는 대로 다시 그린다
+local function ShowTip(self)
+	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+	local rich
+	if self.link then
+		rich = pcall(GameTooltip.SetHyperlink, GameTooltip, self.link)
+	elseif self.item then
+		rich = pcall(GameTooltip.SetItemByID, GameTooltip, self.item)
+		local cached = true
+		if C_Item and C_Item.IsItemDataCachedByID then local ok, v = pcall(C_Item.IsItemDataCachedByID, self.item); cached = not ok or v end
+		if not cached and Item and Item.CreateFromItemID then
+			local ok, it = pcall(Item.CreateFromItemID, Item, self.item)
+			if ok and it and it.ContinueOnItemLoad then
+				it:ContinueOnItemLoad(function()
+					if GameTooltip:IsOwned(self) and self:IsMouseOver() then ShowTip(self) end
+				end)
+			end
+		end
+	elseif self.spell then
+		rich = pcall(GameTooltip.SetSpellByID, GameTooltip, self.spell)
+	end
+	if self.tip then
+		if rich then GameTooltip:AddLine(" ") end
+		for i, l in ipairs(self.tip) do
+			if i == 1 then
+				if not rich then Ink.TipLine(GameTooltip, l, 1, 1, 1) end
+			elseif l ~= "" then
+				GameTooltip:AddLine(l, 0.75, 0.77, 0.8, true)
+			end
+		end
+	end
+	GameTooltip:Show()
+end
+local function TipTarget(f, item, link, spell)
+	f.item, f.link, f.spell = item, link, spell
+end
+
 local function Row(body)
 	local r = CreateFrame("Button", nil, body)
 	r:SetSize(W - 20, ROW)
@@ -437,12 +569,8 @@ local function Row(body)
 	r.right:SetPoint("RIGHT", -6, 0)
 	r:SetScript("OnEnter", function(self)
 		self.hl:SetVertexColor(1, 1, 1, 0.05)
-		if not self.tip then return end
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		for i, l in ipairs(self.tip) do
-			if i == 1 then Ink.TipLine(GameTooltip, l, 1, 1, 1) else GameTooltip:AddLine(l, 0.75, 0.77, 0.8) end
-		end
-		GameTooltip:Show()
+		if not (self.tip or self.item or self.link or self.spell) then return end
+		ShowTip(self)
 	end)
 	r:SetScript("OnLeave", function(self) self.hl:SetVertexColor(1, 1, 1, 0); GameTooltip:Hide() end)
 	r:SetScript("OnClick", function(self) if self.vendor then Waypoint(self.vendor) end end)
@@ -488,6 +616,11 @@ function M:Build(host)
 	c.icon:SetSize(30, 30)
 	c.icon:SetPoint("TOPLEFT", 12, -28)
 	c.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	c.iconHit = CreateFrame("Frame", nil, c)
+	c.iconHit:SetAllPoints(c.icon)
+	c.iconHit:EnableMouse(true)
+	c.iconHit:SetScript("OnEnter", function(self) if self.tip or self.item or self.link or self.spell then ShowTip(self) end end)
+	c.iconHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	c.name = Ink:Text(c, F.bold, 13, C.text, "LEFT")
 	c.name:SetPoint("TOPLEFT", c.icon, "TOPRIGHT", 10, -1)
 	c.name:SetPoint("RIGHT", -12, 0)
@@ -503,6 +636,9 @@ function M:Build(host)
 		m.n:SetPoint("LEFT")
 		m.v = Ink:Text(m, F.numR or F.sans, 10, C.text, "RIGHT")
 		m.v:SetPoint("RIGHT")
+		m:EnableMouse(true)
+		m:SetScript("OnEnter", function(self) if self.item or self.tip then ShowTip(self) end end)
+		m:SetScript("OnLeave", function() GameTooltip:Hide() end)
 		c.mats[i] = m
 	end
 	c.cost = Ink:Text(c, F.sans, 10, GOLD, "LEFT")
@@ -527,8 +663,11 @@ function M:Build(host)
 	c.vend.s:SetPoint("BOTTOMLEFT", c.vend.icon, "BOTTOMRIGHT", 8, -6)
 	c.vend.s:SetPoint("RIGHT", -8, 0)
 	c.vend:SetScript("OnClick", function(self) Waypoint(self.x) end)
-	c.vend:SetScript("OnEnter", function(self) self.bg:SetVertexColor(1, 1, 1, 0.09) end)
-	c.vend:SetScript("OnLeave", function(self) self.bg:SetVertexColor(1, 1, 1, 0.04) end)
+	c.vend:SetScript("OnEnter", function(self)
+		self.bg:SetVertexColor(1, 1, 1, 0.09)
+		if self.item or self.tip then ShowTip(self) end
+	end)
+	c.vend:SetScript("OnLeave", function(self) self.bg:SetVertexColor(1, 1, 1, 0.04); GameTooltip:Hide() end)
 	c.vend:Hide()
 	p.card = c
 	-- 목록
@@ -583,13 +722,22 @@ function M:Paint()
 		if s[4] > 0 and skill < s[2] then cur, curI = s, i break end
 	end
 	local c = p.card
-	if cur then
+	TipTarget(c.iconHit); c.iconHit.tip = nil
+	TipTarget(c.vend); c.vend.tip = nil
+	for _, m in ipairs(c.mats) do m.item, m.tip = nil, nil end
+	-- 단계 한도에 닿았으면 경로 구간보다 "다음 단계를 어디서 배우나" 가 먼저 (배우기 전엔 더 못 올린다)
+	local capped = prof and max > 0 and max < 300 and skill >= max
+	if cur and not capped then
 		local span = math.max(1, cur[2] - cur[1])
 		local left = math.max(1, math.ceil((cur[2] - math.max(skill, cur[1])) * cur[4] / span))
 		local kr = byName[cur[3]]
+		local csid = (not kr or not kr.link) and CraftSpellByName(cur[3]) or nil
+		local citem = CraftItem(csid) or (not kr and ItemByName(cur[3])) or nil
 		c.k:SetText(string.format("지금 구간  %d → %d", cur[1], cur[2]))
-		c.icon:SetTexture(kr and kr.icon or 134400)
-		c.icon:SetDesaturated(not kr)
+		c.icon:SetTexture((kr and kr.icon) or (csid and CraftIcon(csid)) or (citem and ItemIcon(citem)) or 134400)
+		c.icon:SetDesaturated(false)
+		TipTarget(c.iconHit, citem, kr and kr.link, (not citem and csid) or nil)
+		c.iconHit.tip = { cur[3], string.format("숙련 %d → %d 구간", cur[1], cur[2]) }
 		c.name:SetText(cur[3])
 		c.sub:SetText(string.format("약 %d번 더 만들기", left) .. (kr and kr.avail > 0 and ("  ·  |cff6FD39A지금 %d개 가능|r"):format(kr.avail) or "") .. (kr and "" or "  ·  |cffFFB75A아직 안 배움|r"))
 		-- 재료: 아는 제조법이면 게임 자료(한 번에 드는 수 × 남은 횟수), 아니면 경로 자료(구간 합계를 남은 비율로)
@@ -598,7 +746,7 @@ function M:Paint()
 			for _, rg in ipairs(kr.reagents) do mats[#mats + 1] = { rg.name or "?", rg.need * left, Count(rg.name, rg.itemID), rg.itemID } end
 		else
 			for _, m in ipairs(cur[5]) do
-				mats[#mats + 1] = { m[1], math.ceil(m[2] * left / math.max(1, cur[4])), Count(m[1]), nil, m[3] }
+				mats[#mats + 1] = { m[1], math.ceil(m[2] * left / math.max(1, cur[4])), Count(m[1]), ItemByName(m[1]), m[3] }
 			end
 		end
 		local cost, priced = 0, 0
@@ -608,6 +756,8 @@ function M:Paint()
 				local enough = d[3] >= d[2]
 				m.n:SetText(d[1] .. (d[5] and d[5] ~= "" and ("  |cff5E636B" .. d[5] .. "|r") or ""))
 				m.v:SetText((enough and "|cff6FD39A" or "") .. d[3] .. "|r / " .. d[2])
+				m.item = d[4]
+				m.tip = { d[1], string.format("가방 %d · 필요 %d", d[3], d[2]), d[5] and d[5] ~= "" and ("구하는 곳: " .. d[5]) or "" }
 				m:Show()
 				local pr = Price(d[1], d[4])
 				if pr and d[2] > d[3] then cost = cost + pr * (d[2] - d[3]); priced = priced + 1 end
@@ -628,6 +778,8 @@ function M:Paint()
 		if vx then
 			local who, where, price = VendorText(vx)
 			c.vend.x = vx
+			c.vend.item = VendorIndex(name)[cur[3]].item
+			c.vend.tip = { cur[3], "상인: " .. who, where, price ~= "" and ("값: " .. price) or "", "누르면 지도에 상인 위치" }
 			c.vend.t:SetText(who .. (price ~= "" and ("  ·  |cffFFD15F" .. price .. "|r") or ""))
 			c.vend.s:SetText(where .. "  ·  누르면 지도에 표시")
 			c.vend:Show()
@@ -641,18 +793,26 @@ function M:Paint()
 		-- 이 단계 끝: 다음 단계를 어디서 배우는지 (누르면 지도)
 		local nx = prof and max < 300 and M.NextRank(prof, max)
 		c.k:SetText(max >= 300 and "숙련 최대" or ("숙련 " .. max .. " · 이 단계 끝"))
-		c.icon:SetTexture(134400)
+		c.icon:SetTexture(nx and M.RankIcon(nx) or 134400)
+		c.icon:SetDesaturated(false)
 		for _, m in ipairs(c.mats) do m:Hide() end
 		c.cost:SetText(""); c.src:SetText("")
 		if nx then
-			local head1, where = M.NextRankText(nx)
+			local _, where = M.NextRankText(nx)
 			local lv = UnitLevel("player") or 1
+			local costT = M.RankCostText(nx)
 			c.name:SetText(nx.name .. " 단계를 배워야 " .. nx.cap .. "까지 올라가요")
-			c.sub:SetText((lv < nx.lvl and ("|cffFF6B5E" .. nx.lvl .. "레벨부터|r") or (nx.lvl .. "레벨 · 숙련 " .. nx.skill)) .. "  ·  " .. head1)
+			c.sub:SetText((lv < nx.lvl and ("|cffFF6B5E" .. nx.lvl .. "레벨부터|r") or (nx.lvl .. "레벨 · 숙련 " .. nx.skill))
+				.. (costT ~= "" and ("  ·  |cffFFD15F" .. costT .. "|r") or ""))
+			TipTarget(c.iconHit, nx.book, nil, nil)
+			c.iconHit.tip = { nx.name .. " 단계 (" .. nx.cap .. "까지)", nx.lvl .. "레벨 · 숙련 " .. nx.skill .. " 필요",
+				costT ~= "" and ("비용: " .. costT .. (nx.cost and not nx.costSeen and " (기본 값 · 평판이 높으면 싸져요)" or "")) or "",
+				nx.svc and ("훈련사 창에서는 '" .. nx.svc .. "' 으로 보여요") or "" }
 			local sp = nx.spots[1]
 			if sp then
 				c.vend.x = { sp.npc, sp.map, sp.x, sp.y, label = "훈련사" }
-				c.vend.t:SetText(where)
+				c.vend.tip = c.iconHit.tip
+				c.vend.t:SetText(where .. (costT ~= "" and ("  ·  |cffFFD15F" .. costT .. "|r") or ""))
 				c.vend.s:SetText((TRAINER_NOTE[sp.npc] or (#nx.spots > 1 and ("그 밖에 " .. (#nx.spots - 1) .. "곳") or "")) .. "  ·  누르면 지도에 표시")
 				c.vend:Show()
 				c:SetHeight(70 + 34)
@@ -701,6 +861,7 @@ function M:Paint()
 		if dotC then r.dot:SetVertexColor(dotC[1], dotC[2], dotC[3]); r.dot:Show() else r.dot:Hide() end
 		r.tip = tip
 		r.vendor = nil
+		r.item, r.link, r.spell = nil, nil, nil
 		r:ClearAllPoints(); r:SetPoint("TOPLEFT", 0, -y); r:Show()
 		y = y + ROW + 2
 	end
@@ -713,12 +874,17 @@ function M:Paint()
 			for i = 1, math.min(2, #nx.spots) do
 				local sp = nx.spots[i]
 				local _, where = M.NextRankText({ name = nx.name, spots = { sp }, book = nx.book, quest = nx.quest })
+				local costT = M.RankCostText(nx)
 				local tip = { nx.name .. " 단계 (" .. nx.cap .. "까지)", where, nx.lvl .. "레벨 · 숙련 " .. nx.skill .. " 필요",
+					costT ~= "" and ("비용: " .. costT .. (nx.cost and not nx.costSeen and " (기본 값 · 평판이 높으면 싸져요)" or "")) or "",
+					nx.svc and ("훈련사 창에서는 '" .. nx.svc .. "' 으로 보여요") or "",
 					nx.book and "훈련사가 아니라 책으로 배워요 (그 NPC 가 팔아요)" or (nx.quest and "훈련사가 아니라 퀘스트로 배워요" or ""),
 					TRAINER_NOTE[sp.npc] or "", "누르면 지도에 표시" }
-				row(134400, TrainerName(sp.npc, sp.en), ZoneName(sp.map) .. string.format("  %.0f, %.0f", sp.x, sp.y),
-					lv < nx.lvl and ("|cffFF6B5E" .. nx.lvl .. "레벨|r") or (nx.lvl .. "레벨"), GOLD, tip)
+				row(M.RankIcon(nx), TrainerName(sp.npc, sp.en), ZoneName(sp.map) .. string.format("  %.0f, %.0f", sp.x, sp.y)
+					.. "  ·  " .. (lv < nx.lvl and ("|cffFF6B5E" .. nx.lvl .. "레벨|r") or (nx.lvl .. "레벨")),
+					costT ~= "" and ("|cffFFD15F" .. costT .. "|r") or "", GOLD, tip)
 				p.rows[nr].vendor = { sp.npc, sp.map, sp.x, sp.y, label = "훈련사" }
+				if nx.book then p.rows[nr].item = nx.book end
 			end
 			y = y + 6
 		end
@@ -739,13 +905,14 @@ function M:Paint()
 			for _, rg in ipairs(r.reagents) do mats[#mats + 1] = (rg.name or "?") .. " " .. rg.need end
 			local tip = { r.name, (r.diff == 0 and "주황: 만들 때마다 숙련 +1" or "노랑: 대부분 숙련 +1"), table.concat(mats, ", ") }
 			row(r.icon, r.name, table.concat(mats, " · "), r.avail > 0 and ("|cff6FD39A" .. r.avail .. "개 가능|r") or "재료 부족", DIFF_C[r.diff], tip, r.avail == 0)
+			p.rows[nr].link = r.link
 		end
 		y = y + 6
 	end
 	-- 다음 구간
 	if route and curI then
 		local shown = 0
-		for i = curI + 1, #route do
+		for i = (capped and curI or curI + 1), #route do
 			local s = route[i]
 			if s[4] > 0 then
 				if shown == 0 then head("다음 구간", rkey and ("wowf.io · " .. rkey) or nil) end
@@ -760,8 +927,14 @@ function M:Paint()
 					tip[#tip + 1] = "상인: " .. who .. " · " .. where .. (price ~= "" and (" · " .. price) or "")
 					tip[#tip + 1] = "누르면 지도에 상인 위치"
 				end
-				row(kr and kr.icon or 134400, s[3], string.format("%d → %d  ·  %d번", s[1], s[2], s[4]), kr and "|cff6FD39A배움|r" or (s[6] or ""), nil, tip, not kr)
+				local ssid = (not kr or not kr.link) and CraftSpellByName(s[3]) or nil
+				local sitem = CraftItem(ssid) or (not kr and ItemByName(s[3])) or nil
+				row((kr and kr.icon) or (ssid and CraftIcon(ssid)) or (sitem and ItemIcon(sitem)) or 134400, s[3],
+					string.format("%d → %d  ·  %d번", s[1], s[2], s[4]), kr and "|cff6FD39A배움|r" or (s[6] or ""), nil, tip, false)
 				p.rows[nr].vendor = vx or nil
+				p.rows[nr].link = kr and kr.link or nil
+				p.rows[nr].item = (not (kr and kr.link)) and sitem or nil
+				p.rows[nr].spell = (not sitem and not (kr and kr.link)) and ssid or nil
 				if shown >= 4 then break end
 			end
 		end
@@ -782,11 +955,12 @@ function M:Paint()
 			for i = 1, math.min(6, #list) do
 				local e = list[i]
 				local who, where, price = VendorText(e.x)
-				local icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(e.v.item) or 134939
+				local icon = CraftIcon(e.v.spell) or ItemIcon(e.v.item) or 134939
 				local req = e.v.req or 0
 				row(icon, e.craft, who .. " · " .. where, price ~= "" and price or ("숙련 " .. req), req <= skill and GREEN or nil,
 					{ e.craft, "필요 숙련 " .. req, "상인: " .. who, where, price ~= "" and ("값: " .. price) or "", "누르면 지도에 상인 위치" }, req > skill)
 				p.rows[nr].vendor = e.x
+				p.rows[nr].item = e.v.item   -- 제조법 툴팁: 만들어지는 아이템까지 같이 나온다
 			end
 			y = y + 6
 		end
@@ -818,7 +992,7 @@ function M:Paint()
 				local e = can[i]
 				local t = e.who[1]
 				local who = TrainerName(t.npc, t.en)
-				local icon = (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(e.sid)) or (GetSpellTexture and GetSpellTexture(e.sid)) or 134939
+				local icon = CraftIcon(e.sid) or 134939
 				local tip = { e.name, "필요 숙련 " .. e.la }
 				for k = 1, math.min(3, #e.who) do
 					local w = e.who[k]
@@ -829,6 +1003,8 @@ function M:Paint()
 				row(icon, e.name, "숙련 " .. e.la .. "  ·  " .. who .. " · " .. ZoneName(t.map),
 					costByName[e.name] and Money(costByName[e.name]) or (e.la <= skill and "|cff6FD39A지금 배움|r" or ""), e.la <= skill and GREEN or nil, tip, e.la > skill)
 				p.rows[nr].vendor = { t.npc, t.map, t.x, t.y, label = "훈련사" }
+				p.rows[nr].item = CraftItem(e.sid)
+				p.rows[nr].spell = not p.rows[nr].item and e.sid or nil
 			end
 			y = y + 6
 		end
@@ -877,7 +1053,9 @@ function M:CapCheck()
 					if (info.lvl or 0) > lvl then need[#need + 1] = info.lvl .. "레벨 필요" end
 					local sp = info.spots[1]
 					if sp and TRAINER_NOTE[sp.npc] then need[#need + 1] = TRAINER_NOTE[sp.npc] end
-					print(string.format("|cffFFF468FOA|r %s %d/%d · 다음 %s → %s%s", name, rank, max, head, where,
+					local costT = M.RankCostText(info)
+					print(string.format("|cffFFF468FOA|r %s %d/%d · 다음 %s → %s%s%s", name, rank, max, head, where,
+						costT ~= "" and (" · |cffFFD15F" .. costT .. "|r") or "",
 						#need > 0 and (" · |cffFF8A80" .. table.concat(need, ", ") .. "|r") or ""))
 				end
 			end
@@ -889,9 +1067,14 @@ function M:Init()
 	if not FOREVER then return end
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({ "ADDON_LOADED", "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_UPDATE", "CRAFT_SHOW", "CRAFT_UPDATE",
-		"SKILL_LINES_CHANGED", "BAG_UPDATE_DELAYED", "TRADE_SKILL_DATA_SOURCE_CHANGED" }) do pcall(e.RegisterEvent, e, ev) end
+		"SKILL_LINES_CHANGED", "BAG_UPDATE_DELAYED", "TRADE_SKILL_DATA_SOURCE_CHANGED", "GET_ITEM_INFO_RECEIVED" }) do pcall(e.RegisterEvent, e, ev) end
 	local pending, capPending
-	e:SetScript("OnEvent", function(_, event)
+	e:SetScript("OnEvent", function(_, event, a1)
+		if event == "GET_ITEM_INFO_RECEIVED" then
+			-- 패널이 기다리던 아이템(그림)만 다시 그린다
+			if not (a1 and waitItems[a1]) then return end
+			waitItems[a1] = nil
+		end
 		pcall(M.Hook, M)
 		if event == "ADDON_LOADED" then return end
 		if event == "SKILL_LINES_CHANGED" and not capPending then

@@ -153,11 +153,10 @@ function M:ReadTrainer()
 			if ok and not v then pcall(SetTrainerServiceTypeFilter, t, 1) end
 		end
 	end
-	local list, svc = {}, {}
+	local list = {}
 	local n = GetNumTrainerServices() or 0
 	for i = 1, n do
 		local ok, name, rankText, kind = pcall(GetTrainerServiceInfo, i)
-		if ok and name then svc[#svc + 1] = { name, type(rankText) == "string" and rankText or "" } end
 		if ok and name and kind ~= "header" then
 			local cost = GetTrainerServiceCost and select(1, GetTrainerServiceCost(i)) or nil
 			local lv = GetTrainerServiceLevelReq and GetTrainerServiceLevelReq(i) or 0
@@ -193,15 +192,22 @@ function M:ReadTrainer()
 			local P = Ink.modules.Professions
 			local prof = P and P.ProfID and P.ProfID(key)
 			local g = plain and plain(UnitGUID("npc")) or UnitGUID("npc")
-			local npc = type(g) == "string" and tonumber(select(6, strsplit("-", g))) or nil
+			local npc = type(g) == "string" and tonumber((select(6, strsplit("-", g)))) or nil
 			if prof and npc then
-				-- 단계 항목: "가죽세공 (전문)" 처럼 이름 = 기술 · 부제 = 단계, 또는 "전문 가죽세공" 한 줄
+				-- 단계 항목: 훈련사 창에는 "초급 · 수습 · 숙련 · 전문 + 기술 이름" 으로 나온다 (예: "전문 채광" = 대가 단계)
+				--  비용도 같이 기억 (다음 단계 안내에 씀)
 				local ranks = {}
-				for _, sv in ipairs(svc) do
-					local sname, sub = sv[1], sv[2]
-					for r, rn in ipairs(P.RANK_NAME or {}) do
-						if ((sname == key or key:find(sname, 1, true)) and sub:find(rn, 1, true))
-							or (sname:find(rn, 1, true) and sname:find(key, 1, true)) then ranks[r] = true end
+				local pn = P.PROF_NAME and P.PROF_NAME[prof] or key
+				Ink.db.profRankCost = Ink.db.profRankCost or {}
+				for _, e in ipairs(list) do
+					for r, rn in ipairs(P.SERVICE_NAME or {}) do
+						if e[2] == rn .. " " .. pn or e[2] == rn .. " " .. key then
+							ranks[r] = true
+							if e[6] then
+								Ink.db.profRankCost[prof] = Ink.db.profRankCost[prof] or {}
+								Ink.db.profRankCost[prof][r] = e[6]
+							end
+						end
 					end
 				end
 				local m = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
