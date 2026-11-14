@@ -839,6 +839,28 @@ function M:DrawObject(f, unit)
 		f.otext:SetPoint("TOP", f.name, "BOTTOM", 0, -2)
 		f.otext:SetShadowColor(0, 0, 0, 1)
 	end
+	-- 자물쇠 따기 연습 사물함 (도적): 자물쇠 배지 + 반짝임 · 색 = 열면 숙련도가 오르는지
+	local LP = Ink.modules.Lockpick
+	local box
+	if LP and LP.Active and LP.Active() then
+		local ok, _, b = pcall(LP.BoxOf, unit)
+		box = ok and b or nil
+	end
+	if box then
+		local col, txt = LP.Look(box[2])
+		f:SetScale(1.25)
+		f.objInfo = { kind = "lock" }
+		f.role.icon:SetTexture(Ink.icon("Lock"))
+		f.role.icon:SetVertexColor(col[1], col[2], col[3])
+		f.role.ring:SetVertexColor(col[1], col[2], col[3], 0.95)
+		f.role:Show()
+		f.name:SetTextColor(col[1], col[2], col[3])
+		f.name:SetAlpha(1)
+		f.otext:SetText("자물쇠 따기 · " .. txt)
+		f.otext:Show()
+		M.Sparkle(f, true)
+		return
+	end
 	local info = ObjectQuestInfo(unit)
 	f.objInfo = info
 	pcall(M.ObjDiag, M, unit, "plate", info)
