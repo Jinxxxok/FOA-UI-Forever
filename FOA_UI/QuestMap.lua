@@ -910,6 +910,8 @@ function M:TurnIns(mapID)
 		local id = info and not info.isHeader and info.questID
 		-- 막 받은 퀘스트는 목표 정보가 오기 전 잠깐 "완료"로 보여서 내 자리에 물음표가 떴다 사라졌다 → 몇 초 기다린다
 		local fresh = id and M.acceptedAt and M.acceptedAt[id] and (GetTime() - M.acceptedAt[id] < 6)
+		-- 어디서든 보고하는 퀘스트(눌러서 완료)는 보고할 NPC 가 없어서 지도에 "?"를 찍지 않는다 (퀘스트 목록 맨 위 카드)
+		if id and info.isAutoComplete then seen[id] = true end
 		if id and not seen[id] and not fresh and Ready(id) then
 			local objs = C_QuestLog.GetQuestObjectives and C_QuestLog.GetQuestObjectives(id) or {}
 			local spot, src, npc, txt = self:TurnSpot(id)

@@ -102,6 +102,9 @@ local function Row(i)
 			M:AbandonQuest(id)
 		elseif IsShiftKeyDown() then
 			if C_QuestLog.RemoveQuestWatch then C_QuestLog.RemoveQuestWatch(id) end
+		elseif self.autoDone then
+			-- 어디서든 보고하는 퀘스트 (블리자드 "눌러서 완료"): 보상 창을 연다
+			M:CompleteAuto(id)
 		else
 			M:ShowQuest(id)
 		end
@@ -111,7 +114,12 @@ local function Row(i)
 		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
 		GameTooltip:AddLine(self.title:GetText() or "", 1, 1, 1)
 		if Ink.TimerTipLine then Ink.TimerTipLine(GameTooltip, self.questID) end
-		Ink.TipLine(GameTooltip, "클릭: 퀘스트 보기 · 우클릭: 퀘스트 포기 · Shift 클릭: 목록에서 빼기", 0.7, 0.7, 0.7)
+		if self.autoDone then
+			Ink.TipLine(GameTooltip, "어디서든 보고할 수 있는 퀘스트예요 · 클릭: 보고하기 (보상 창)", 1, 0.95, 0.41)
+			Ink.TipLine(GameTooltip, "우클릭: 퀘스트 포기 · Shift 클릭: 목록에서 빼기", 0.7, 0.7, 0.7)
+		else
+			Ink.TipLine(GameTooltip, "클릭: 퀘스트 보기 · 우클릭: 퀘스트 포기 · Shift 클릭: 목록에서 빼기", 0.7, 0.7, 0.7)
+		end
 		GameTooltip:Show()
 	end)
 	r:SetScript("OnLeave", function(self) self.title:SetAlpha(1); GameTooltip:Hide() end)
@@ -268,7 +276,7 @@ local function QuestLogInfo()
 				zone = info.title
 				if zone and not order[zone] then order[#order + 1] = zone; order[zone] = #order end
 			elseif info.questID then
-				map[info.questID] = { zone = zone, level = info.level }
+				map[info.questID] = { zone = zone, level = info.level, auto = info.isAutoComplete }
 			end
 		end
 	end
@@ -585,6 +593,109 @@ function M:NoteProgress(id, sum)
 	Ink.cdb.qSpot[id] = { m, math.floor(x * 1000 + 0.5) / 1000, math.floor(y * 1000 + 0.5) / 1000 }
 end
 
+-------------------------------------------------------------------------------
+-- 블리자드 퀘스트 알림 카드
+--  · "눌러서 완료": 어디서든 보고하는 퀘스트 (목표를 채우면 그 자리에서 보상 창)
+--  · "새 퀘스트": 아이템 · 지역에서 자동으로 제안된 퀘스트
+--  블리자드 목표 추적기를 숨기고 FOA 목록을 써서 이 알림이 안 보였다 (보고할 NPC 가 없는데 "?"만 남던 퀘스트)
+-------------------------------------------------------------------------------
+function M:CompleteAuto(id)
+	if RemoveAutoQuestPopUp then pcall(RemoveAutoQuestPopUp, id) end
+	if ShowQuestComplete then pcall(ShowQuestComplete, id) end
+end
+
+local function AutoList()
+	local out, seen = {}, {}
+	local n = GetNumAutoQuestPopUps and GetNumAutoQuestPopUps() or 0
+	for i = 1, n do
+		local id, kind = GetAutoQuestPopUp(i)
+		if id and not seen[id] then seen[id] = true; out[#out + 1] = { id = id, kind = kind } end
+	end
+	-- 알림 목록에서 빠졌어도 다 채운 "어디서든 보고" 퀘스트는 카드로
+	local num = C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetNumQuestLogEntries() or 0
+	for i = 1, num do
+		local info = C_QuestLog.GetInfo and C_QuestLog.GetInfo(i)
+		local id = info and not info.isHeader and info.questID
+		if id and info.isAutoComplete and not seen[id] and not M:Fresh(id)
+			and ((C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(id)) or (C_QuestLog.IsComplete and C_QuestLog.IsComplete(id))) then
+			seen[id] = true
+			out[#out + 1] = { id = id, kind = "COMPLETE" }
+		end
+	end
+	return out
+end
+
+function M:PopCard(i)
+	local f = self.frame
+	f.pops = f.pops or {}
+	local c = f.pops[i]
+	if c then return c end
+	c = CreateFrame("Button", nil, f)
+	c:SetSize(W, 38)
+	c:RegisterForClicks("LeftButtonUp")
+	c.bg = Ink:Round(c, "BACKGROUND", true, false)
+	c.bg:SetAllPoints()
+	c.bd = Ink:Round(c, "BORDER", true, true)
+	c.bd:SetAllPoints()
+	c.icon = c:CreateTexture(nil, "ARTWORK")
+	c.icon:SetSize(16, 16)
+	c.icon:SetPoint("LEFT", 9, 0)
+	c.tag = Ink:Text(c, F.semi, 10, C.accent, "LEFT")
+	c.tag:SetPoint("TOPLEFT", c.icon, "TOPRIGHT", 8, 6)
+	c.title = Ink:Text(c, F.semi, 12, C.text, "LEFT")
+	c.title:SetPoint("TOPLEFT", c.tag, "BOTTOMLEFT", 0, -2)
+	c.title:SetPoint("RIGHT", -8, 0)
+	c.title:SetWordWrap(false)
+	c:SetScript("OnClick", function(self)
+		if not self.qid then return end
+		if self.kind == "OFFER" then
+			if RemoveAutoQuestPopUp then pcall(RemoveAutoQuestPopUp, self.qid) end
+			if ShowQuestOffer then pcall(ShowQuestOffer, self.qid) end
+		else
+			M:CompleteAuto(self.qid)
+		end
+		C_Timer.After(0.3, function() M:Update() end)
+	end)
+	c:SetScript("OnEnter", function(self)
+		self.bd:SetAlpha(1)
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:AddLine(self.title:GetText() or "", 1, 1, 1)
+		Ink.TipLine(GameTooltip, self.kind == "OFFER" and "클릭: 퀘스트 내용 보기 · 수락" or "클릭: 보상 창 열기 (NPC 에게 가지 않아도 돼요)", 0.75, 0.77, 0.8)
+		GameTooltip:Show()
+	end)
+	c:SetScript("OnLeave", function(self) self.bd:SetAlpha(0.7); GameTooltip:Hide() end)
+	f.pops[i] = c
+	return c
+end
+
+function M:PaintPopups(y)
+	local f = self.frame
+	local list = AutoList()
+	local h = 0
+	for i, e in ipairs(list) do
+		if i > 3 then break end
+		local c = self:PopCard(i)
+		c.qid, c.kind = e.id, e.kind
+		local offer = e.kind == "OFFER"
+		local col = offer and { 1.00, 0.80, 0.30 } or C.accent
+		c.bg:SetVertexColor(0.04, 0.045, 0.06, 0.92)
+		c.bd:SetVertexColor(col[1], col[2], col[3], 1)
+		c.bd:SetAlpha(0.7)
+		c.icon:SetTexture(Ink.icon(offer and "QuestBang" or "QuestTurnIn"))
+		c.icon:SetVertexColor(col[1], col[2], col[3])
+		c.tag:SetText(offer and "새 퀘스트 · 눌러서 보기" or "퀘스트 완료 · 눌러서 보고")
+		c.tag:SetTextColor(col[1], col[2], col[3])
+		c.title:SetText(C_QuestLog.GetTitleForQuestID(e.id) or ("퀘스트 #" .. e.id))
+		c:ClearAllPoints()
+		c:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y - h)
+		c:Show()
+		h = h + 44
+	end
+	for i = #list + 1, #(f.pops or {}) do f.pops[i]:Hide() end
+	if #list > 3 then for i = 4, #(f.pops or {}) do f.pops[i]:Hide() end end
+	return h
+end
+
 function M:Update()
 	local f = self.frame
 	if not f or not f:IsShown() then return end
@@ -655,8 +766,11 @@ function M:Update()
 
 	local y = -32
 	-- 직업 퀘스트 칸도 보호 프레임이 아니라 전투 중에도 다시 그린다 (접기 · 펴기가 바로 보이게)
-	self.classH = self:PaintClass(y)
-	y = y - (self.classH or 0)
+	-- 블리자드 퀘스트 알림(눌러서 완료 · 새 퀘스트 제안): 블리자드 목표 추적기를 숨겨서 안 보이던 것 → 맨 위 카드로
+	local popH = self:PaintPopups(y)
+	self.classH = self:PaintClass(y - popH)
+	y = y - popH - (self.classH or 0)
+	if popH > 0 then self.classH = (self.classH or 0) + popH end
 	local shown = 0
 	local total = #quests
 	local MAX_QUESTS = MaxQuests()
@@ -712,6 +826,7 @@ function M:Update()
 			complete = C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(id) or C_QuestLog.IsComplete(id)
 			if complete and #objs == 0 and self:Fresh(id) then complete = false end
 		end
+		r.autoDone = complete and qinfo[id] and qinfo[id].auto or nil
 		local tag = QuestTag(id)
 		local qi2 = qinfo[id]
 		local lvp = ""
@@ -740,7 +855,7 @@ function M:Update()
 			local o = ObjectiveLine(r, 1)
 			o:ClearAllPoints()
 			o:SetPoint("TOPLEFT", r, "TOPLEFT", 0, oy)
-			o.text:SetText("완료 · 보고하러 가기")
+			o.text:SetText(r.autoDone and "완료 · 눌러서 보고하기 (어디서든)" or "완료 · 보고하러 가기")
 			o.text:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
 			o.count:SetText("")
 			o.bar:Hide()
@@ -1028,11 +1143,12 @@ function M:BuildToast()
 	self.toast = t
 end
 
-function M:QuestDone(title, demo)
+function M:QuestDone(title, demo, auto)
 	if Ink.db.questToast == false and not demo then return end
 	if not self.toast then self:BuildToast() end
 	local t = self.toast
 	t.title:SetText(title or "")
+	t.sub:SetText(auto and "어디서든 보고 · 퀘스트 목록 맨 위 카드를 누르세요" or "목표 완료 · 보고하러 가세요")
 	t:SetAlpha(1)
 	t:Show()
 	t.ag:Stop()
@@ -1083,7 +1199,7 @@ function M:CheckDone()
 			end
 			-- 목표가 없는 퀘스트(바로 보고하는 심부름)는 받자마자 완료라 알리지 않는다
 			if done and self.doneState and self.doneState[id] == false and objs and #objs > 0 then
-				self:QuestDone(info.title)
+				self:QuestDone(info.title, nil, info.isAutoComplete)
 			end
 		end
 	end
@@ -1127,7 +1243,7 @@ function M:Init()
 		"QUEST_WATCH_LIST_CHANGED", "QUEST_LOG_UPDATE", "QUEST_ACCEPTED", "QUEST_REMOVED", "QUEST_TURNED_IN",
 		"SUPER_TRACKING_CHANGED", "UNIT_QUEST_LOG_CHANGED", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA",
 		"SCENARIO_UPDATE", "PLAYER_REGEN_ENABLED", "BAG_UPDATE_COOLDOWN",
-		"PLAYER_LEVEL_UP", "QUEST_DATA_LOAD_RESULT",
+		"PLAYER_LEVEL_UP", "QUEST_DATA_LOAD_RESULT", "QUEST_AUTOCOMPLETE",
 	}) do
 		pcall(e.RegisterEvent, e, ev)
 	end
