@@ -163,14 +163,15 @@ def ilist(v):
 #  207 커즌의 수수께끼: 제2의 반란(203) + 나쁜 약(204) 둘 다 끝내야 (QuestieDB 포에버 자료 대조)
 #  95786 남부해안의 지인(수사 니메츠 · 가라앉은 도시 얼라 시작): 니메츠가 "트롤 전설"을 연구하는 친구에게 보내는 퀘스트라
 #        트롤 전설 석판 퀘스트(207) 다음 (퀘스트 글 + 게임에서 203 · 204 전에는 니메츠가 아무것도 안 줌 확인)
-PRE_FIX = {207: [204, 203], 95786: [207]}
+#  94992 구조 대작전(길 잃은 말): 휠러의 달아난 말들(94618)에서 먹이를 준 그 말이 주는 퀘스트 (wowf.io: 94618 보고 = 길 잃은 말)
+PRE_FIX = {207: [204, 203], 95786: [207], 94992: [94618]}
 
 rows, skipped = [], {"nocoord": 0, "u": 0, "removed": 0, "event": 0}
 for qid in sorted(quests):
     q = quests[qid]
     if "u" in q: skipped["u"] += 1; continue
     if "rwp" in q: skipped["removed"] += 1; continue
-    if "e" in q: skipped["event"] += 1; continue
+    if "e" in q or q.get("isYearly"): skipped["event"] += 1; continue
     co = q.get("coords")
     pts = []
     if isinstance(co, dict):
@@ -192,10 +193,23 @@ for qid in sorted(quests):
     pre = ilist(q.get("sourceQuests"))
     for p in PRE_FIX.get(qid, []):
         if p not in pre: pre.append(p)
+    # 조건 더 (없으면 안 씀): {전문기술 숙련도, 연결 퀘스트의 목적지{}, 선행 중 몇 개면 되는지, 평판 이하{}, 이 퀘스트를 깨면 잠김{}, 이 주문을 알면 잠김{}}
+    lockQ, lockS = [], []
+    lc = q.get("lc")
+    if isinstance(lc, list):
+        for i in range(1, len(lc) - 1, 2):
+            if lc[i] == "questID": lockQ.append(int(lc[i + 1]))
+            elif lc[i] == "spellID": lockS.append(int(lc[i + 1]))
+    mrep = q.get("maxReputation")
+    mrep = [int(mrep[0]), int(mrep[1])] if isinstance(mrep, list) and len(mrep) >= 2 else []
+    extra = [int(q.get("learnedAt", 0) or 0) if q.get("requireSkill") else 0,
+             ilist(q.get("nextQuests")) if q.get("isBreadcrumb") else [],
+             int(q.get("sqreq", 0) or 0), mrep, lockQ, lockS]
+    while extra and extra[-1] in (0, []): extra.pop()
     rows.append((qid, pts[:3], int(q.get("lvl", 1) or 1), int(q.get("r", 0) or 0), ilist(q.get("races")),
                  ilist(q.get("c")), pre, ilist(q.get("altQuests")),
                  int(q.get("requireSkill", 0) or 0), rep, int(q.get("awp", 0) or 0), flags, item,
-                 giver[0] if giver else 0))
+                 giver[0] if giver else 0, extra))
 
 L = lambda xs: "{" + ",".join(str(x) for x in xs) + "}"
 with open(sys.argv[2], "w", encoding="utf-8") as f:
@@ -207,7 +221,10 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
         p = []
         for (m, x, y) in r[1]:
             p += [m, round(x, 1), round(y, 1)]
-        f.write("{%d,%s,%d,%d,%s,%s,%s,%s,%d,%s,%d,%d,%d,%d},\n" % (
-            r[0], L(p), r[2], r[3], L(r[4]), L(r[5]), L(r[6]), L(r[7]), r[8], L(r[9]), r[10], r[11], r[12], r[13]))
+        ex = ""
+        if r[14]:
+            ex = "," + "{" + ",".join(L(v) if isinstance(v, list) else str(v) for v in r[14]) + "}"
+        f.write("{%d,%s,%d,%d,%s,%s,%s,%s,%d,%s,%d,%d,%d,%d%s},\n" % (
+            r[0], L(p), r[2], r[3], L(r[4]), L(r[5]), L(r[6]), L(r[7]), r[8], L(r[9]), r[10], r[11], r[12], r[13], ex))
     f.write("}\n")
 print("quests:", len(quests), "written:", len(rows), "skipped:", skipped)

@@ -433,17 +433,27 @@ function M:PaintClass(y)
 	return -(cy - y) + 6
 end
 
--- 지역 머리줄: 점 · 지역 이름 · 옅은 선 · 개수
+-- 지역 머리줄: 표시 · 지역 이름(굵게) · 선 · 개수 — 지금 있는 지역은 노란 띠 + 위치 핀으로 눈에 띄게
 function M:ZoneHead(i)
 	local f = self.frame
 	f.zheads = f.zheads or {}
 	local h = f.zheads[i]
 	if h then return h end
 	h = CreateFrame("Frame", nil, f)
-	h:SetSize(W, 14)
-	h.t = Ink:Text(h, F.semi, 10, C.muted, "LEFT")
-	h.t:SetPoint("LEFT", 0, 0)
-	h.n = Ink:Text(h, F.latin, 10, C.dim, "RIGHT")
+	h:SetSize(W, 18)
+	h.band = h:CreateTexture(nil, "BACKGROUND")
+	h.band:SetTexture(Ink.tex.white)
+	h.band:SetPoint("TOPLEFT", -6, 1)
+	h.band:SetPoint("BOTTOMRIGHT", 4, -1)
+	if h.band.SetGradient and CreateColor then
+		h.band:SetGradient("HORIZONTAL", CreateColor(1, 1, 1, 0.10), CreateColor(1, 1, 1, 0))
+	end
+	h.icon = h:CreateTexture(nil, "ARTWORK")
+	h.icon:SetSize(11, 11)
+	h.icon:SetPoint("LEFT", 0, 0)
+	h.t = Ink:Text(h, F.bold, 12, C.soft, "LEFT")
+	h.t:SetPoint("LEFT", h.icon, "RIGHT", 5, 0)
+	h.n = Ink:Text(h, F.latin, 10, C.muted, "RIGHT")
 	h.n:SetPoint("RIGHT", 0, 0)
 	h.line = h:CreateTexture(nil, "ARTWORK")
 	h.line:SetHeight(1)
@@ -453,15 +463,137 @@ function M:ZoneHead(i)
 	return h
 end
 
+-- 머리줄 모양: kind = "class" · "here" · "zone"
+function M:PaintHead(h, kind, text, count)
+	local col, icon, lineA, bandA
+	if kind == "class" then
+		col, icon, lineA, bandA = ClassRGB(), "Diamond", 0.30, 0.10
+	elseif kind == "here" then
+		col, icon, lineA, bandA = C.accent, "MapPin", 0.35, 0.12
+	else
+		col, icon, lineA, bandA = C.soft, "Diamond", 0.14, 0
+	end
+	h.t:SetText(text)
+	h.t:SetTextColor(col[1], col[2], col[3])
+	if icon == "Diamond" then
+		-- 마름모: 작은 네모를 45도 돌려서
+		h.icon:SetTexture(Ink.tex.white)
+		h.icon:SetSize(5, 5)
+		h.icon:SetRotation(math.rad(45))
+		h.icon:ClearAllPoints()
+		h.icon:SetPoint("LEFT", 3, 0)
+	else
+		h.icon:SetTexture(Ink.icon(icon))
+		h.icon:SetSize(11, 11)
+		h.icon:SetRotation(0)
+		h.icon:ClearAllPoints()
+		h.icon:SetPoint("LEFT", 0, 0)
+	end
+	h.icon:SetVertexColor(col[1], col[2], col[3], 1)
+	h.line:SetColorTexture(col[1], col[2], col[3], lineA)
+	h.band:SetVertexColor(col[1], col[2], col[3], 1)
+	h.band:SetAlpha(bandA > 0 and 1 or 0)
+	if bandA > 0 and h.band.SetGradient and CreateColor then
+		h.band:SetGradient("HORIZONTAL", CreateColor(col[1], col[2], col[3], bandA), CreateColor(col[1], col[2], col[3], 0))
+	end
+	h.n:SetText(count and tostring(count) or "")
+	local nc = kind == "zone" and C.muted or col
+	h.n:SetTextColor(nc[1], nc[2], nc[3])
+end
+
+-------------------------------------------------------------------------------
+-- 가까운 순 정렬
+--  퀘스트 자리: 다 끝냈으면 보고하는 곳 · 게임 표시 · 목표가 마지막으로 오른 자리 · 받은 자리
+--  (움직일 때마다 순서가 흔들리지 않게 50야드 단위로 묶고, 같은 묶음 안에선 원래 순서)
+-------------------------------------------------------------------------------
+local function WorldOf(m, x, y)
+	if not (m and x and y and C_Map.GetWorldPosFromMapPos and CreateVector2D) then return end
+	local ok, cont, wp = pcall(C_Map.GetWorldPosFromMapPos, m, CreateVector2D(x, y))
+	if not (ok and cont and wp) then return end
+	local wx, wy = wp:GetXY()
+	return cont, wx, wy
+end
+
+local function PlayerWorld()
+	local m = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	local p = m and C_Map.GetPlayerMapPosition and C_Map.GetPlayerMapPosition(m, "player")
+	if not p then return end
+	local x, y = p:GetXY()
+	x, y = plain(x), plain(y)
+	if not (x and y) then return end
+	return WorldOf(m, x, y)
+end
+
+function M:QuestSpot(id)
+	if type(id) ~= "number" then return end
+	local Q = Ink.modules.QuestMap
+	local ready = C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(id)
+	if ready and Q and Q.TurnSpot then
+		local sp = Q:TurnSpot(id)
+		if sp then return sp end
+	end
+	if Q and Q.PoiQuests then
+		local sp = Q:PoiQuests()[id]
+		if sp then return sp end
+	end
+	local t = Ink.cdb and Ink.cdb.qSpot and Ink.cdb.qSpot[id]
+	if type(t) == "table" and t[1] then return t end
+	if Q and Q.GiverSpot then return Q.GiverSpot(id) end
+end
+
+-- 거리(야드) · 다른 대륙이거나 모르면 nil
+function M:QuestDist(id, pc, px, py)
+	if not pc then return end
+	local sp = self:QuestSpot(id)
+	if not sp then return end
+	local c, x, y = WorldOf(sp[1], sp[2], sp[3])
+	if not c or c ~= pc then return end
+	return math.sqrt((x - px) ^ 2 + (y - py) ^ 2)
+end
+
+-- 지금 있는 곳의 이름들 (세부 지역 · 지역 · 상위 지도) — 퀘스트 목록 머리줄 이름과 맞춰 본다
+local function HereNames()
+	local out = {}
+	local function add(n) if type(n) == "string" and n ~= "" then out[n] = true end end
+	add(GetRealZoneText and GetRealZoneText())
+	add(GetZoneText and GetZoneText())
+	add(GetSubZoneText and GetSubZoneText())
+	local m = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	local CONT = Enum and Enum.UIMapType and Enum.UIMapType.Continent or 2
+	for _ = 1, 4 do
+		local info = m and C_Map.GetMapInfo and C_Map.GetMapInfo(m)
+		if not info or (info.mapType and info.mapType <= CONT) then break end
+		add(info.name)
+		m = info.parentMapID
+	end
+	return out
+end
+
+-- 목표가 오를 때 그 자리를 적어 둔다 (가까운 순 정렬에 씀)
+function M:NoteProgress(id, sum)
+	self.progSum = self.progSum or {}
+	local last = self.progSum[id]
+	self.progSum[id] = sum
+	if last == nil or sum <= last then return end
+	local m = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	local p = m and C_Map.GetPlayerMapPosition and C_Map.GetPlayerMapPosition(m, "player")
+	if not p then return end
+	local x, y = p:GetXY()
+	x, y = plain(x), plain(y)
+	if not (x and y) then return end
+	Ink.cdb.qSpot = Ink.cdb.qSpot or {}
+	Ink.cdb.qSpot[id] = { m, math.floor(x * 1000 + 0.5) / 1000, math.floor(y * 1000 + 0.5) / 1000 }
+end
+
 function M:Update()
 	local f = self.frame
 	if not f or not f:IsShown() then return end
 	local quests = WatchedQuests()
 	if #quests == 0 and self.testing then quests = { "test1", "test2" } end
-	-- 지역별로 묶기: 진행 중인 직업 퀘스트 → 지금 있는 지역 → 퀘스트 목록 순서
+	-- 지역별로 묶기: 진행 중인 직업 퀘스트 → 지금 있는 지역 → 가까운 지역 순 (같은 지역 안에선 가까운 퀘스트부터)
 	local cset = ClassSet()
 	local qinfo, zorder = QuestLogInfo()
-	local here = GetRealZoneText and GetRealZoneText() or ""
+	local hereSet = HereNames()
 	local CLASSG, OTHER = "\001직업", "기타"
 	local group = {}
 	if self.testing and not next(qinfo) then
@@ -471,17 +603,45 @@ function M:Update()
 		local q = qinfo[id]
 		group[id] = (cset and cset[id]) and CLASSG or (q and q.zone) or OTHER
 	end
+	local nearOn = Ink.db.questNear ~= false
+	local dist, gmin = {}, {}
+	if nearOn then
+		local pc, px, py = PlayerWorld()
+		for _, id in ipairs(quests) do
+			local d = self:QuestDist(id, pc, px, py)
+			dist[id] = d
+			local g = group[id]
+			if d and (not gmin[g] or d < gmin[g]) then gmin[g] = d end
+		end
+	end
 	local function rank(g)
-		if g == CLASSG then return 0 elseif g == here then return 1 elseif zorder[g] then return 2 + zorder[g] end
+		if g == CLASSG then return 0 elseif hereSet[g] then return 1 end
+		if gmin[g] then return 2 + math.floor(gmin[g] / 200) * 0.001 end
+		if zorder[g] then return 10 + zorder[g] end
 		return 999
 	end
+	-- 지난번 순서 (같은 거리 묶음 안에서 순서를 지키려고)
+	local prev = self.prevPos or {}
 	local pos = {}
-	for i, id in ipairs(quests) do pos[id] = i end
+	for i, id in ipairs(quests) do pos[id] = (nearOn and prev[id]) or (1000 + i) end
 	table.sort(quests, function(a, b)
 		local ra, rb = rank(group[a]), rank(group[b])
 		if ra ~= rb then return ra < rb end
+		if group[a] ~= group[b] then return tostring(group[a]) < tostring(group[b]) end
+		if nearOn then
+			local da, db = dist[a], dist[b]
+			if da and db then
+				local ba, bb = math.floor(da / 50), math.floor(db / 50)
+				if ba ~= bb then return ba < bb end
+			elseif da or db then
+				return da ~= nil
+			end
+		end
 		return pos[a] < pos[b]
 	end)
+	self.prevPos = {}
+	for i, id in ipairs(quests) do self.prevPos[id] = i end
+	self.orderSig = table.concat((function() local t = {} for i, id in ipairs(quests) do t[i] = tostring(id) end return t end)(), ",")
 	local gcount = {}
 	for _, id in ipairs(quests) do gcount[group[id]] = (gcount[group[id]] or 0) + 1 end
 	local lastG
@@ -519,22 +679,15 @@ function M:Update()
 				--  (예전엔 전투 중엔 자리를 안 옮겨서, 목표 줄 수가 바뀌면 다음 퀘스트와 겹쳐 보였다)
 				local h = self:ZoneHead(nh)
 				h:ClearAllPoints()
-				h:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y - ((idx > 1 or (self.classH or 0) > 0) and 4 or 0))
+				h:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y - ((idx > 1 or (self.classH or 0) > 0) and 6 or 0))
 				if g == CLASSG then
-					local rgb = ClassRGB()
-					h.t:SetText("직업 퀘스트 진행 중")
-					h.t:SetTextColor(rgb[1], rgb[2], rgb[3])
-					h.line:SetColorTexture(rgb[1], rgb[2], rgb[3], 0.18)
+					self:PaintHead(h, "class", "직업 퀘스트 진행 중", gcount[g])
 				else
-					h.t:SetText(g)
-					local hc = (g == here) and C.soft or C.muted
-					h.t:SetTextColor(hc[1], hc[2], hc[3])
-					h.line:SetColorTexture(1, 1, 1, 0.08)
+					self:PaintHead(h, hereSet[g] and "here" or "zone", g, gcount[g])
 				end
-				h.n:SetText(tostring(gcount[g] or ""))
 				h:Show()
 			end
-			y = y - ((idx > 1 or (self.classH or 0) > 0) and 26 or 22)
+			y = y - ((idx > 1 or (self.classH or 0) > 0) and 32 or 26)
 		end
 		r:ClearAllPoints()
 		r:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
@@ -923,6 +1076,11 @@ function M:CheckDone()
 			if M:Fresh(id) then done = nil end
 			now[id] = (done == nil) and nil or (done and true or false)
 			local objs = C_QuestLog.GetQuestObjectives(id)
+			if objs and #objs > 0 then
+				local sum = 0
+				for _, ob in ipairs(objs) do sum = sum + (tonumber(ob.numFulfilled) or (ob.finished and 1 or 0)) end
+				pcall(self.NoteProgress, self, id, sum)
+			end
 			-- 목표가 없는 퀘스트(바로 보고하는 심부름)는 받자마자 완료라 알리지 않는다
 			if done and self.doneState and self.doneState[id] == false and objs and #objs > 0 then
 				self:QuestDone(info.title)
@@ -930,6 +1088,17 @@ function M:CheckDone()
 		end
 	end
 	self.doneState = now
+end
+
+function M:NearTick()
+	local f = self.frame
+	if Ink.db.questNear == false or not (f and f:IsShown()) or InCombatLockdown() then return end
+	local pc, px, py = PlayerWorld()
+	if not pc then return end
+	local l = self.nearAt
+	if l and l[1] == pc and math.sqrt((l[2] - px) ^ 2 + (l[3] - py) ^ 2) < 30 then return end
+	self.nearAt = { pc, px, py }
+	if l then self:Update() end
 end
 
 function M:SetTest(on)
@@ -965,6 +1134,8 @@ function M:Init()
 	C_Timer.After(4, function() pcall(M.WatchClass, M) M:Update() end)
 	-- 시간 제한 퀘스트 남은 시간: 1초마다 글자만
 	C_Timer.NewTicker(1, function() pcall(M.TickTimers, M) end)
+	-- 가까운 순: 30야드 넘게 움직였으면 4초마다 다시 정렬 (전투 중엔 쉼)
+	C_Timer.NewTicker(4, function() pcall(M.NearTick, M) end)
 	local pending, donePending
 	C_Timer.After(3, function() M:CheckDone() end)
 	e:SetScript("OnEvent", function(_, event, arg1, arg2)
@@ -977,7 +1148,22 @@ function M:Init()
 				M.acceptedAt = M.acceptedAt or {}
 				M.acceptedAt[qid] = GetTime()
 				C_Timer.After(6.5, function() M:CheckDone(); M:Update() end)
+				-- 받은 자리 (목표가 오르기 전까지 가까운 순 정렬에 씀)
+				local m = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+				local p = m and C_Map.GetPlayerMapPosition and C_Map.GetPlayerMapPosition(m, "player")
+				if p then
+					local x, y = p:GetXY()
+					x, y = plain(x), plain(y)
+					if x and y then
+						Ink.cdb.qSpot = Ink.cdb.qSpot or {}
+						Ink.cdb.qSpot[qid] = { m, math.floor(x * 1000 + 0.5) / 1000, math.floor(y * 1000 + 0.5) / 1000 }
+					end
+				end
 			end
+		end
+		if (event == "QUEST_REMOVED" or event == "QUEST_TURNED_IN") and type(arg1) == "number" then
+			if Ink.cdb.qSpot then Ink.cdb.qSpot[arg1] = nil end
+			if M.progSum then M.progSum[arg1] = nil end
 		end
 		if event == "QUEST_LOG_UPDATE" or event == "UNIT_QUEST_LOG_CHANGED" or event == "QUEST_ACCEPTED" then
 			if not donePending then

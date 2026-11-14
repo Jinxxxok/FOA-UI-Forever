@@ -100,35 +100,67 @@ local CUR_PATCH = (function()
 	return (tonumber(a) or 1) * 10000 + (tonumber(b) or 60) * 100 + (tonumber(c) or 1)
 end)()
 
+-- 전문기술 숙련도 [기술 번호] = 숙련도 (모르면 false)
+--  포에버: C_SkillInfo (번호로 바로) · 그 밖: GetProfessions
 local profSkills
 local function KnownSkills()
 	if profSkills then return profSkills end
 	profSkills = {}
-	if GetProfessions then
+	if GetProfessions and GetProfessionInfo then
 		local list = { GetProfessions() }
 		for i = 1, 6 do
 			local idx = list[i]
 			if idx then
-				local _, _, _, _, _, _, line = GetProfessionInfo(idx)
-				if line then profSkills[line] = true end
+				local ok, _, _, rank, _, _, _, line = pcall(GetProfessionInfo, idx)
+				if ok and line then profSkills[line] = rank or 1 end
 			end
 		end
 	end
 	return profSkills
 end
+local function SkillRank(line)
+	local t = KnownSkills()
+	local v = t[line]
+	if v == nil then
+		v = false
+		local SI = C_SkillInfo
+		if SI and SI.GetSkillLineInfoByID then
+			local ok, d = pcall(SI.GetSkillLineInfoByID, line)
+			if ok and type(d) == "table" and not d.isHeader and (d.rank or 0) > 0 then v = d.rank end
+		end
+		t[line] = v
+	end
+	return v or nil
+end
 
-local function RepOK(rep)
-	if not rep[1] then return true end
-	local fid, need = rep[1], rep[2] or 0
+-- 평판 값 (모르면 nil)
+local function Standing(fid)
 	if C_Reputation and C_Reputation.GetFactionDataByID then
 		local ok, d = pcall(C_Reputation.GetFactionDataByID, fid)
-		if ok and d and d.currentStanding then return d.currentStanding >= need end
+		if ok and d and d.currentStanding then return d.currentStanding end
 	end
 	if GetFactionInfoByID then
 		local ok, _, _, _, _, _, bar = pcall(GetFactionInfoByID, fid)
-		if ok and bar then return bar >= need end
+		if ok and bar then return bar end
 	end
-	return true
+end
+local function RepOK(rep)
+	if not rep[1] then return true end
+	local v = Standing(rep[1])
+	if v == nil then return true end
+	return v >= (rep[2] or 0)
+end
+
+local function KnowsSpell(id)
+	if IsPlayerSpell then
+		local ok, v = pcall(IsPlayerSpell, id)
+		if ok and v then return true end
+	end
+	if IsSpellKnown then
+		local ok, v = pcall(IsSpellKnown, id)
+		if ok and v then return true end
+	end
+	return false
 end
 
 local function Done(id)
@@ -147,6 +179,37 @@ local function NotOffered(id, level)
 	return at and level <= at
 end
 
+-- 선행 퀘스트: 보통은 모두, 자료에 "몇 개 중 하나" 가 있으면 그만큼만
+local function PreOK(r)
+	local pre = r[7]
+	if #pre == 0 then return true end
+	local need = (r[15] and r[15][3]) or 0
+	if need <= 0 then
+		for _, s in ipairs(pre) do if not Done(s) then return false end end
+		return true
+	end
+	local n = 0
+	for _, s in ipairs(pre) do if Done(s) then n = n + 1 end end
+	return n >= need
+end
+
+-- 그 밖의 조건 (QuestDB 15번째 · 있을 때만)
+--  전문기술 숙련도 · 연결 퀘스트(목적지 퀘스트를 받았거나 깼으면 더는 안 줌) · 평판이 너무 높음 · 잠그는 퀘스트 · 잠그는 주문
+local function ExtraBlocked(r)
+	local x = r[15]
+	if not x then return false end
+	if (x[1] or 0) > 0 and r[9] ~= 0 and (SkillRank(r[9]) or 0) < x[1] then return true end
+	if x[2] then for _, q in ipairs(x[2]) do if Done(q) or InLog(q) then return true end end end
+	if x[4] and x[4][1] then
+		local v = Standing(x[4][1])
+		if v and v > x[4][2] then return true end
+	end
+	if x[5] then for _, q in ipairs(x[5]) do if Done(q) then return true end end end
+	if x[6] then for _, s in ipairs(x[6]) do if KnowsSpell(s) then return true end end end
+	return false
+end
+M.ExtraBlocked = ExtraBlocked
+
 -- 0 = 안 보임, 1 = 받을 수 있음, 2 = 곧(1~2레벨 뒤)
 local function State(r, ctx)
 	local id, lvl, fac = r[1], r[3], r[4]
@@ -156,9 +219,10 @@ local function State(r, ctx)
 	if r[11] > CUR_PATCH then return 0 end
 	if Done(id) or InLog(id) then return 0 end
 	for _, a in ipairs(r[8]) do if Done(a) or InLog(a) then return 0 end end
-	for _, s in ipairs(r[7]) do if not Done(s) then return 0 end end
-	if r[9] ~= 0 and not KnownSkills()[r[9]] then return 0 end
+	if not PreOK(r) then return 0 end
+	if r[9] ~= 0 and not SkillRank(r[9]) then return 0 end
 	if not RepOK(r[10]) then return 0 end
+	if ExtraBlocked(r) then return 0 end
 	if NotOffered(id, ctx.level) then return 0 end
 	if lvl > ctx.level then
 		return (lvl <= ctx.level + 2 and Ink.db.questMapSoon ~= false) and 2 or 0
@@ -177,15 +241,18 @@ local function QuestName(id)
 	if C_QuestLog.RequestLoadQuestByID then pcall(C_QuestLog.RequestLoadQuestByID, id) end
 end
 
-local npcName = {}
+local npcName, npcMiss = {}, {}
 local function NpcName(id)
 	if not id or id == 0 then return end
 	if npcName[id] ~= nil then return npcName[id] or nil end
+	-- 아직 모르는 NPC 는 30초에 한 번만 다시 물어본다 (보고 NPC 찾기에서 여러 NPC 를 훑어서)
+	if npcMiss[id] and GetTime() - npcMiss[id] < 30 then return end
 	if C_TooltipInfo and C_TooltipInfo.GetHyperlink then
 		local ok, d = pcall(C_TooltipInfo.GetHyperlink, ("unit:Creature-0-0-0-0-%d-0000000000"):format(id))
 		local t = ok and d and d.lines and d.lines[1] and plain(d.lines[1].leftText)
 		if type(t) == "string" and t ~= "" then npcName[id] = t; return t end
 	end
+	npcMiss[id] = GetTime()
 end
 
 -------------------------------------------------------------------------------
@@ -217,8 +284,9 @@ local function ClassState(r, ctx)
 		for _, q in ipairs(r[7]) do if Done(q) then any = true break end end
 		if not any then return 0 end
 	end
-	if r[9] ~= 0 and not KnownSkills()[r[9]] then return 0 end
+	if r[9] ~= 0 and not SkillRank(r[9]) then return 0 end
 	if not RepOK(r[10]) then return 0 end
+	if ExtraBlocked(r) then return 0 end
 	if lvl + 10 < ctx.level then return 0 end
 	return lvl > ctx.level and 2 or 1
 end
@@ -473,6 +541,18 @@ function M:BuildLegend()
 		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
 		GameTooltip:AddLine("받을 수 있는 퀘스트", 1, 0.82, 0.32)
 		Ink.TipLine(GameTooltip, "금색 = 지금 받을 수 있음 · 파랑 = 반복 · 회색 = 1~2레벨 뒤", 0.75, 0.77, 0.8)
+		Ink.TipLine(GameTooltip, "조건(선행 · 전문기술 숙련도 · 평판 · 연결 퀘스트)이 안 맞는 퀘스트는 숨기고, 열리면 보여요", 0.75, 0.77, 0.8)
+		local unk = M.turnUnknown
+		if unk and #unk > 0 then
+			GameTooltip:AddLine(" ")
+			GameTooltip:AddLine("보고 위치를 모르는 퀘스트 (한 번 보고하면 기억)", 1, 0.82, 0.32)
+			for i, u in ipairs(unk) do
+				if i > 6 then GameTooltip:AddLine("… " .. (#unk - 6) .. "개 더", 0.56, 0.58, 0.61) break end
+				GameTooltip:AddLine((QuestName(u.id) or ("퀘스트 #" .. u.id)), 0.96, 0.95, 0.9)
+				if u.txt and u.txt ~= "" then Ink.TipLine(GameTooltip, "   " .. u.txt, 0.62, 0.64, 0.68) end
+			end
+		end
+		GameTooltip:AddLine(" ")
 		GameTooltip:AddLine("누르면 지도에서 숨기기 / 보이기", 0.56, 0.58, 0.61)
 		GameTooltip:Show()
 	end)
@@ -491,7 +571,7 @@ function M:PaintLegend(nOn, nSoon, nRep)
 		b:SetPoint("TOPRIGHT", wm, "BOTTOMRIGHT", 0, -6)
 	end
 	local Map = Ink.modules.Map
-	if nOn + nSoon + nRep == 0 and not Ink.db.questMapHide then b:Hide() if Map and Map.LayoutUnder then Map:LayoutUnder() end return end
+	if nOn + nSoon + nRep == 0 and not (self.turnUnknown and #self.turnUnknown > 0) and not Ink.db.questMapHide then b:Hide() if Map and Map.LayoutUnder then Map:LayoutUnder() end return end
 	local parts
 	if Ink.db.questMapHide then
 		parts = "|cff8E939B퀘스트 숨김 · 눌러서 보기|r"
@@ -499,6 +579,8 @@ function M:PaintLegend(nOn, nSoon, nRep)
 		parts = string.format("받을 수 있는 퀘스트 |cffFFCC4D%d|r", nOn)
 		if nRep > 0 then parts = parts .. string.format("  |cff66BFFF반복 %d|r", nRep) end
 		if nSoon > 0 then parts = parts .. string.format("  |cffA0A4AA곧 %d|r", nSoon) end
+		local unk = self.turnUnknown and #self.turnUnknown or 0
+		if unk > 0 then parts = parts .. string.format("  |cff8E939B보고 위치 모름 %d|r", unk) end
 	end
 	b.t:SetText(parts)
 	b:SetWidth(b.t:GetStringWidth() + 36)
@@ -538,7 +620,13 @@ function M:Groups(mapID)
 	return order, cnt
 end
 
--- 보고할 퀘스트 (다 끝낸 것): 게임이 알려 주는 보고 위치 → 없으면 받은 NPC 자리(보통 같은 NPC에게 보고)
+-- 보고할 퀘스트 (다 끝낸 것) "?" 자리 — 받은 곳과 보고하는 곳이 다른 퀘스트가 많아서(약 절반) 차례대로 찾는다
+--  1) 게임이 알려 주는 보고 위치
+--  2) 이 캐릭터(계정)가 전에 그 퀘스트를 보고한 자리 (보고할 때마다 배운다)
+--  3) 다음 퀘스트를 주는 NPC (퀘스트 줄기: 보고 받은 NPC 가 다음 퀘스트를 준다 · 연결 퀘스트는 목적지 퀘스트를 주는 NPC)
+--  4) 퀘스트 목표 글에 이름이 나온 NPC ("…에게 돌아가십시오")
+--  5) 목표 글이 없는 퀘스트만 받은 NPC
+--  모르면 지도에 찍지 않고 범례에 "보고 위치 모름"으로 (엉뚱한 자리에 "?"를 찍지 않게)
 local byQuest
 local function QuestRow(id)
 	if not byQuest then
@@ -552,7 +640,7 @@ local function Ready(id)
 	return C_QuestLog.IsComplete and C_QuestLog.IsComplete(id)
 end
 -- 게임이 보고 위치를 알려 주는 퀘스트 (어느 지역 지도에든 표시가 있으면)
---  → 그런 퀘스트는 "받은 곳" 대신 게임 표시만 쓴다 (받은 곳과 보고하는 곳이 다른 퀘스트에서 엉뚱한 물음표가 뜨던 문제)
+--  → 그런 퀘스트는 게임 표시만 쓴다
 local zoneMaps
 local function ZoneMaps()
 	if zoneMaps then return zoneMaps end
@@ -561,6 +649,16 @@ local function ZoneMaps()
 		for _, cont in ipairs({ 1414, 1415, 1945, 113 }) do
 			local ok, kids = pcall(C_Map.GetMapChildrenInfo, cont, 3, true)
 			for _, k in ipairs(ok and kids or {}) do zoneMaps[#zoneMaps + 1] = k.mapID end
+		end
+	end
+	-- 새 지역(강물터 등)은 대륙 아래 목록에 없을 수 있어서 퀘스트 자료에 있는 지역 지도도 더한다
+	local seen = {}
+	for _, m in ipairs(zoneMaps) do seen[m] = true end
+	local ZONE = Enum.UIMapType and Enum.UIMapType.Zone or 3
+	for m in pairs(Index()) do
+		if not seen[m] then
+			local info = C_Map.GetMapInfo and C_Map.GetMapInfo(m)
+			if info and info.mapType == ZONE then seen[m] = true; zoneMaps[#zoneMaps + 1] = m end
 		end
 	end
 	return zoneMaps
@@ -573,23 +671,218 @@ function M:PoiQuests()
 	if C_QuestLog.GetQuestsOnMap then
 		for _, m in ipairs(ZoneMaps()) do
 			local ok, list = pcall(C_QuestLog.GetQuestsOnMap, m)
-			for _, q in ipairs(ok and list or {}) do if q.questID and q.x then set[q.questID] = true end end
+			for _, q in ipairs(ok and list or {}) do
+				if q.questID and q.x and not set[q.questID] then set[q.questID] = { m, q.x, q.y } end
+			end
 		end
 	end
 	self.poiSet = set
 	return set
 end
 
+-- 퀘스트 줄기: [퀘스트] = 그 뒤에 이어지는 퀘스트 줄들 (연결 퀘스트는 목적지 퀘스트)
+local followers
+local function Followers()
+	if followers then return followers end
+	followers = {}
+	for _, r in ipairs(ns.QUEST_DB or {}) do
+		for _, p in ipairs(r[7]) do
+			followers[p] = followers[p] or {}
+			table.insert(followers[p], r)
+		end
+	end
+	for _, r in ipairs(ns.QUEST_DB or {}) do
+		local x = r[15]
+		if x and x[2] and bit.band(r[12], 2) ~= 0 then
+			followers[r[1]] = {}
+			for _, nq in ipairs(x[2]) do
+				local nr = QuestRow(nq)
+				if nr then table.insert(followers[r[1]], nr) end
+			end
+		end
+	end
+	return followers
+end
+
+-- NPC 가 서 있는 자리 {지도, x, y} (0~1): 직접 말을 걸어 본 자리 → 그 NPC 가 주는 퀘스트 자리
+local giverSpot
+local function NpcSpot(npc)
+	if not npc or npc == 0 then return end
+	local learned = Ink.db.npcSpot and Ink.db.npcSpot[npc]
+	if type(learned) == "table" and learned[1] then return learned end
+	if not giverSpot then
+		giverSpot = {}
+		for _, r in ipairs(ns.QUEST_DB or {}) do
+			local g = r[14]
+			if g ~= 0 and not giverSpot[g] and r[2][1] then giverSpot[g] = { r[2][1], r[2][2] / 100, r[2][3] / 100 } end
+		end
+	end
+	return giverSpot[npc]
+end
+M.NpcSpot = NpcSpot
+-- 퀘스트를 주는 자리 {지도, x, y} (0~1)
+function M.GiverSpot(id)
+	local r = QuestRow(id)
+	if r and r[2][1] then return { r[2][1], r[2][2] / 100, r[2][3] / 100 } end
+end
+
+-- 목표 글 (퀘스트 로그 "목표" 문단)
+local function ObjectiveText(id)
+	local idx = C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(id)
+	if not (idx and GetQuestLogQuestText) then return end
+	local ok, _, obj = pcall(GetQuestLogQuestText, idx)
+	obj = ok and plain(obj)
+	if type(obj) == "string" then return obj end
+end
+M.ObjectiveText = ObjectiveText
+
+-- 목표 글에 이름이 나올 만한 NPC: 그 지역(받은 곳 · 지금 있는 곳)에서 퀘스트를 주는 NPC + 말을 걸어 본 NPC
+local npcByMap
+local function MapNpcs(map)
+	if not npcByMap then
+		npcByMap = {}
+		for _, r in ipairs(ns.QUEST_DB or {}) do
+			local g, pts = r[14], r[2]
+			if g ~= 0 then
+				for i = 1, #pts, 3 do
+					local t = npcByMap[pts[i]] or {}
+					npcByMap[pts[i]] = t
+					t[g] = true
+				end
+			end
+		end
+	end
+	local out = {}
+	for g in pairs(npcByMap[map] or {}) do out[g] = true end
+	for id, s in pairs(Ink.db.npcSpot or {}) do
+		if type(s) == "table" and s[1] == map then out[id] = true end
+	end
+	return out
+end
+local function NameOf(id)
+	local s = Ink.db.npcSpot and Ink.db.npcSpot[id]
+	if type(s) == "table" and s[4] then return s[4] end
+	return NpcName(id)
+end
+
+-- 보고 받는 NPC 와 자리: npc, spot{지도,x,y}, 근거
+--  근거: "learned" 전에 보고한 곳 · "follow" 다음 퀘스트를 주는 NPC · "text" 목표 글의 NPC · "giver" 받은 NPC
+function M:Ender(id)
+	local e = Ink.db.questEnd and Ink.db.questEnd[id]
+	if type(e) == "table" and e[1] then return e[4], e, "learned" end
+	local r = QuestRow(id)
+	local giver = r and r[14] or 0
+	-- 다음 퀘스트를 주는 NPC (모두 같은 NPC 일 때만 · 받은 NPC 가 그중에 있으면 받은 NPC)
+	local fol = Followers()[id]
+	if fol and #fol > 0 then
+		local set, n, one = {}, 0, nil
+		for _, fr in ipairs(fol) do
+			if fr[14] ~= 0 and not set[fr[14]] then set[fr[14]] = true; n = n + 1; one = fr[14] end
+		end
+		if n == 1 and one ~= giver then
+			local sp = NpcSpot(one)
+			if sp then return one, sp, "follow" end
+		elseif (n == 1 and one == giver) or (n > 1 and set[giver]) then
+			local sp = NpcSpot(giver)
+			if sp then return giver, sp, "follow" end
+		end
+	end
+	-- 목표 글
+	local txt = ObjectiveText(id)
+	if txt and txt ~= "" then
+		local gname = giver ~= 0 and NameOf(giver)
+		if gname and #gname >= 4 and txt:find(gname, 1, true) then
+			local sp = NpcSpot(giver)
+			if sp then return giver, sp, "text" end
+		end
+		local maps = {}
+		if r and r[2][1] then maps[r[2][1]] = true end
+		local pm = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+		if pm then maps[pm] = true end
+		local found = {}
+		for m in pairs(maps) do
+			for npc in pairs(MapNpcs(m)) do
+				if npc ~= giver and not found[npc] then
+					local nm = NameOf(npc)
+					if nm and #nm >= 4 and txt:find(nm, 1, true) then found[npc] = nm end
+				end
+			end
+		end
+		-- 다른 이름 안에 든 짧은 이름은 빼고, 남은 이름이 하나(같은 이름 여럿이면 그중 직접 만난 NPC)일 때만
+		local list = {}
+		for npc, nm in pairs(found) do
+			local inside = false
+			for npc2, nm2 in pairs(found) do
+				if npc2 ~= npc and #nm2 > #nm and nm2:find(nm, 1, true) then inside = true break end
+			end
+			if not inside then list[#list + 1] = npc end
+		end
+		local hit
+		if #list == 1 then
+			hit = list[1]
+		elseif #list > 1 then
+			local same = true
+			for _, npc in ipairs(list) do if found[npc] ~= found[list[1]] then same = false break end end
+			if same then
+				hit = list[1]
+				for _, npc in ipairs(list) do if Ink.db.npcSpot and Ink.db.npcSpot[npc] then hit = npc break end end
+			end
+		end
+		if hit then
+			local sp = NpcSpot(hit)
+			if sp then return hit, sp, "text" end
+		end
+		return nil, nil, nil, txt
+	end
+	-- 목표 글이 없는 퀘스트(바로 보고하는 것)는 대개 받은 NPC
+	if giver ~= 0 and txt == "" then
+		local sp = NpcSpot(giver)
+		if sp then return giver, sp, "giver" end
+	end
+end
+
+-- 다른 지도 좌표를 이 지도 좌표로 (도시 → 지역은 사각형, 그 밖은 세계 좌표로 · 지도 밖이면 nil)
+local function ToMap(sp, mapID)
+	local m, x, y = sp[1], sp[2], sp[3]
+	if m == mapID then return x, y end
+	local rc = CityRect(m, mapID)
+	if rc then return rc[1] + x * (rc[2] - rc[1]), rc[3] + y * (rc[4] - rc[3]) end
+	if C_Map.GetWorldPosFromMapPos and C_Map.GetMapPosFromWorldPos and CreateVector2D then
+		local ok, cont, wp = pcall(C_Map.GetWorldPosFromMapPos, m, CreateVector2D(x, y))
+		if ok and cont and wp then
+			local ok2, _, mp = pcall(C_Map.GetMapPosFromWorldPos, cont, wp, mapID)
+			if ok2 and mp then
+				local mx, my = mp:GetXY()
+				if mx and mx >= 0 and mx <= 1 and my >= 0 and my <= 1 then return mx, my end
+			end
+		end
+	end
+end
+M.ToMap = ToMap
+
+-- 퀘스트 하나의 보고 자리 (퀘스트 목록 가까운 순 정렬에서도 씀): spot{지도,x,y}, 근거
+function M:TurnSpot(id)
+	local poi = self:PoiQuests()[id]
+	if poi then return poi, "poi" end
+	local c = self.enderCache and self.enderCache[id]
+	if c and GetTime() - c.at < (c.spot and 60 or 15) then return c.spot, c.src, c.npc, c.txt end
+	local npc, spot, src, txt = self:Ender(id)
+	self.enderCache = self.enderCache or {}
+	self.enderCache[id] = { at = GetTime(), spot = spot, src = src, npc = npc, txt = txt }
+	return spot, src, npc, txt
+end
+
 function M:TurnIns(mapID)
-	local out, seen = {}, {}
-	local poi = self:PoiQuests()
+	local out, unknown = {}, {}
+	self.turnUnknown = unknown
 	if not mapID then return out end
+	local seen = {}
 	if C_QuestLog.GetQuestsOnMap then
 		local ok, list = pcall(C_QuestLog.GetQuestsOnMap, mapID)
 		for _, q in ipairs(ok and list or {}) do
 			if q.questID and q.x and q.y and Ready(q.questID) then
 				seen[q.questID] = true
-				out[#out + 1] = { x = q.x, y = q.y, ids = { q.questID }, poi = true }
+				out[#out + 1] = { x = q.x, y = q.y, ids = { q.questID }, poi = true, src = "poi" }
 			end
 		end
 	end
@@ -597,26 +890,74 @@ function M:TurnIns(mapID)
 	for i = 1, n do
 		local info = C_QuestLog.GetInfo and C_QuestLog.GetInfo(i)
 		local id = info and not info.isHeader and info.questID
-		-- 받은 곳으로 보고 위치를 짐작하는 건 "목표를 다 채운" 퀘스트만.
-		--  · 목표가 없는 퀘스트(편지 배달 · 누구와 대화)는 받자마자 완료로 나오지만 보고는 다른 NPC 라서 짐작하면 엉뚱한 곳에 뜬다
-		--  · 막 받은 퀘스트는 목표 정보가 오기 전 잠깐 "완료"로 보여서 내 자리에 물음표가 떴다 사라졌다 → 몇 초 기다린다
+		-- 막 받은 퀘스트는 목표 정보가 오기 전 잠깐 "완료"로 보여서 내 자리에 물음표가 떴다 사라졌다 → 몇 초 기다린다
 		local fresh = id and M.acceptedAt and M.acceptedAt[id] and (GetTime() - M.acceptedAt[id] < 6)
-		local objs = id and not fresh and C_QuestLog.GetQuestObjectives and C_QuestLog.GetQuestObjectives(id)
-		if id and not seen[id] and not poi[id] and not fresh and objs and #objs > 0 and Ready(id) then
-			local r = QuestRow(id)
-			local pts = r and r[2] or {}
-			for k = 1, #pts, 3 do
-				if pts[k] == mapID then
-					local x, y = pts[k + 1] / 100, pts[k + 2] / 100
+		if id and not seen[id] and not fresh and Ready(id) then
+			local objs = C_QuestLog.GetQuestObjectives and C_QuestLog.GetQuestObjectives(id) or {}
+			local spot, src, npc, txt = self:TurnSpot(id)
+			-- 목표가 없는 심부름(편지 배달 · 누구와 대화)은 받은 NPC 로 짐작하지 않는다 (보고는 다른 NPC)
+			if spot and src == "giver" and #objs == 0 then spot = nil end
+			if spot then
+				local x, y = ToMap(spot, mapID)
+				if x then
 					local host
 					for _, o in ipairs(out) do if not o.poi and math.abs(o.x - x) < 0.004 and math.abs(o.y - y) < 0.004 then host = o end end
-					if host then host.ids[#host.ids + 1] = id else out[#out + 1] = { x = x, y = y, ids = { id }, giver = r[14] } end
-					break
+					if host then
+						host.ids[#host.ids + 1] = id
+						if host.giver ~= npc then host.giver = 0 end
+					else
+						out[#out + 1] = { x = x, y = y, ids = { id }, giver = npc or 0, src = src }
+					end
 				end
+			elseif #objs > 0 or txt then
+				unknown[#unknown + 1] = { id = id, txt = txt }
 			end
 		end
 	end
 	return out
+end
+
+-- 보고한 자리 배우기: 보상 창이 열릴 때 NPC · 내 자리를 적어 두고, 보고가 끝나면 저장
+--  말을 건 NPC 자리도 적어 둔다 (목표 글에 이름이 나온 NPC 를 찾을 때 씀)
+local function TalkGuid()
+	local g = plain(UnitGUID("npc")) or plain(UnitGUID("questnpc"))
+	if type(g) ~= "string" then return end
+	local kind, _, _, _, _, id = strsplit("-", g)
+	return kind, tonumber(id)
+end
+local function PlayerSpot()
+	local m = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	local p = m and C_Map.GetPlayerMapPosition and C_Map.GetPlayerMapPosition(m, "player")
+	if not p then return end
+	local x, y = p:GetXY()
+	x, y = plain(x), plain(y)
+	if not (x and y) or (x == 0 and y == 0) then return end
+	return m, math.floor(x * 1000 + 0.5) / 1000, math.floor(y * 1000 + 0.5) / 1000
+end
+M.PlayerSpot = PlayerSpot
+function M:LearnNpc()
+	local kind, id = TalkGuid()
+	if kind ~= "Creature" or not id then return end
+	local m, x, y = PlayerSpot()
+	if not m then return end
+	Ink.db.npcSpot = Ink.db.npcSpot or {}
+	local name = plain(UnitName("npc"))
+	Ink.db.npcSpot[id] = { m, x, y, type(name) == "string" and name or nil }
+end
+function M:NoteTurnIn()
+	local qid = GetQuestID and GetQuestID()
+	if not (qid and qid > 0) then return end
+	local m, x, y = PlayerSpot()
+	if not m then return end
+	local kind, id = TalkGuid()
+	self.pendingEnd = { id = qid, at = GetTime(), m = m, x = x, y = y, npc = kind == "Creature" and id or 0 }
+end
+function M:SaveTurnIn(qid)
+	local p = self.pendingEnd
+	if not (p and p.id == qid and GetTime() - p.at < 120) then return end
+	self.pendingEnd = nil
+	Ink.db.questEnd = Ink.db.questEnd or {}
+	Ink.db.questEnd[qid] = { p.m, p.x, p.y, p.npc }
 end
 
 -------------------------------------------------------------------------------
@@ -695,7 +1036,7 @@ function M:Refresh()
 			p.baseScale = pinScale * 1.06
 			p:SetScale(p.baseScale)
 			M.Place(p, cv, t.x * W / p.baseScale, -t.y * H / p.baseScale)
-			p.ids, p.giver, p.poi, p.mapID, p.wx, p.wy = t.ids, t.giver, t.poi, mapID, t.x, t.y
+			p.ids, p.giver, p.poi, p.src, p.mapID, p.wx, p.wy = t.ids, t.giver, t.poi, t.src, mapID, t.x, t.y
 			Paint(p, GOLD, false, #t.ids)
 			p.glow:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 0.45)
 			p.lv:SetText("")
@@ -709,13 +1050,20 @@ function M:Refresh()
 	if Map and Map.QueueDeclutter then Map:QueueDeclutter() end
 end
 
+local SRC_NOTE = {
+	learned = "전에 이 퀘스트를 보고한 자리",
+	follow = "다음 퀘스트를 주는 NPC 자리 (보고 받는 NPC)",
+	text = "퀘스트 목표 글에 나온 NPC 자리",
+	giver = "받은 NPC 자리",
+}
 function M:TurnTip(p)
 	GameTooltip:SetOwner(p, "ANCHOR_RIGHT", 4, 0)
-	GameTooltip:AddLine((NpcName(p.giver) and (NpcName(p.giver) .. " · ") or "") .. "보고할 퀘스트", 1, 0.82, 0.32)
+	local who = p.giver and p.giver ~= 0 and NameOf(p.giver)
+	GameTooltip:AddLine((who and (who .. " · ") or "") .. "보고할 퀘스트", 1, 0.82, 0.32)
 	for _, id in ipairs(p.ids or {}) do
 		GameTooltip:AddLine("|T" .. Ink.icon("Check") .. ":12:12:0:0:64:64:0:64:0:64:111:211:154|t " .. (QuestName(id) or ("퀘스트 #" .. id)), 0.96, 0.95, 0.9)
 	end
-	if not p.poi then GameTooltip:AddLine("받은 곳 기준 (보통 같은 NPC에게 보고)", 0.56, 0.58, 0.61) end
+	if not p.poi and SRC_NOTE[p.src] then GameTooltip:AddLine(SRC_NOTE[p.src], 0.56, 0.58, 0.61) end
 	GameTooltip:AddLine(" ")
 	GameTooltip:AddLine("클릭: 길 안내 표시", 0.56, 0.58, 0.61)
 	GameTooltip:Show()
@@ -798,7 +1146,7 @@ function M:MiniPoints()
 			end
 			if Ink.db.questTurnIn ~= false then
 				for _, t in ipairs(self:TurnIns(mapID)) do
-					pts[#pts + 1] = { x = t.x, y = t.y, ids = t.ids, giver = t.giver, poi = t.poi, turn = true }
+					pts[#pts + 1] = { x = t.x, y = t.y, ids = t.ids, giver = t.giver, poi = t.poi, src = t.src, turn = true }
 				end
 			end
 		end
@@ -868,7 +1216,7 @@ function M:MiniUpdate()
 			p:ClearAllPoints()
 			p:SetPoint("CENTER", mm, "CENTER", x, y)
 			p.turn = q.turn
-			p.list, p.giver, p.state, p.ids, p.poi = q.list, q.giver, q.state, q.ids, q.poi
+			p.list, p.giver, p.state, p.ids, p.poi, p.src = q.list, q.giver, q.state, q.ids, q.poi, q.src
 			p.mapID, p.wx, p.wy = mapID, q.x, q.y
 			p.icon:SetTexture(Ink.icon(q.turn and "QuestTurnIn" or "QuestBang"))
 			local col = q.turn and GOLD or (q.rep and BLUE or GOLD)
@@ -972,7 +1320,7 @@ function M:Init()
 	local e = CreateFrame("Frame")
 	for _, ev in ipairs({ "ADDON_LOADED", "QUEST_ACCEPTED", "QUEST_TURNED_IN", "QUEST_REMOVED", "QUEST_LOG_UPDATE",
 		"PLAYER_LEVEL_UP", "SKILL_LINES_CHANGED", "QUEST_DATA_LOAD_RESULT", "UPDATE_FACTION",
-		"GOSSIP_SHOW", "QUEST_GREETING", "QUEST_DETAIL" }) do
+		"GOSSIP_SHOW", "QUEST_GREETING", "QUEST_DETAIL", "QUEST_PROGRESS", "QUEST_COMPLETE", "MERCHANT_SHOW", "TRAINER_SHOW" }) do
 		pcall(e.RegisterEvent, e, ev)
 	end
 	e:SetScript("OnEvent", function(_, event, a1, a2)
@@ -990,10 +1338,32 @@ function M:Init()
 			-- 목표 · 게임 보고 위치가 도착한 뒤에 다시 그린다
 			C_Timer.After(6.5, function() M.miniDirty = true; M.poiDirty = true; M:Queue() end)
 		end
-		if event == "GOSSIP_SHOW" or event == "QUEST_GREETING" or event == "QUEST_DETAIL" then
+		if event == "GOSSIP_SHOW" or event == "QUEST_GREETING" or event == "QUEST_DETAIL" or event == "QUEST_PROGRESS"
+			or event == "QUEST_COMPLETE" or event == "MERCHANT_SHOW" or event == "TRAINER_SHOW" then
+			-- 말을 건 NPC 자리 기억 (보고하는 NPC 찾기에 씀)
+			pcall(M.LearnNpc, M)
+			if event == "QUEST_COMPLETE" then pcall(M.NoteTurnIn, M) end
 			-- 대화창 목록이 다 채워진 뒤에 확인
-			C_Timer.After(0.2, function() pcall(M.CheckOffered, M, event) end)
+			if event == "GOSSIP_SHOW" or event == "QUEST_GREETING" or event == "QUEST_DETAIL" then
+				C_Timer.After(0.2, function() pcall(M.CheckOffered, M, event) end)
+			end
 			return
+		end
+		if event == "QUEST_TURNED_IN" and type(a1) == "number" then
+			pcall(M.SaveTurnIn, M, a1)
+			M.turnedAt = M.turnedAt or {}
+			M.turnedAt[a1] = GetTime()
+			if M.enderCache then M.enderCache[a1] = nil end
+		end
+		if event == "QUEST_REMOVED" and type(a1) == "number" then
+			-- 포기한 퀘스트(보고 없이 빠진 것): "안 준다"고 적어 둔 것도 지우고 바로 다시 보이게
+			local t = M.turnedAt and M.turnedAt[a1]
+			if not (t and GetTime() - t < 3) then
+				if Ink.cdb and Ink.cdb.qNotOffered then Ink.cdb.qNotOffered[a1] = nil end
+				if M.enderCache then M.enderCache[a1] = nil end
+				M.miniAt = 0
+				C_Timer.After(1, function() M.miniDirty = true; M.miniAt = 0; M:Queue() end)
+			end
 		end
 		if event == "QUEST_DATA_LOAD_RESULT" then
 			-- 이름이 도착하면 열린 툴팁만 다시

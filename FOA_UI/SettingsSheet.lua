@@ -472,6 +472,7 @@ function M:BuildRegistry()
 				{ kind = "slider", key = "questMax", label = "한 번에 보이는 수", min = 3, max = 10, step = 1, fmt = "%d개", def = 6,
 					hud = "quest", apply = quests },
 				SW("questClass", "직업 퀘스트", "받을 수 있는 직업 퀘스트를 맨 위에", { hud = "quest", apply = quests }),
+				SW("questNear", "가까운 순", "지금 지역을 맨 위로 · 그 안에서 가까운 퀘스트부터", { hud = "quest", apply = quests }),
 				SW("questToast", "완료 알림", "목표를 다 채우면 위에 카드"),
 				{ kind = "cycle", key = "questSound", label = "완료 소리", desc = "바꾸면 미리 들려줘요", opts = soundOpts, def = "random",
 					apply = function() call("Quest", "PlayDoneSound") end },

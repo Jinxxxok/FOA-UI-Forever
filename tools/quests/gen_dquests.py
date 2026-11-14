@@ -167,6 +167,9 @@ FIX = {
     95787: dict(add_pre=[95786]), 95788: dict(add_pre=[95786]),
     95799: dict(add_pre=[95787]), 95798: dict(add_pre=[95788]),
     95776: dict(add_pre=[95773]),
+    # 크롤도크는 이제 그만!(얼라 · 크롤도크 요새): 밖 NPC 가 아니라 던전 안에서 마커스 틸웰을 찾아 호위를 시작
+    #  (wowf.io 포에버 퀘스트 자료: "마커스 틸웰을 안전한 곳까지 호위" · AllTheThings 엔 주는 NPC 없음)
+    94969: dict(giver=259253, map=0, x=0, y=0, kind=KIND_INSIDE_NPC),
 }
 IDX = dict(fac=2, map=3, x=4, y=5, giver=6, pre=7, kind=13, turnin=14)
 
