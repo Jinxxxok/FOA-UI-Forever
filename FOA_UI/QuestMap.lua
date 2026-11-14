@@ -1368,8 +1368,18 @@ function M:WorldUp(button)
 	id = tonumber(id)
 	if kind ~= "Creature" or not id or not IsGiver(id) then return end
 	if UnitCanAttack and UnitCanAttack("player", "mouseover") then return end
+	-- 가까이 있는지: 게임 거리 확인 → 안 되면(막힌 기능) 그 NPC 자리와 내 자리로 (15야드 안)
 	local ok, near = pcall(CheckInteractDistance, "mouseover", 3)
-	if not (ok and near) then return end
+	if not ok or near == nil then
+		near = false
+		local sp = NpcSpot(id)
+		local pm, px, py = PlayerSpot()
+		if sp and pm and sp[1] == pm and C_Map.GetMapWorldSize then
+			local w, h = C_Map.GetMapWorldSize(pm)
+			if w and w > 0 then near = math.sqrt(((sp[2] - px) * w) ^ 2 + ((sp[3] - py) * h) ^ 2) <= 15 end
+		end
+	end
+	if not near then return end
 	local name = plain(UnitName("mouseover"))
 	local token = GetTime()
 	self.silentTry = token
