@@ -132,6 +132,32 @@ local function ViewKey()
 	return type(v) == "string" and v ~= "" and v or nil
 end
 
+-- BIS 판 보기: 육성(지금 레벨 최고템) · PvE(공략 BIS) · PvP(명예 · 계급 장비 + PvP 점수)
+--  고른 적이 없으면 만렙 전 = 육성, 만렙 = PvE
+local function BisView()
+	local v = Ink.cdb and Ink.cdb.bisView
+	if v == "lvl" or v == "pve" or v == "pvp" then return v end
+	return (UnitLevel("player") or 60) < 60 and "lvl" or "pve"
+end
+M.BisView = BisView
+
+-- 점수 기준 특성: PvP 보기면 "특성#pvp" (Score 가 PvP 가중치로 계산)
+local function ScoreSpec()
+	local k = ViewKey()
+	if M.viewNow == "pvp" and ns.Score then
+		return (k or select(2, ns.Score:Spec()) or "") .. "#pvp"
+	end
+	return k
+end
+
+function M:SetBisView(v)
+	if Ink.cdb then Ink.cdb.bisView = v end
+	self.bisMode = "gear"
+	self.dirty = true
+	self:PaintSidebar()
+	self:PaintBis()
+end
+
 function M:SetViewSpec(id)
 	if Ink.cdb then Ink.cdb.bisSpec = (id ~= CurrentSpecID()) and id or nil end
 	self.dirty = true
@@ -556,8 +582,9 @@ end
 -- 포에버: 공략 BIS (g) = BIS, 공략 대체(alt) 순서 = 대체 1~3 (던전 도감이 없어서 전리품 표 대신 공략 목록)
 function M:BuildRanksForever()
 	local lvl = UnitLevel("player") or 60
+	local view = BisView()
 	local skey = SpecKey()
-	local key = skey .. ":" .. lvl .. (Ink.db.bisCrafts == false and "" or ":c") .. (Ink.db.bisQuests == false and "" or ":q") .. (Ink.db.bisWorld == false and "" or ":w")
+	local key = skey .. ":" .. lvl .. ":" .. view .. (Ink.db.bisCrafts == false and "" or ":c") .. (Ink.db.bisQuests == false and "" or ":q") .. (Ink.db.bisWorld == false and "" or ":w")
 	if self.rankKey == key and not self.dirty then return end
 	-- 아이템이 도착할 때마다(dirty) 곧바로 다시 만들면, 0.2초마다 다시 그려지는 아이템 툴팁이
 	--  수천 개 후보를 계속 훑었다 → 같은 조건이면 2초에 한 번만, 미뤄진 건 잠시 뒤 한 번에
@@ -577,6 +604,7 @@ function M:BuildRanksForever()
 		return
 	end
 	self.rankKey, self.dirty, self.rankAt = key, nil, now
+	self.viewNow = view
 	wipe(self.ranks)
 	wipe(self.rankCount)
 	local spec = ns.BIS_FOREVER and ns.BIS_FOREVER.specs[skey]
@@ -585,10 +613,11 @@ function M:BuildRanksForever()
 	local per = {}
 	-- 던전 전리품 모음 (아이템 → 어느 던전 몇 넴)
 	local pool, byId = {}, {}
-	-- 만렙 전에는 지금 갈 수 있는 던전(권장 최저 레벨 ≤ 내 레벨 + 4)만 대체템 후보로
+	-- 육성: 지금 갈 수 있는 던전(권장 최저 레벨 ≤ 내 레벨 + 4)만 · PvE · PvP: 만렙 기준으로 전부
+	local plv = view == "lvl" and lvl or 60
 	for _, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
 		local data = (not d.soon) and self:Scan(d.key, true)
-		local open = lvl >= 60 or d.lo <= lvl + 4
+		local open = plv >= 60 or d.lo <= plv + 4
 		for _, b in ipairs(data and data.bosses or {}) do
 			for _, it in ipairs(b.items) do
 				byId[it.id] = byId[it.id] or it
@@ -599,16 +628,17 @@ function M:BuildRanksForever()
 			end
 		end
 	end
-	-- 만렙 전: 공략 BIS(만렙 기준) 대신 지금 레벨에 착용 가능한 최고템 (아래 BuildLevelRanks)
-	self.levelMode = lvl < 60
+	-- 육성 · PvP: 공략 목록 없이 FOA 점수 순 (아래 BuildLevelRanks) · PvP 는 명예 · 계급 장비를 더하고 PvP 가중치로
+	self.levelMode = view ~= "pve"
 	if self.levelMode then
-		self:AddCrafts(pool, lvl)
-		self:AddQuestRewards(pool, lvl)
-		self:AddWorldSources(pool, lvl)
-		return self:BuildLevelRanks(pool, lvl)
+		self:AddCrafts(pool, plv)
+		self:AddQuestRewards(pool, plv)
+		self:AddWorldSources(pool, plv)
+		if view == "pvp" then self:AddPvP(pool) end
+		return self:BuildLevelRanks(pool, plv)
 	end
-	self:AddQuestRewards(pool, lvl)
-	self:AddWorldSources(pool, lvl)
+	self:AddQuestRewards(pool, plv)
+	self:AddWorldSources(pool, plv)
 	local function Fill()
 		-- 공략 대체가 3개 안 되는 칸은 던전 전리품 중 FOA 점수(직업 · 특성 가중치) 높은 순으로 채운다
 		local sc = ns.Score
@@ -618,7 +648,7 @@ function M:BuildRanksForever()
 			for _, it in ipairs(list) do
 				if not self.ranks[it.id] then
 					local l = "item:" .. it.id
-					local v = sc:Score(l, nil, FOREVER and ViewKey() or nil)
+					local v = sc:Score(l, nil, FOREVER and ScoreSpec() or nil)
 					if v and v > 0 and sc:Usable(l) then it.score = v; cand[#cand + 1] = it end
 				end
 			end
@@ -758,6 +788,9 @@ end
 
 -- 자료 출처 한 줄
 function M:SourceLabel()
+	if FOREVER and self.viewNow == "pvp" then
+		return "PvP 명예 · 계급 장비 + 던전 · 제작 · 퀘스트 · 평판\nFOA PvP 점수 순 (체력 ↑ · 적중 ↓)"
+	end
 	if FOREVER and self.levelMode then
 		local srcs = { "던전" }
 		if Ink.db.bisCrafts ~= false and ns.FOREVER_CRAFTS then srcs[#srcs + 1] = "제작" end
@@ -774,6 +807,7 @@ end
 
 local function RankText(r)
 	if not r then return nil end
+	if r.lvlMode and r.pvp then return r.rank == 0 and "PvP BIS" or ("PvP 대체 " .. r.rank) end
 	if r.lvlMode then return r.rank == 0 and "레벨 최고" or ("다음 " .. r.rank) end
 	if r.rank == 0 then return "BIS" end
 	return "대체 " .. r.rank
@@ -809,19 +843,20 @@ local function Badge(parent)
 	function b:Set(r)
 		if not r then self:Hide() return end
 		local a = C.accent
+		local lv = r.lvlMode and not r.pvp  -- 육성 보기: "최고 · 다음 n" / PvE · PvP: "BIS · 대체 n"
 		if r.rank == 0 then
 			self.fill:SetVertexColor(a[1], a[2], a[3], 1)
 			self.line:SetVertexColor(a[1], a[2], a[3], 1)
-			self.text:SetFont(r.lvlMode and F.bold or F.latinB, Ink:BoostSize(10), "")
+			self.text:SetFont(lv and F.bold or F.latinB, Ink:BoostSize(10), "")
 			self.text:SetTextColor(0.05, 0.055, 0.07)
-			self.text:SetText(r.lvlMode and "최고" or "BIS")
-			self:SetWidth(r.lvlMode and 36 or 34)
+			self.text:SetText(lv and "최고" or "BIS")
+			self:SetWidth(lv and 36 or 34)
 		else
 			self.fill:SetVertexColor(a[1], a[2], a[3], 0.06)
 			self.line:SetVertexColor(a[1], a[2], a[3], 0.6)
 			self.text:SetFont(F.semi, Ink:BoostSize(10), "")
 			self.text:SetTextColor(a[1], a[2], a[3])
-			self.text:SetText((r.lvlMode and "다음 " or "대체 ") .. r.rank)
+			self.text:SetText((lv and "다음 " or "대체 ") .. r.rank)
 			self:SetWidth(44)
 		end
 		self:Show()
@@ -1228,6 +1263,41 @@ function M:AddWorldSources(pool, lvl)
 	end
 end
 
+-- PvP 보기: 명예 · 계급 장비 (내 진영 + 공용 파란 세트) 를 후보에
+function M:AddPvP(pool)
+	local data = ns.FOREVER_PVP
+	if not data then return end
+	local fac = UnitFactionGroup("player") == "Horde" and "H" or "A"
+	self.pvpById = self.pvpById or {}
+	local have = {}
+	for _, list in pairs(pool) do for _, it in ipairs(list) do have[it.id] = true end end
+	local function Add(id, rank)
+		if have[id] then return end
+		local it = self.pvpById[id]
+		if not it then
+			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
+			local slot = iid and loc and EQUIP_EJ[loc]
+			if not slot then return end
+			it = { id = id, icon = icon, slot = slot, pvp = rank,
+				srcText = rank > 0 and string.format("PvP · 계급 %d · 명예", rank) or "PvP · 명예 (파란 세트)" }
+			self.pvpById[id] = it
+		end
+		if not it.name and (not C_Item.IsItemDataCachedByID or C_Item.IsItemDataCachedByID(id)) then
+			local name, link, q = C_Item.GetItemInfo(id)
+			it.name, it.link, it.quality = name, link, q
+		end
+		if ForMyClass(it) then
+			have[id] = true
+			pool[it.slot] = pool[it.slot] or {}
+			table.insert(pool[it.slot], it)
+		end
+	end
+	for rank, ids in pairs(data[fac] or {}) do
+		for _, id in ipairs(ids) do Add(id, rank) end
+	end
+	for _, id in ipairs(data.N or {}) do Add(id, 0) end
+end
+
 -- 월드 출처 글자 (착용 시 귀속이면 경매장 시세도)
 function M:WorldSourceText(it)
 	local t = ns.ItemSourceText and ns.ItemSourceText(it.id) or "기타"
@@ -1337,6 +1407,7 @@ end
 -- 만렙 전 "레벨 최고템": 부위마다 지금 착용 가능한(요구 레벨 ≤ 내 레벨) 내 직업 장비를 FOA 점수 순으로 4개
 --  두 손 무기를 드는 직업(도적 · 20레벨부터 전사 · 사냥꾼)은 한손 무기를 보조장비 칸에도 (보조 손 점수로)
 function M:BuildLevelRanks(pool, lvl)
+	local pvpView = self.viewNow == "pvp" or nil
 	self.levelRanks = {}
 	self.levelPending = false
 	local sc = ns.Score
@@ -1353,7 +1424,7 @@ function M:BuildLevelRanks(pool, lvl)
 					self.levelPending = true
 					RequestItem(it.id)
 				elseif (minLv or 0) <= lvl and ForMyClass(it) then
-					local v = sc:Score(link or ("item:" .. it.id), off, FOREVER and ViewKey() or nil)
+					local v = sc:Score(link or ("item:" .. it.id), off, FOREVER and ScoreSpec() or nil)
 					if v == nil then self.levelPending = true; RequestItem(it.id) end
 					if v and v > 0 then out[#out + 1] = { it = it, score = v, minLv = minLv } end
 				end
@@ -1375,7 +1446,7 @@ function M:BuildLevelRanks(pool, lvl)
 		local ranked = Rank(src, slot == 11 and dual)
 		local l = {}
 		for i = 1, math.min(4, #ranked) do
-			l[i] = { rank = i - 1, slot = slot, it = ranked[i].it, lvlMode = true, score = ranked[i].score }
+			l[i] = { rank = i - 1, slot = slot, it = ranked[i].it, lvlMode = true, pvp = pvpView, score = ranked[i].score }
 		end
 		if #l > 0 then self.levelRanks[slot] = l end
 	end
@@ -1386,7 +1457,7 @@ function M:BuildLevelRanks(pool, lvl)
 		end
 		local ranked = Rank(src, true)
 		local l = {}
-		for i = 1, math.min(4, #ranked) do l[i] = { rank = i - 1, slot = 11, it = ranked[i].it, lvlMode = true } end
+		for i = 1, math.min(4, #ranked) do l[i] = { rank = i - 1, slot = 11, it = ranked[i].it, lvlMode = true, pvp = pvpView } end
 		if #l > 0 then self.levelRanks[11] = l end
 	end
 	-- 아이템 → 순위 (전리품 칸 "추천" · 툴팁용. 두 칸에 다 있으면 높은 순위로)
@@ -5073,12 +5144,15 @@ function M:BuildBisPanel()
 	p.hint:SetWidth(BP_W - 204)
 	p.hint:SetWordWrap(true)
 	p.hint:SetText("마우스를 올리면 툴팁 + 획득처. 대체템은 BIS 장비의 능력치 비중으로 이번 시즌 레이드 · 던전 전리품에서 FOA가 고른 거예요.")
-	-- 장비 / 준비물 전환 (위 오른쪽, 예시 문구 아래)
+	-- 보기 전환 (위 오른쪽): 장비 — 육성 · PvE · PvP │ 준비물
 	p.modes = {}
-	for i, m in ipairs({ { "gear", "장비" }, { "prep", "준비물" } }) do
+	-- 본섭은 보기 전환이 없다 (장비 · 준비물만)
+	local TABS_BIS = FOREVER and { { "gear", "육성", "lvl" }, { "gear", "PvE", "pve" }, { "gear", "PvP", "pvp" }, { "prep", "준비물" } }
+		or { { "gear", "장비" }, { "prep", "준비물" } }
+	for i, m in ipairs(TABS_BIS) do
 		local b = CreateFrame("Button", nil, p)
-		b:SetSize(58, 24)
-		b:SetPoint("TOPRIGHT", p, "TOPRIGHT", -16 - (2 - i) * 60, -48)
+		b:SetSize(52, 24)
+		b:SetPoint("TOPRIGHT", p, "TOPRIGHT", -16 - (#TABS_BIS - i) * 54 - ((FOREVER and i < #TABS_BIS) and 9 or 0), -48)
 		b.label = Ink:Text(b, F.semi, 12, C.muted, "CENTER")
 		b.label:SetPoint("CENTER", 0, 1)
 		b.label:SetText(m[2])
@@ -5086,10 +5160,20 @@ function M:BuildBisPanel()
 		b.line:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
 		b.line:SetSize(18, 2)
 		b.line:SetPoint("BOTTOM", 0, 0)
-		b:SetScript("OnClick", function() M.bisMode = m[1]; M:PaintBis() end)
-		b.mode = m[1]
+		b.mode, b.view = m[1], m[3]
+		b:SetScript("OnClick", function(self)
+			if self.view then M:SetBisView(self.view) else M.bisMode = self.mode; M:PaintBis() end
+		end)
+		b:SetScript("OnEnter", function(self) if not self.on then self.label:SetTextColor(C.soft[1], C.soft[2], C.soft[3]) end end)
+		b:SetScript("OnLeave", function(self) if not self.on then self.label:SetTextColor(C.muted[1], C.muted[2], C.muted[3]) end end)
 		p.modes[i] = b
 	end
+	-- 장비 보기 셋과 준비물 사이 가는 세로선
+	p.modeSep = p:CreateTexture(nil, "ARTWORK")
+	p.modeSep:SetColorTexture(1, 1, 1, 0.1)
+	p.modeSep:SetSize(1, 12)
+	p.modeSep:SetPoint("RIGHT", p.modes[#TABS_BIS], "LEFT", -5, 1)
+	p.modeSep:SetShown(FOREVER and true or false)
 	self:BuildPrep(p)
 	p:SetScript("OnShow", function() M:PaintBis() end)
 	self.bisPanel = p
@@ -5360,8 +5444,10 @@ function M:PaintBis()
 	if not p or not p:IsShown() then return end
 	self:BuildRanks()
 	local mode = self.bisMode or "gear"
+	local view = BisView()
 	for _, b in ipairs(p.modes) do
-		local on = b.mode == mode
+		local on = (b.view and mode == "gear" and b.view == view) or (not b.view and mode == b.mode)
+		b.on = on
 		b.label:SetTextColor(on and C.text[1] or C.muted[1], on and C.text[2] or C.muted[2], on and C.text[3] or C.muted[3])
 		b.line:SetShown(on)
 	end
@@ -5396,9 +5482,11 @@ function M:PaintBis()
 			table.insert(bySlot[r.slot], r)
 		end
 	end
-	p.sumL:SetText(self.levelMode and "칸 레벨 최고템 착용" or "칸 BIS 착용")
-	p.hint:SetText(self.levelMode and "마우스를 올리면 툴팁 · 획득처\n제작템은 클릭하면 제조법 상인 위치를 지도에 찍어요"
-		or "마우스를 올리면 툴팁 · 획득처\n대체템은 BIS 장비의 능력치 비중으로 FOA가 고른 거예요")
+	local pvpView = self.viewNow == "pvp"
+	p.sumL:SetText(pvpView and "칸 PvP BIS 착용" or (self.levelMode and "칸 레벨 최고템 착용" or "칸 BIS 착용"))
+	p.hint:SetText(pvpView and "마우스를 올리면 툴팁 · 획득처\nPvP 점수: 체력을 높게 · 적중은 낮게 친 FOA 계산이에요"
+		or (self.levelMode and "마우스를 올리면 툴팁 · 획득처\n제작템은 클릭하면 제조법 상인 위치를 지도에 찍어요"
+		or "마우스를 올리면 툴팁 · 획득처\n대체템은 BIS 장비의 능력치 비중으로 FOA가 고른 거예요"))
 	for _, list in pairs(bySlot) do table.sort(list, function(a, b) return a.rank < b.rank end) end
 	local wornBis = 0
 	self.bisSel = self.bisSel or 1
@@ -5477,7 +5565,11 @@ function M:PaintBis()
 		row.itemID, row.link, row.it = nil, nil, nil
 		row.badge:Hide(); row.rank:Hide(); row.state:SetText("")
 		row.icon:Set(nil, 0, "")
-		if self.levelMode then
+		if pvpView then
+			row.name:SetText(self.levelPending and "아이템 정보를 받아 오는 중…" or "이 부위는 PvP 후보가 없어요")
+			row.name:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
+			row.src:SetText("명예 · 계급 장비 · 던전 · 제작 · 퀘스트 · 평판에서 골라요")
+		elseif self.levelMode then
 			row.name:SetText(self.levelPending and "아이템 정보를 받아 오는 중…" or "지금 갈 수 있는 던전에 이 부위 템이 없어요")
 			row.name:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
 			row.src:SetText("내 레벨 + 4 까지의 던전 전리품 · 제작템 · 퀘스트 · 던전 퀘스트 보상에서 골라요")

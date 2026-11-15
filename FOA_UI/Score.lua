@@ -417,22 +417,34 @@ function M:Weights()
 end
 
 -- 고른 특성의 가중치 (지금 내 특성이면 Weights 와 같음)
+-- 특성 뒤에 "#pvp" 를 붙이면 점수 방식 설정과 상관없이 PvP 가중치 (BIS 판 PvP 보기)
+local function SplitPvP(spec)
+	if type(spec) == "string" and spec:find("#pvp$") then return (spec:gsub("#pvp$", "")), true end
+	return spec, false
+end
+M.SplitPvP = SplitPvP
+
 function M:WeightsFor(spec)
+	local force
+	spec, force = SplitPvP(spec)
 	local class, cur = self:Spec()
+	local function ToPvP(w)
+		if not w then return w end
+		self.pvpCache = self.pvpCache or {}
+		self.pvpCache[w] = self.pvpCache[w] or PvP(w)
+		return self.pvpCache[w]
+	end
 	if not spec or spec == cur then
 		local w = self:Weights()
-		return w, weightSig
+		if force and self:Mode() ~= "pvp" then w = ToPvP(w) end
+		return w, (weightSig or "") .. (force and "#pvp" or "")
 	end
 	local w = W[(class or "") .. ":" .. spec]
 	if not w then return end
 	local sig
 	w, sig = CapAdjust(w, class, spec)
-	if self:Mode() == "pvp" then
-		self.pvpCache = self.pvpCache or {}
-		self.pvpCache[w] = self.pvpCache[w] or PvP(w)
-		w = self.pvpCache[w]
-	end
-	return w, (class or "") .. ":" .. spec .. sig
+	if force or self:Mode() == "pvp" then w = ToPvP(w) end
+	return w, (class or "") .. ":" .. spec .. sig .. (force and "#pvp" or "")
 end
 
 function M:ProfileName()
@@ -642,6 +654,7 @@ local MH_DAGGER = { ["ROGUE:subtlety"] = 0.3, ["ROGUE:assassination"] = 0.6 }
 M.MH_DAGGER = MH_DAGGER
 local MH_LOC = { INVTYPE_WEAPON = true, INVTYPE_WEAPONMAINHAND = true, INVTYPE_2HWEAPON = true }
 function M:MainHandRule(spec)
+	spec = SplitPvP(spec)
 	local class, cur = self:Spec()
 	return MH_DAGGER[(class or "") .. ":" .. (spec or cur or "")]
 end
