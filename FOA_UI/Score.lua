@@ -131,17 +131,38 @@ M.K = K
 local SPELL_HIT = { MAGE = true, WARLOCK = true, ["PRIEST:shadow"] = true, ["DRUID:balance"] = true, ["SHAMAN:ele"] = true }
 
 -- PvP: 체력을 크게, 적중 · 정신력 · 마나 회복은 덜 (탄력도가 없는 클래식 PvP 관례)
-local function PvP(w)
+-- PvP 가중치: 직업마다 다르다 (Mobalytics 포에버 PvP 공략의 능력치 우선순위, 2026-11 확인)
+--  도적: 민첩 > 치명 > 전투력 > 체력 · 적중은 만렙 장비로 쉽게 채워진다 (Perplexity)
+--  전사: 체력이 가장 중요 (Omnivore) · 사냥꾼: 민첩 > 치명, 유리 대포 (Captain · Feor)
+--  수양 · 신성 사제: 체력 · 지능 먼저, 치유량 · 정신력 · 마나 회복은 그다음, 치명은 낮게 (Hydra)
+--  공략이 없는 직업: 클래식 PvP 관례 (체력 ↑ · 적중 ↓ · 치명 조금 ↑ · 시전자 주문 관통 ↑)
+--  set = 그 값으로 · mul = 원래 값에 곱하기 · 적중 상한은 PvP 기준(근접 5% · 주문 4%)으로 따로 (CapAdjust)
+local PVP_BASE = { set = {}, mul = { hit = 0.5, shit = 0.5, exp = 0.6, spi = 0.4, mp5 = 0.6, crit = 1.1, scrit = 1.1, spen = 1.5 } }
+local PVP_HEAL = { set = { sta = 1.2 }, mul = { int = 1.3, mp5 = 0.8, spi = 0.5, crit = 0.9, scrit = 0.9, hit = 0.3, shit = 0.3 } }
+local PVP_PROFILE = {
+	ROGUE = { set = { sta = 0.75 }, mul = { hit = 0.35, exp = 0.5, crit = 1.15 } },
+	["WARRIOR:arms"] = { set = { sta = 2.1 }, mul = { hit = 0.5, exp = 0.6, crit = 1.1 } },
+	["WARRIOR:fury"] = { set = { sta = 2.1 }, mul = { hit = 0.5, exp = 0.6, crit = 1.1 } },
+	HUNTER = { set = { sta = 0.6 }, mul = { hit = 0.5, exp = 0.6, crit = 1.15 } },
+	["PRIEST:disc"] = { set = { sta = 1.2, int = 1.0, heal = 0.75, sp = 0.75 }, mul = { spi = 0.45, mp5 = 0.4, crit = 0.6, scrit = 0.6, hit = 0.3, shit = 0.3 } },
+	["PRIEST:holy"] = { set = { sta = 1.2, int = 1.0, heal = 0.75, sp = 0.75 }, mul = { spi = 0.45, mp5 = 0.4, crit = 0.6, scrit = 0.6, hit = 0.3, shit = 0.3 } },
+	["PALADIN:holy"] = PVP_HEAL, ["SHAMAN:resto"] = PVP_HEAL, ["DRUID:resto"] = PVP_HEAL,
+	-- 근접 혼종 (징벌 · 고양 · 야성): 맞으면서 싸운다 → 체력 조금 더
+	["PALADIN:ret"] = { set = { sta = 1.2 } }, ["PALADIN:retshock"] = { set = { sta = 1.2 } },
+	["SHAMAN:enh"] = { set = { sta = 1.2 } }, ["DRUID:feral"] = { set = { sta = 0.9 } },
+}
+M.PVP_PROFILE = PVP_PROFILE
+
+local function PvP(w, class, spec)
+	local prof = PVP_PROFILE[(class or "") .. ":" .. (spec or "")] or PVP_PROFILE[class or ""] or {}
 	local p = {}
 	for k, v in pairs(w) do p[k] = v end
-	p.sta = math.max(1.0, (w.sta or 0) * 3)
-	if p.hit then p.hit = p.hit * 0.5 end
-	if p.shit then p.shit = p.shit * 0.6 end
-	if p.exp then p.exp = p.exp * 0.6 end
-	if p.spi then p.spi = p.spi * 0.4 end
-	if p.mp5 then p.mp5 = p.mp5 * 0.6 end
-	if p.crit then p.crit = p.crit * 1.1 end
-	if p.armor then p.armor = math.max(p.armor, 0.03) end
+	-- 기본 관례 → 직업 · 특성 공략 순서로 덮는다
+	for k, m in pairs(PVP_BASE.mul) do if p[k] then p[k] = p[k] * m end end
+	p.sta = math.max(1.0, math.min(2.5, (w.sta or 0) * 1.5))
+	for k, m in pairs(prof.mul or {}) do if w[k] then p[k] = w[k] * m end end
+	for k, v in pairs(prof.set or {}) do p[k] = v end
+	p.armor = math.max(p.armor or 0, 0.03)
 	return p
 end
 
@@ -382,20 +403,36 @@ local function CurHit(spell)
 end
 
 -- 적중 상한을 이미 넘겼으면 적중 가치를 크게 낮춘다 (조금은 남겨서 같은 조건이면 적중 있는 쪽)
-local capCache = {}
-local function CapAdjust(w, class, spec)
+local capCache = { pve = {}, pvp = {} }
+-- PvP: 같은 레벨 플레이어 상대 상한 (근접 5% · 주문 4%) · PvE: 보스 상대 (근접 8% · 주문 17%)
+local function CapAdjust(w, class, spec, pvp)
 	local spell = SPELL_HIT[class] or SPELL_HIT[class .. ":" .. spec]
-	local cap = spell and 17 or 8
+	local cap = pvp and (spell and 4 or 5) or (spell and 17 or 8)
 	local over = CurHit(spell) >= cap
 	if not over then return w, "" end
-	capCache[w] = capCache[w] or (function()
+	local cc = capCache[pvp and "pvp" or "pve"]
+	cc[w] = cc[w] or (function()
 		local p = {}
 		for k, v in pairs(w) do p[k] = v end
 		if p.hit then p.hit = p.hit * 0.15 end
 		if p.shit then p.shit = p.shit * 0.15 end
 		return p
 	end)()
-	return capCache[w], "cap"
+	return cc[w], "cap"
+end
+
+-- 가중치 만들기: 특성 표 → 적중 상한 (PvE · PvP 기준) → PvP 면 직업별 PvP 가중치
+local pvpCache = {}
+local function Build(class, spec, wkey, pvp)
+	local w = W[wkey]
+	if not w then return end
+	local sig
+	w, sig = CapAdjust(w, class, spec, pvp)
+	if pvp then
+		pvpCache[w] = pvpCache[w] or PvP(w, class, wkey:match(":(.+)$"))
+		w = pvpCache[w]
+	end
+	return w, wkey .. sig .. (pvp and "#pvp" or "")
 end
 
 local weightSig = ""
@@ -403,16 +440,9 @@ function M:Weights()
 	local class, spec = self:Spec()
 	local wkey = (class or "") .. ":" .. (spec or "")
 	if class == "PALADIN" and spec == "ret" and specCache.shock and not (Ink.cdb and Ink.cdb.scoreSpec) then wkey = "PALADIN:retshock" end
-	local w = W[wkey]
+	local w, sig = Build(class, spec, wkey, self:Mode() == "pvp")
 	if not w then return end
-	local sig
-	w, sig = CapAdjust(w, class, spec)
-	if self:Mode() == "pvp" then
-		self.pvpCache = self.pvpCache or {}
-		self.pvpCache[w] = self.pvpCache[w] or PvP(w)
-		w = self.pvpCache[w]
-	end
-	weightSig = wkey .. sig
+	weightSig = sig
 	return w, class, spec
 end
 
@@ -428,23 +458,18 @@ function M:WeightsFor(spec)
 	local force
 	spec, force = SplitPvP(spec)
 	local class, cur = self:Spec()
-	local function ToPvP(w)
-		if not w then return w end
-		self.pvpCache = self.pvpCache or {}
-		self.pvpCache[w] = self.pvpCache[w] or PvP(w)
-		return self.pvpCache[w]
-	end
+	local pvp = force or self:Mode() == "pvp"
 	if not spec or spec == cur then
-		local w = self:Weights()
-		if force and self:Mode() ~= "pvp" then w = ToPvP(w) end
-		return w, (weightSig or "") .. (force and "#pvp" or "")
+		if not force then
+			local w = self:Weights()
+			return w, weightSig
+		end
+		spec = cur
+		local wkey = (class or "") .. ":" .. (spec or "")
+		if class == "PALADIN" and spec == "ret" and specCache.shock and not (Ink.cdb and Ink.cdb.scoreSpec) then wkey = "PALADIN:retshock" end
+		return Build(class, spec, wkey, true)
 	end
-	local w = W[(class or "") .. ":" .. spec]
-	if not w then return end
-	local sig
-	w, sig = CapAdjust(w, class, spec)
-	if force or self:Mode() == "pvp" then w = ToPvP(w) end
-	return w, (class or "") .. ":" .. spec .. sig .. (force and "#pvp" or "")
+	return Build(class, spec, (class or "") .. ":" .. spec, pvp)
 end
 
 function M:ProfileName()

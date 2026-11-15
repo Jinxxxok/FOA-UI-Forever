@@ -789,7 +789,7 @@ end
 -- 자료 출처 한 줄
 function M:SourceLabel()
 	if FOREVER and self.viewNow == "pvp" then
-		return "PvP 명예 · 계급 장비 + 던전 · 제작 · 퀘스트 · 평판\nFOA PvP 점수 순 (체력 ↑ · 적중 ↓)"
+		return "PvP 명예 · 계급 장비 + 던전 · 제작 · 퀘스트 · 평판\nFOA PvP 점수 순 (직업별 PvP 능력치 · 적중 상한은 플레이어 기준)"
 	end
 	if FOREVER and self.levelMode then
 		local srcs = { "던전" }
@@ -5484,7 +5484,7 @@ function M:PaintBis()
 	end
 	local pvpView = self.viewNow == "pvp"
 	p.sumL:SetText(pvpView and "칸 PvP BIS 착용" or (self.levelMode and "칸 레벨 최고템 착용" or "칸 BIS 착용"))
-	p.hint:SetText(pvpView and "마우스를 올리면 툴팁 · 획득처\nPvP 점수: 체력을 높게 · 적중은 낮게 친 FOA 계산이에요"
+	p.hint:SetText(pvpView and "마우스를 올리면 툴팁 · 획득처\nPvP 점수: 직업마다 PvP 공략의 능력치 순서로 FOA가 계산해요"
 		or (self.levelMode and "마우스를 올리면 툴팁 · 획득처\n제작템은 클릭하면 제조법 상인 위치를 지도에 찍어요"
 		or "마우스를 올리면 툴팁 · 획득처\n대체템은 BIS 장비의 능력치 비중으로 FOA가 고른 거예요"))
 	for _, list in pairs(bySlot) do table.sort(list, function(a, b) return a.rank < b.rank end) end
