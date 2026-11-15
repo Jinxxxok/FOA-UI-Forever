@@ -141,11 +141,14 @@ local function BisView()
 end
 M.BisView = BisView
 
--- 점수 기준 특성: PvP 보기면 "특성#pvp" (Score 가 PvP 가중치로 계산)
+-- 점수 기준: BIS 보기마다 그 기준 가중치 ("특성#lvl" 육성 · "#pve" 레이드 · "#pvp")
+--  (PvE 보기는 만렙 전에 열어도 레이드 기준, 육성 보기는 레벨업 기준)
+local VIEW_PROF = { lvl = "lvl", pve = "pve", pvp = "pvp" }
 local function ScoreSpec()
 	local k = ViewKey()
-	if M.viewNow == "pvp" and ns.Score then
-		return (k or select(2, ns.Score:Spec()) or "") .. "#pvp"
+	local prof = M.viewNow and VIEW_PROF[M.viewNow]
+	if prof and ns.Score then
+		return (k or select(2, ns.Score:Spec()) or "") .. "#" .. prof
 	end
 	return k
 end

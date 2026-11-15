@@ -42,7 +42,7 @@ local K = {
 }
 
 -- 직업 · 특성별 가중치 (포에버 레벨 60 PvE)
---  출처: Icy Veins 포에버 능력치 우선순위 (2026-11 갱신) · Warcraft Tavern 포에버 직업 공략
+--  출처: Icy Veins 포에버 능력치 우선순위 (전 전문화 27개, 2026-11-16 다시 확인) · Warcraft Tavern 포에버 직업 공략
 --  우선순위(같은 아이템 예산일 때 어느 능력치가 나은가)를 클래식 환산(힘 → 공격력, 민첩 → 치명 등)으로 숫자로 옮겼다.
 --  포에버는 적중 · 치명타가 물리 · 주문 공통이라 시전자도 hit / crit 를 shit / scrit 과 같은 값으로 친다.
 --  상한: 근접 · 원거리 적중 8% · 주문 적중 17% · 숙련 6.5% → 이미 채웠으면 적중 가치를 낮춘다 (CapAdjust).
@@ -51,8 +51,8 @@ local K = {
 local function Caster(t) t.hit = t.hit or t.shit; t.crit = t.crit or t.scrit; t.rdps = t.rdps or 0.6; return t end
 local W = {
 	-- 전사: 무기 공격력 > 적중(8%) > 숙련(6.5%) > 치명타 > 힘 · 힘 1 = 공격력 2, 민첩 20 = 치명 1%
-	["WARRIOR:arms"] = { dps = 16, hit = 26, exp = 24, crit = 22, str = 2.0, agi = 1.15, ap = 1, haste = 13, sta = 0.2, armor = 0.01 },
-	["WARRIOR:fury"] = { dps = 15, hit = 26, exp = 24, crit = 23, str = 2.0, agi = 1.2, ap = 1, haste = 14, sta = 0.2, armor = 0.01 },
+	["WARRIOR:arms"] = { dps = 16, hit = 26, exp = 24, crit = 22, agi = 2.05, str = 2.0, ap = 1, haste = 13, sta = 0.2, armor = 0.01 },
+	["WARRIOR:fury"] = { dps = 15, hit = 26, exp = 24, crit = 23, str = 2.0, ap = 1, haste = 13, agi = 0.9, sta = 0.2, armor = 0.01 },
 	-- 방어 전사: (공격) 숙련 > 적중 > 민첩 > 힘 > 체력 · (방어) 체력 > 방어도 > 민첩 > 회피 · 무기 막기 > 방어 숙련
 	["WARRIOR:prot"] = { sta = 1.6, armor = 0.12, agi = 1.5, dodge = 12, parry = 11, def = 1.0, block = 4, bv = 0.3,
 		exp = 16, hit = 14, str = 1.0, ap = 0.4, crit = 8, dps = 5, haste = 4 },
@@ -67,20 +67,20 @@ local W = {
 	-- 생존: 포에버에서 근접 특성 → 근접 무기가 중심
 	["HUNTER:sv"] = { dps = 15, rdps = 5, hit = 26, crit = 24, agi = 2.3, ap = 1, rap = 0.4, int = 0.3, haste = 13, sta = 0.2, armor = 0.01, exp = 18 },
 	-- 마법사: 적중(17%) > 주문력 > 치명타 > 지능 > 정신력 · 마나 회복
-	["MAGE:arcane"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 11, int = 0.55, spi = 0.25, mp5 = 0.6, haste = 9, sta = 0.1, spen = 0.4 }),
-	["MAGE:fire"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 12, int = 0.4, spi = 0.15, mp5 = 0.5, haste = 9, sta = 0.1, spen = 0.4 }),
-	["MAGE:frost"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 9, int = 0.4, mp5 = 0.55, spi = 0.15, haste = 9, sta = 0.1, spen = 0.4 }),
+	["MAGE:arcane"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 11, int = 0.55, spi = 0.25, mp5 = 0.2, haste = 9, sta = 0.1, spen = 0.4 }),
+	["MAGE:fire"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 12, int = 0.4, spi = 0.15, mp5 = 0.12, haste = 9, sta = 0.1, spen = 0.4 }),
+	["MAGE:frost"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 9, int = 0.4, mp5 = 0.3, spi = 0.15, haste = 9, sta = 0.1, spen = 0.4 }),
 	-- 흑마법사: 적중 > 주문력 > 치명타 > 가속 > 지능 (파괴는 가속 > 치명타)
-	["WARLOCK:aff"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 8, haste = 7, int = 0.3, spi = 0.15, sta = 0.3, mp5 = 0.4, spen = 0.5 }),
-	["WARLOCK:demo"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 8, haste = 7, int = 0.3, spi = 0.15, sta = 0.3, mp5 = 0.4, spen = 0.5 }),
-	["WARLOCK:destro"] = Caster({ shit = 14, sp = 1, sdmg = 1, haste = 9, scrit = 8, int = 0.3, spi = 0.1, sta = 0.3, mp5 = 0.4, spen = 0.5 }),
+	["WARLOCK:aff"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 8, haste = 7, int = 0.35, spen = 0.3, spi = 0.15, sta = 0.1, mp5 = 0.15 }),
+	["WARLOCK:demo"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 8, haste = 7, int = 0.35, spen = 0.3, spi = 0.15, sta = 0.1, mp5 = 0.15 }),
+	["WARLOCK:destro"] = Caster({ shit = 14, sp = 1, sdmg = 1, haste = 9, scrit = 8, int = 0.35, spen = 0.3, spi = 0.15, sta = 0.1, mp5 = 0.15 }),
 	-- 사제(수양 · 신성): 치유량 > 마나 회복 > 정신력 > 지능 > 치명타
 	["PRIEST:disc"] = Caster({ heal = 1, sp = 1, mp5 = 2.0, spi = 0.75, int = 0.6, scrit = 6, haste = 5, sta = 0.1 }),
 	["PRIEST:holy"] = Caster({ heal = 1, sp = 1, mp5 = 2.0, spi = 0.8, int = 0.55, scrit = 6, haste = 5, sta = 0.1 }),
-	-- 암흑: 적중(17%) > 주문력 > 치명타 > 주문 관통 > 정신력
-	["PRIEST:shadow"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 8, spen = 0.7, spi = 0.25, int = 0.3, mp5 = 0.4, haste = 8, sta = 0.1 }),
-	-- 드루이드 조화: 적중(17%) > 치명타 > 주문력 > 지능
-	["DRUID:balance"] = Caster({ shit = 14, scrit = 11, sp = 1, sdmg = 1, int = 0.45, haste = 9, spi = 0.15, mp5 = 0.6, sta = 0.1, spen = 0.4 }),
+	-- 암흑: 주문력 > 치명타 > 가속 > 적중 > 주문 관통 > 지능 > 정신력 > 마나 회복 > 체력 (Icy Veins 2026-11 · 예전 적중 1순위에서 바뀜)
+	["PRIEST:shadow"] = Caster({ sp = 1, sdmg = 1, scrit = 10, haste = 9, shit = 7, spen = 0.4, int = 0.3, spi = 0.25, mp5 = 0.2, sta = 0.1 }),
+	-- 드루이드 조화: 적중 > 주문력 > 치명타 > 가속 > 지능 > 정신력 > 마나 회복
+	["DRUID:balance"] = Caster({ shit = 14, sp = 1, sdmg = 1, scrit = 11, haste = 9, int = 0.45, spi = 0.15, mp5 = 0.12, sta = 0.1, spen = 0.4 }),
 	-- 야성(표범): 무기 공격력(포에버는 폼에도 무기 dps 가 더해짐) > 숙련 > 적중 > 민첩 > 힘
 	["DRUID:feral"] = { dps = 14, exp = 25, hit = 24, agi = 2.25, str = 2.0, ap = 1, fap = 1, crit = 25, haste = 10, sta = 0.2, armor = 0.02 },
 	-- 야성(곰): 방어도 > 방어 숙련(440) > 체력 > 민첩 > 회피 · 위협은 표범과 같은 순서
@@ -88,17 +88,17 @@ local W = {
 	["DRUID:resto"] = Caster({ heal = 1, sp = 1, int = 0.75, spi = 0.7, mp5 = 1.5, scrit = 6, haste = 5, sta = 0.1 }),
 	-- 성기사 신성: 치유량 > 지능 > 정신력 > 마나 회복 > 치명타
 	["PALADIN:holy"] = Caster({ heal = 1, sp = 1, int = 0.8, spi = 0.65, mp5 = 1.4, scrit = 7, haste = 5, sta = 0.1 }),
-	-- 보호: 체력 > 방어 숙련(440) > 주문력 > 지능 > 힘
-	["PALADIN:prot"] = { sta = 1.6, def = 1.4, sp = 0.8, int = 0.5, str = 0.4, armor = 0.08, bv = 0.3, block = 3, dodge = 8, parry = 8,
+	-- 보호: 체력 > 주문력 > 지능 > 힘 > 방패 막기 > 방어 숙련 (Icy Veins 2026-11)
+	["PALADIN:prot"] = { sta = 1.6, sp = 0.8, int = 0.5, str = 0.4, armor = 0.08, bv = 0.3, block = 3, def = 0.3, dodge = 8, parry = 8,
 		hit = 6, exp = 4, dps = 3, crit = 4, shit = 4 },
 	-- 징벌(봉인 해제 빌드): 무기 공격력 > 적중(8%) > 숙련(6.5%) > 힘 > 주문력
 	["PALADIN:ret"] = { dps = 16, hit = 26, exp = 22, str = 2.0, sp = 0.6, crit = 20, agi = 1.0, ap = 1, int = 0.3, haste = 12, sta = 0.2, armor = 0.01 },
 	-- 징벌(신성 충격 빌드): 무기 공격력 > 적중 > 주문력 > 치명타 > 숙련
 	["PALADIN:retshock"] = { dps = 12, hit = 24, sp = 1.3, sdmg = 1.3, crit = 18, exp = 14, str = 1.4, agi = 0.8, ap = 0.7, int = 0.4, haste = 10, sta = 0.2, armor = 0.01 },
-	-- 주술사 정기: 주문력 > 적중(17%) > 치명타 > 지능 > 마나 회복
-	["SHAMAN:ele"] = Caster({ sp = 1, sdmg = 1, shit = 12, scrit = 9, int = 0.4, mp5 = 0.8, haste = 9, spen = 0.5, spi = 0.1, sta = 0.1 }),
-	-- 고양: 무기 공격력 > 적중 > 숙련 > 지능(전투력 75%) > 힘 > 주문력
-	["SHAMAN:enh"] = { dps = 14, hit = 24, exp = 22, int = 2.1, str = 2.0, sp = 0.7, crit = 18, agi = 0.8, ap = 1, haste = 12, sta = 0.2, armor = 0.01 },
+	-- 주술사 정기: 주문력 > 적중(17%) > 치명타 > 지능 > 마나 회복 > 정신력
+	["SHAMAN:ele"] = Caster({ sp = 1, sdmg = 1, shit = 12, scrit = 9, int = 0.4, mp5 = 0.35, haste = 9, spen = 0.5, spi = 0.1, sta = 0.1 }),
+	-- 고양: 무기 공격력 > 적중 > 숙련 > 힘 ≥ 지능 (11-12 핫픽스로 정신 기민함 전환 150% → 100%) > 주문력 · 치명 · 민첩은 덤
+	["SHAMAN:enh"] = { dps = 14, hit = 24, exp = 22, str = 2.0, int = 1.8, sp = 0.7, crit = 18, agi = 0.8, ap = 1, haste = 12, sta = 0.2, armor = 0.01 },
 	-- 복원: 치유량 > 치명타 > 지능 > 정신력 > 마나 회복
 	["SHAMAN:resto"] = Caster({ heal = 1, sp = 1, scrit = 10, int = 0.65, spi = 0.4, mp5 = 1.2, haste = 6, sta = 0.1 }),
 }
@@ -163,6 +163,45 @@ local function PvP(w, class, spec)
 	for k, m in pairs(prof.mul or {}) do if w[k] then p[k] = w[k] * m end end
 	for k, v in pairs(prof.set or {}) do p[k] = v end
 	p.armor = math.max(p.armor or 0, 0.03)
+	return p
+end
+
+-- 육성(레벨업) 가중치: Icy Veins 포에버 전문화별 레벨업 공략의 Stats 항목 (2026-11-16 확인)
+--  공통: 같은 레벨 몹 상대라 적중 상한이 낮다(근접 5% · 주문 4%, CapAdjust) · 숙련은 레벨업 장비에 드물다
+--  근접 · 사냥꾼: 무기 공격력 > 적중 · 숙련 > 민첩(힘) > 치명 · 쉬는 시간이 줄도록 체력을 조금 더
+--  시전자: 주문력 > 치명 > 지능 > 정신력(레벨업에선 과소평가된 능력치) > 체력 · 냉기 마법사는 적중을 그대로 높게
+--  힐러: 혼자 사냥할 땐 피해도 필요 → 주문력(피해 + 치유)을 치유량보다 위로 · 탱커: 레벨업은 딜 위주 (무기 · 힘 · 적중)
+local LVL_BASE = { set = {}, mul = { hit = 0.7, shit = 0.7, exp = 0.5, haste = 0.8 } }
+local LVL_MELEE = { set = { sta = 0.5, armor = 0.02 }, mul = {} }
+local LVL_CASTER = { set = { sta = 0.35 }, mul = { int = 1.2, spi = 2.5, mp5 = 1.2, crit = 0.9, scrit = 0.9 } }
+local LVL_HEAL = { set = { sp = 1.0, sdmg = 0.6, sta = 0.35 }, mul = { heal = 0.9, spi = 1.0, int = 1.05, mp5 = 1.0 } }
+local LVL_PROFILE = {
+	WARRIOR = LVL_MELEE, ROGUE = LVL_MELEE, HUNTER = { set = { sta = 0.4 }, mul = {} },
+	["PALADIN:ret"] = LVL_MELEE, ["PALADIN:retshock"] = LVL_MELEE, ["SHAMAN:enh"] = LVL_MELEE, ["DRUID:feral"] = LVL_MELEE,
+	MAGE = LVL_CASTER, ["PRIEST:shadow"] = LVL_CASTER, ["DRUID:balance"] = LVL_CASTER, ["SHAMAN:ele"] = LVL_CASTER,
+	-- 흑마법사: 생명력 전환으로 마나를 채워서 정신력보다 체력 · 주문력 > 치명 (고통은 대재앙(Pandemic) 뒤로 치명 ↑)
+	WARLOCK = { set = { sta = 0.45 }, mul = { int = 1.1, spi = 1.5, mp5 = 1.0 } },
+	-- 비전: 주문력 > 지능 > 정신력 > 치명 > 체력 · 화염: 주문력 > 치명 > 지능 > 정신력 > 체력 · 냉기: 적중 > 주문 피해 > …
+	["MAGE:arcane"] = { set = { sta = 0.35, int = 0.6, spi = 0.5 }, mul = { scrit = 0.5, crit = 0.5 } },
+	["MAGE:fire"] = { set = { sta = 0.3, spi = 0.45 }, mul = { int = 1.25 } },
+	["MAGE:frost"] = { set = { sta = 0.35 }, mul = { shit = 1 / 0.7, hit = 1 / 0.7, spi = 2.5, int = 1.2 } },
+	["PRIEST:disc"] = LVL_HEAL, ["PRIEST:holy"] = LVL_HEAL, ["DRUID:resto"] = LVL_HEAL, ["SHAMAN:resto"] = LVL_HEAL,
+	-- 신성 성기사: 레벨업 초반은 근접 평타 비중이 커서 무기 · 적중 · 치명도 본다
+	["PALADIN:holy"] = { set = { sp = 1.0, sta = 0.4, dps = 6, str = 0.8 }, mul = { heal = 0.7, spi = 1.3 } },
+	-- 탱커: 레벨업은 딜이 먼저 (무기 · 힘 · 적중), 방어 능력치는 낮게
+	["WARRIOR:prot"] = { set = { dps = 12, str = 1.8, sta = 0.8, armor = 0.03, def = 0.2, ap = 0.8, crit = 16 }, mul = { dodge = 0.4, parry = 0.4, block = 0.4, bv = 0.6 } },
+	["PALADIN:prot"] = { set = { sta = 1.2, dps = 8, str = 1.0, def = 0.2, armor = 0.03 }, mul = { dodge = 0.4, parry = 0.4, block = 0.5 } },
+	["DRUID:guardian"] = { set = { sta = 0.8, agi = 2.0, str = 1.8, armor = 0.04, def = 0.2, dps = 10, crit = 18 }, mul = { dodge = 0.5 } },
+}
+M.LVL_PROFILE = LVL_PROFILE
+
+local function Lvl(w, class, spec)
+	local prof = LVL_PROFILE[(class or "") .. ":" .. (spec or "")] or LVL_PROFILE[class or ""] or {}
+	local p = {}
+	for k, v in pairs(w) do p[k] = v end
+	for k, m in pairs(LVL_BASE.mul) do if p[k] then p[k] = p[k] * m end end
+	for k, m in pairs(prof.mul or {}) do if p[k] then p[k] = p[k] * m end end
+	for k, v in pairs(prof.set or {}) do p[k] = v end
 	return p
 end
 
@@ -403,14 +442,14 @@ local function CurHit(spell)
 end
 
 -- 적중 상한을 이미 넘겼으면 적중 가치를 크게 낮춘다 (조금은 남겨서 같은 조건이면 적중 있는 쪽)
-local capCache = { pve = {}, pvp = {} }
--- PvP: 같은 레벨 플레이어 상대 상한 (근접 5% · 주문 4%) · PvE: 보스 상대 (근접 8% · 주문 17%)
-local function CapAdjust(w, class, spec, pvp)
+local capCache = { pve = {}, pvp = {}, lvl = {} }
+-- PvE: 보스 상대 (근접 8% · 주문 17%) · PvP · 육성: 같은 레벨 상대 (근접 5% · 주문 4%)
+local function CapAdjust(w, class, spec, prof)
 	local spell = SPELL_HIT[class] or SPELL_HIT[class .. ":" .. spec]
-	local cap = pvp and (spell and 4 or 5) or (spell and 17 or 8)
+	local cap = prof == "pve" and (spell and 17 or 8) or (spell and 4 or 5)
 	local over = CurHit(spell) >= cap
 	if not over then return w, "" end
-	local cc = capCache[pvp and "pvp" or "pve"]
+	local cc = capCache[prof] or capCache.pve
 	cc[w] = cc[w] or (function()
 		local p = {}
 		for k, v in pairs(w) do p[k] = v end
@@ -421,55 +460,70 @@ local function CapAdjust(w, class, spec, pvp)
 	return cc[w], "cap"
 end
 
--- 가중치 만들기: 특성 표 → 적중 상한 (PvE · PvP 기준) → PvP 면 직업별 PvP 가중치
-local pvpCache = {}
-local function Build(class, spec, wkey, pvp)
+-- 가중치 만들기: 특성 표 → 적중 상한 (기준마다) → PvP · 육성이면 그 기준 가중치
+--  기준(prof): "pve" 레이드 · "pvp" · "lvl" 육성(레벨업)
+local profCache = { pvp = {}, lvl = {} }
+local function Build(class, spec, wkey, prof)
 	local w = W[wkey]
 	if not w then return end
 	local sig
-	w, sig = CapAdjust(w, class, spec, pvp)
-	if pvp then
-		pvpCache[w] = pvpCache[w] or PvP(w, class, wkey:match(":(.+)$"))
-		w = pvpCache[w]
+	w, sig = CapAdjust(w, class, spec, prof)
+	local sk = wkey:match(":(.+)$")
+	if prof == "pvp" then
+		profCache.pvp[w] = profCache.pvp[w] or PvP(w, class, sk)
+		w = profCache.pvp[w]
+	elseif prof == "lvl" then
+		profCache.lvl[w] = profCache.lvl[w] or Lvl(w, class, sk)
+		w = profCache.lvl[w]
 	end
-	return w, wkey .. sig .. (pvp and "#pvp" or "")
+	return w, wkey .. sig .. "#" .. prof
+end
+
+-- 지금 기준: 점수 방식이 PvP 면 PvP, 아니면 만렙 전엔 육성 · 만렙이면 PvE(레이드)
+function M:Profile()
+	if self:Mode() == "pvp" then return "pvp" end
+	if (UnitLevel("player") or 60) < 60 then return "lvl" end
+	return "pve"
+end
+
+local function WKey(class, spec)
+	local wkey = (class or "") .. ":" .. (spec or "")
+	if class == "PALADIN" and spec == "ret" and specCache.shock and not (Ink.cdb and Ink.cdb.scoreSpec) then wkey = "PALADIN:retshock" end
+	return wkey
 end
 
 local weightSig = ""
 function M:Weights()
 	local class, spec = self:Spec()
-	local wkey = (class or "") .. ":" .. (spec or "")
-	if class == "PALADIN" and spec == "ret" and specCache.shock and not (Ink.cdb and Ink.cdb.scoreSpec) then wkey = "PALADIN:retshock" end
-	local w, sig = Build(class, spec, wkey, self:Mode() == "pvp")
+	local prof = self:Profile()
+	local w, sig = Build(class, spec, WKey(class, spec), prof)
 	if not w then return end
 	weightSig = sig
-	return w, class, spec
+	return w, class, spec, prof
 end
 
--- 고른 특성의 가중치 (지금 내 특성이면 Weights 와 같음)
--- 특성 뒤에 "#pvp" 를 붙이면 점수 방식 설정과 상관없이 PvP 가중치 (BIS 판 PvP 보기)
-local function SplitPvP(spec)
-	if type(spec) == "string" and spec:find("#pvp$") then return (spec:gsub("#pvp$", "")), true end
-	return spec, false
+-- 특성 뒤에 "#pvp" · "#pve" · "#lvl" 을 붙이면 그 기준으로 (BIS 판 보기: PvP · PvE · 육성)
+local function SplitProfile(spec)
+	if type(spec) == "string" then
+		local base, prof = spec:match("^(.-)#(%a+)$")
+		if base and (prof == "pvp" or prof == "pve" or prof == "lvl") then return base, prof end
+	end
+	return spec, nil
 end
-M.SplitPvP = SplitPvP
+M.SplitProfile = SplitProfile
+M.SplitPvP = function(spec) local b, p = SplitProfile(spec) return b, p == "pvp" end
 
 function M:WeightsFor(spec)
-	local force
-	spec, force = SplitPvP(spec)
+	local prof
+	spec, prof = SplitProfile(spec)
 	local class, cur = self:Spec()
-	local pvp = force or self:Mode() == "pvp"
-	if not spec or spec == cur then
-		if not force then
-			local w = self:Weights()
-			return w, weightSig
-		end
-		spec = cur
-		local wkey = (class or "") .. ":" .. (spec or "")
-		if class == "PALADIN" and spec == "ret" and specCache.shock and not (Ink.cdb and Ink.cdb.scoreSpec) then wkey = "PALADIN:retshock" end
-		return Build(class, spec, wkey, true)
+	if (not spec or spec == "" or spec == cur) and not prof then
+		local w = self:Weights()
+		return w, weightSig
 	end
-	return Build(class, spec, (class or "") .. ":" .. spec, pvp)
+	if not spec or spec == "" then spec = cur end
+	local wkey = spec == cur and WKey(class, spec) or ((class or "") .. ":" .. spec)
+	return Build(class, spec, wkey, prof or self:Profile())
 end
 
 function M:ProfileName()
@@ -477,7 +531,8 @@ function M:ProfileName()
 	local name = SPEC_NAME[spec or ""] or ""
 	if class == "PALADIN" and spec == "ret" and specCache.shock then name = name .. "(신성 충격)" end
 	if class == "DRUID" and spec == "guardian" then name = "야성(곰)" end
-	return name .. " " .. (UnitClass("player") or "") .. " · " .. (self:Mode() == "pvp" and "PvP" or "PvE")
+	local prof = self:Profile()
+	return name .. " " .. (UnitClass("player") or "") .. " · " .. (prof == "pvp" and "PvP" or (prof == "lvl" and "육성" or "PvE"))
 end
 
 -------------------------------------------------------------------------------
@@ -520,58 +575,213 @@ local function IsRed(c)
 	return c and c.r and c.r > 0.95 and c.g < 0.2 and c.b < 0.2
 end
 
--- 장착 효과 문장에서 숫자 뽑기 (한글 / 영어)
-local EFFECTS = {
-	{ "주문.-적중", "spell.-hit", "shit", true },
-	{ "주문.-치명", "spell.-critical", "scrit", true },
-	{ "적중", "chance to hit", "hit", true },
-	{ "치명타", "critical strike", "crit", true },
+-------------------------------------------------------------------------------
+-- 착용 · 사용 · 적중 시 효과 문장 읽기
+--  포에버는 클래식 장비의 능력치형 착용 효과(전투력 +40, 적중 +1% …)를 대부분 초록 능력치 줄로 바꿨다 (GetItemStats).
+--  남은 착용 효과(게임 자료 861개 아이템, 2026-11-16 추출)는 아래 종류로 읽는다:
+--   능력치 문장 · 지역 / 상태 조건 문장 · 파티 오라 · 발동(확률) · 사용 효과(장신구) · 이동 속도 · 은신 · 군중 제어 저항 ·
+--   소환수 강화 · 반사 피해 · 위협 수준 · 직업 주문 강화(직업 전용 장비)
+--  사실만 기억해 두고(ReadTooltip), 점수는 기준(PvE · PvP · 육성)마다 따로 계산한다 (EffectPoints).
+-------------------------------------------------------------------------------
+-- 능력치 문장 (위에서부터 먼저 맞는 것) · { 한글, 영어, 키, % 단위 }
+local STAT_PATS = {
+	{ "변신 상태일 때 전투력", "in cat, bear", "fap" },
 	{ "원거리 전투력", "ranged attack power", "rap" },
-	{ "공격 전투력", "attack power", "ap" },
+	{ "전투력", "attack power", "ap" },
+	{ "주문 극대화", "spell critical", "scrit", true },
+	{ "극대화율", "critical strike", "crit", true },
+	{ "치명타", "critical strike", "crit", true },
+	{ "주문의 적중", "hit with spells", "shit", true },
+	{ "주문 적중", "spell hit", "shit", true },
+	{ "적중", "chance to hit", "hit", true },
+	{ "숙련", "expertise", "exp", true },
 	{ "피해와 치유", "damage and healing", "sp" },
 	{ "치유량", "healing done", "heal" },
-	{ "5초마다.-마나", "mana per 5", "mp5" },
-	{ "방어 숙련", "defense", "def" },
+	{ "주문 및 효과에 의한 피해", "damage done by spells", "sdmg" },
+	{ "주문 및 효과에 의한 공격력", "spell damage", "sdmg" },
+	{ "주문과 효과의 피해", "spell damage", "sdmg" },
 	{ "회피", "dodge", "dodge", true },
 	{ "무기 막기", "parry", "parry", true },
+	{ "방패로 공격을 막을", "block attacks", "block", true },
+	{ "방패 막기 확률", "chance to block", "block", true },
+	{ "피해 방어량", "block value", "bv" },
+	{ "방어 숙련", "defense", "def" },
+	{ "방어도", "armor", "armor" },
+	{ "주문 시전 속도", "casting speed", "haste", true },
+	{ "공격 속도", "attack speed", "haste", true },
+	{ "모든 능력치", "all stats", "all" },
+	{ "정신력", "spirit", "spi" },
+	{ "지능", "intellect", "int" },
+	{ "민첩", "agility", "agi" },
+	{ "체력", "stamina", "sta" },
+	{ "힘", "strength", "str" },
 }
--- 내 능력치를 올리는 효과만 (예: "자신에게 걸리는 침묵 효과의 적중률이 4% 감소" 는 적중이 아니라 방어 효과)
-local function Positive(text, low)
-	if text:find("감소") or text:find("걸리는") or text:find("받는") or low:find("decreas") or low:find("reduc")
-		or low:find("against you") or low:find("you are hit") then return false end
-	return text:find("증가") or text:find("향상") or low:find("increas") or low:find("improv")
-end
--- 계열 주문 공격력: 한글 "비전 주문 효과에 의한 공격력이 최대 9만큼" · 영어 "damage done by Arcane spells and effects by up to 9"
+M.STAT_PATS = STAT_PATS
 local SCHOOLS = { { "비전", "arcane" }, { "화염", "fire" }, { "냉기", "frost" }, { "자연", "nature" }, { "암흑", "shadow" }, { "신성", "holy" } }
-local function ParseSchool(text, low, out)
-	local ko = text:find("주문") and (text:find("공격력") or text:find("피해")) and not text:find("치유")
-	local en = low:find("damage done by %a+ spells")
-	if not (ko or en) or not Positive(text, low) then return false end
-	for _, sc in ipairs(SCHOOLS) do
-		if (ko and text:find(sc[1] .. "%s*주문")) or (en and low:find("by " .. sc[2] .. " spells", 1, true)) then
-			local n = tonumber(text:match("(%d+)"))
-			if n then
-				out["sch_" .. sc[2]] = (out["sch_" .. sc[2]] or 0) + n
-				return true
-			end
+local WEAPON_SKILL = { "단검", "도검", "도끼", "둔기", "장착 무기", "장창", "지팡이", "활", "총", "석궁", "양손" }
+
+local function Num(t)
+	return tonumber(t:match("(%d+%.?%d*)%%")) or tonumber(t:match("([%d%.]+)만큼")) or tonumber(t:match("%+%s*(%d+%.?%d*)"))
+		or tonumber(t:match("(%d+%.?%d*)"))
+end
+
+-- 문장 하나에서 능력치 하나 (키, 값) · 감소 문장은 버린다 (단, 주문 관통은 "저항력을 … 감소")
+local function StatOf(t)
+	local low = t:lower()
+	if t:find("마법 저항력을 [%d%.]+만큼 관통") or t:find("저항력을 관통") or t:find("주문 관통") or (t:find("대상의") and t:find("저항력을") and t:find("감소"))
+		or low:find("spell penetration") then
+		return "spen", Num(t)
+	end
+	if (t:find("매초마다") or t:find("매 초마다")) and t:find("마나") then return "mp5", (Num(t) or 0) * 5 end
+	if t:find("5초마다") or t:find("5초 마다") or low:find("per 5") or low:find("every 5 sec") then
+		if t:find("마나") or low:find("mana") then return "mp5", Num(t:gsub("5초", "")) end
+		if t:find("생명력") or low:find("health") then return "hp5", Num(t:gsub("5초", "")) end
+	end
+	local neg = t:find("감소") or t:find("걸리는") or t:find("받는") or low:find("decreas") or low:find("reduc")
+	if neg then return nil end
+	if not (t:find("증가") or t:find("향상") or t:find("%+") or low:find("increas") or low:find("improv")) then return nil end
+	-- 계열 주문 공격력 ("화염 주문과 효과에 의한 공격력이 최대 N")
+	if t:find("주문") and (t:find("공격력") or t:find("피해")) and not t:find("치유") then
+		for _, sc in ipairs(SCHOOLS) do
+			if t:find(sc[1] .. "%s*주문") or low:find(sc[2] .. " spells", 1, true) then return "sch_" .. sc[2], Num(t) end
 		end
 	end
+	-- 무기 숙련도 (+N) · 자물쇠 따기 · 낚시 같은 전문 기술은 빼고
+	if t:find("숙련도") and not t:find("방어") then
+		for _, w in ipairs(WEAPON_SKILL) do
+			if t:find(w, 1, true) then return "wskill", Num(t) end
+		end
+		return nil
+	end
+	for _, e in ipairs(STAT_PATS) do
+		if t:find(e[1], 1, true) or low:find(e[2], 1, true) then
+			local n = e[4] and tonumber(t:match("(%d+%.?%d*)%%")) or Num(t)
+			if e[4] and not t:find("%%") then n = nil end
+			if n then return e[3], n end
+			return nil
+		end
+	end
+end
+M.StatOf = StatOf
+
+-- 지역 · 상태 조건 (그때만 켜지는 효과는 일부만 친다)
+local function Condition(t)
+	if t:find("지역에서") or t:find("숲 및 초원") or t:find("숲과 초원") or t:find("에서는") then return 0.25 end
+	if t:find("변신 상태일 때") then return 1 end -- 야성 전투력 (드루이드는 늘 변신해서 싸운다)
+	if t:find("활성화된 동안") or t:find("걸리면") or t:find("상태일 때") or t:find("체력이 %d+%%") then return 0.5 end
+	return 1
+end
+
+local function Sentences(t)
+	local out = {}
+	for raw in (t .. " "):gmatch("(.-%.)%s") do
+		local part = raw:gsub("^%s+", "")
+		if part ~= "" then out[#out + 1] = part end
+	end
+	if #out == 0 then out[1] = t end
+	return out
+end
+
+-- 효과 한 줄 → r (effects · utils · procs · uses)
+local PROC_WORDS = { "확률로", "일정 확률", "공격 시", "적중 시", "시전 시", "가격 당했을 때", "가격당했을 때", "공격을 받을 때", "공격을 받으면",
+	"성공했을 때", "했을 경우", "성공하면", "막기에 성공", "적중 당했을 때", "자동 공격이", "의 추가", "chance on hit", "when struck" }
+local function IsProc(t)
+	for _, w in ipairs(PROC_WORDS) do if t:find(w, 1, true) then return true end end
 	return false
 end
-local function ParseEffect(text, out)
-	local low = text:lower()
-	if ParseSchool(text, low, out) then return end
-	for _, e in ipairs(EFFECTS) do
-		if (text:find(e[1]) or low:find(e[2])) and (not e[4] or Positive(text, low)) then
-			-- "0.3%" 같은 소수도 그대로 (예전엔 "3%"로 읽어서 10배가 됐다)
-			local n = tonumber(text:match("(%d+%.?%d*)%%")) or tonumber(text:match("(%d+%.?%d*)"))
-			if n and (not e[4] or text:find("%%")) then
-				out[e[3]] = (out[e[3]] or 0) + n
-				return
-			end
+
+local function ParseProc(t, r)
+	local p = { chance = tonumber(t:match("(%d+%.?%d*)%%의 확률")) }
+	-- 확률 없이 매번 ("근접 공격 시 N의 추가 화염 피해" · "모든 원거리 자동 공격이 …")
+	if not p.chance and not t:find("일정 확률") and (t:find("의 추가") or t:find("자동 공격이")) then p.chance = 100 end
+	-- 특정 지역에서만 ("악몽의 영향을 받는 지역 바깥에서는 효과를 발휘하지 않습니다")
+	p.cond = (t:find("지역 바깥에서는") or t:find("지역에서만") or t:find("에서는 효과를 발휘하지")) and 0.25 or 1
+	local defensive = t:find("가격 당했을 때") or t:find("가격당했을 때") or t:find("공격을 받") or t:find("공격자") or t:find("막기에 성공") or t:find("적중 당했을 때")
+	if t:find("추가 공격") or t:find("추가로 %d* ?회 공격") or t:find("회의 추가") then
+		p.kind, p.n = "extra", tonumber(t:match("(%d+)회")) or 1
+	elseif t:find("초 동안") and not defensive then
+		local body = t:gsub("^.-초 동안", "")
+		body = body:match("^(.-%.)%s") or body -- 첫 문장만 (뒤의 "…영향을 받는 지역 바깥에서는" 같은 조건 문장 빼고)
+		local k, n = StatOf(body)
+		if k and n then p.kind, p.stat, p.n, p.dur = "buff", k, n, tonumber(t:match("(%d+)초 동안")) end
+	end
+	if not p.kind then
+		local d = tonumber(t:match("(%d+)의 [가-힣 ]-피해")) or tonumber(t:match("(%d+)의 추가"))
+		if d and not defensive then
+			p.kind, p.n = "dmg", d
+			p.spell = (t:find("주문") and (t:find("시전") or t:find("적중하여"))) and true or nil
+		elseif t:find("마나를 회복") then
+			p.kind, p.n = "mana", tonumber(t:match("(%d+)의 마나")) or 0
+		elseif defensive then
+			p.kind = "def"
 		end
 	end
+	if p.kind then r.procs[#r.procs + 1] = p return true end
+	return false
 end
+
+local function ParseUtility(t, r, cond)
+	local function U(kind, v) r.utils[#r.utils + 1] = { kind, (v or 1) * cond } end
+	if t:find("은신 감지") then U("detect", Num(t) or 1) return true end
+	if t:find("은신") and (t:find("증가") or t:find("효과가")) and not t:find("감소") then U("stealth", Num(t) or 1) return true end
+	if t:find("탈것") and t:find("속도") then U("mount", Num(t) or 0) return true end
+	if t:find("이동") and t:find("속도") and t:find("증가") then U("speed", Num(t) or 3) return true end
+	if t:find("자신에게 걸리는") or (t:find("지속시간이") and t:find("감소")) or t:find("면역") then U("ccres", Num(t) or 5) return true end
+	if t:find("소환수의") then U("pet", Num(t) or 3) return true end
+	if t:find("공격자에게") then U("reflect", Num(t) or 0) return true end
+	if t:find("위협 수준") then U(t:find("감소") and "threat-" or "threat+", Num(t) or 0) return true end
+	if t:find("전투장") or t:find("검투장") then U("pvpdr", Num(t) or 0) return true end
+	if t:find("저항력") and t:find("증가") then U("res", Num(t) or 0) return true end
+	return false
+end
+
+local function ParseLine(t, kind, r, classItem)
+	t = t:gsub("^[^:]*:%s*", "", 1)
+	if kind == "use" then
+		local dur = tonumber(t:match("(%d+)초 동안")) or tonumber(t:lower():match("for (%d+) sec"))
+		local cd = tonumber(t:match("(%d+)분 재사용")) or tonumber(t:match("재사용 대기시간[^%d]*(%d+)분"))
+		cd = cd and cd * 60 or tonumber(t:match("(%d+)초 재사용")) or 120
+		if dur then
+			local body = t:gsub("^.-초 동안", "")
+			local k, n = StatOf(body)
+			if k and n then r.uses[#r.uses + 1] = { stat = k, n = n, dur = dur, cd = cd } return end
+		end
+		return
+	end
+	local sents = Sentences(t)
+	local first = sents[1]
+	local function ClassMod()
+		if classItem and (first:find("증가") or first:find("감소") or first:find("방지") or first:find("받지 않") or first:find("단축")
+			or first:find("되돌려") or first:find("추가로 생성") or first:find("치유합니다")) then
+			r.utils[#r.utils + 1] = { "classmod", 1 }
+		end
+	end
+	if kind == "proc" or IsProc(t) then
+		if not ParseProc(t, r) then ClassMod() end
+		return
+	end
+	local cond = Condition(first)
+	-- 파티 오라: 나에게도 걸린다 ("주위 X미터 반경에 있는 모든 파티원의 …")
+	local k, n = StatOf(first)
+	if k and n then
+		if k == "all" then
+			for _, s in ipairs({ "str", "agi", "sta", "int", "spi" }) do r.effects[s] = (r.effects[s] or 0) + n * cond end
+		else
+			r.effects[k] = (r.effects[k] or 0) + n * cond
+		end
+		-- "…공격력이 N만큼, 방어도가 N만큼" 같이 한 문장에 둘: 쉼표 뒤를 한 번 더
+		local rest = first:match("만큼,%s*(.+)$")
+		if rest then
+			local k2, n2 = StatOf(rest)
+			if k2 and n2 and k2 ~= "all" then r.effects[k2] = (r.effects[k2] or 0) + n2 * cond end
+		end
+		return
+	end
+	if ParseUtility(first, r, cond) then return end
+	-- 직업 전용 장비의 직업 주문 강화 ("일제 사격의 공격력이 N%만큼 증가" 등)
+	ClassMod()
+end
+M.ParseLine = ParseLine
 
 -- 툴팁 줄: 못 쓰면 "no", 레벨이 모자라면 요구 레벨, 장착 효과 능력치
 local tipCache = {}
@@ -587,7 +797,7 @@ M.ItemCached = ItemCached
 local function ReadTooltip(link)
 	local c = tipCache[link]
 	if c then return c end
-	local r = { effects = {}, pcts = {} }
+	local r = { effects = {}, pcts = {}, utils = {}, procs = {}, uses = {} }
 	if not (C_TooltipInfo and C_TooltipInfo.GetHyperlink) then r.complete = true return r end
 	-- 정보가 없는 아이템의 툴팁을 만들면 게임이 서버에 그 아이템을 묻는다.
 	--  BIS 순위처럼 수백 개를 훑을 때 그렇게 되면 요청이 폭주해서 착용 중인 장비 정보까지 밀려났다
@@ -598,7 +808,15 @@ local function ReadTooltip(link)
 	-- 아이템 정보가 아직 안 왔으면 (줄이 거의 없음) 기억하지 않는다
 	local complete = #data.lines >= 2 and GetItemInfo(link) ~= nil
 	local lp = LevelPattern()
-	local onEquip = ITEM_SPELL_TRIGGER_ONEQUIP
+	local onEquip = ITEM_SPELL_TRIGGER_ONEQUIP or "착용 효과:"
+	local onUse = ITEM_SPELL_TRIGGER_ONUSE or "사용 효과:"
+	local onProc = ITEM_SPELL_TRIGGER_ONPROC or "적중 시:"
+	local classLine = ITEM_CLASSES_ALLOWED and ITEM_CLASSES_ALLOWED:gsub("%%s", ""):gsub("[:%s]+$", "") or "직업"
+	local classItem = false
+	for i2, line in ipairs(data.lines) do
+		local t2 = plain(line.leftText)
+		if i2 > 1 and type(t2) == "string" and t2:find(classLine, 1, true) == 1 then classItem = true end
+	end
 	-- 아직 안 배운 무기 종류는 빨간 줄로 나오지만, 무기 전문가에게 배우면 쓸 수 있는 종류면 못 쓰는 걸로 치지 않는다
 	local learnable, subID = CanLearnWeapon(link)
 	local subName = subID and GetItemSubClassInfo and GetItemSubClassInfo(2, subID)
@@ -620,16 +838,23 @@ local function ReadTooltip(link)
 			if type(rt) == "string" and IsRed(line.rightColor) then
 				if SkillLine(rt) then r.skill = true else r.no = true end
 			end
-			if onEquip and t:find(onEquip, 1, true) then ParseEffect(t, r.effects)
+			if t:find(onEquip, 1, true) == 1 then pcall(ParseLine, t, "equip", r, classItem)
+			elseif t:find(onUse, 1, true) == 1 then pcall(ParseLine, t, "use", r, classItem)
+			elseif t:find(onProc, 1, true) == 1 then pcall(ParseLine, t, "proc", r, classItem)
 			elseif t:find("%%") then
 				-- 포에버 능력치 줄의 % ("적중률 0.3%") → 등급을 % 로 바꿀 때 그대로 쓴다
 				local n = tonumber(t:match("(%d+%.?%d*)%%"))
 				if n then
-					local key = (t:find("주문.-적중") or t:lower():find("spell.-hit")) and "shit"
-						or (t:find("주문.-치명") or t:lower():find("spell.-crit")) and "scrit"
-						or (t:find("적중") or t:lower():find("hit")) and "hit"
-						or (t:find("치명") or t:lower():find("crit")) and "crit"
-						or (t:find("가속") or t:lower():find("haste")) and "haste"
+					local lo = t:lower()
+					local key = (t:find("주문.-적중") or lo:find("spell.-hit")) and "shit"
+						or ((t:find("주문.-치명") or t:find("극대화")) and not t:find("치명타 및") or lo:find("spell.-crit")) and "scrit"
+						or (t:find("적중") or lo:find("hit")) and "hit"
+						or (t:find("치명") or lo:find("crit")) and "crit"
+						or (t:find("가속") or lo:find("haste")) and "haste"
+						or (t:find("숙련") or lo:find("expertise")) and "exp"
+						or (t:find("회피") or lo:find("dodge")) and "dodge"
+						or (t:find("무기 막기") or lo:find("parry")) and "parry"
+						or (t:find("방패 막기") or lo:find("block")) and "block"
 					if key and not r.pcts[key] then r.pcts[key] = n end
 				end
 			end
@@ -661,6 +886,8 @@ local scoreCache = {}
 RATING_IDX = {
 	hit = CR_HIT_MELEE or 6, crit = CR_CRIT_MELEE or 9, shit = CR_HIT_SPELL or 8,
 	scrit = CR_CRIT_SPELL or 11, haste = CR_HASTE_MELEE or 18,
+	-- 숙련 · 회피 · 무기 막기 · 방패 막기도 등급 → % (예전엔 등급 1점을 1% 로 쳐서 크게 부풀었다)
+	exp = CR_EXPERTISE or 24, dodge = CR_DODGE or 3, parry = CR_PARRY or 4, block = CR_BLOCK or 5,
 }
 RatingPct = function(cr, v)
 	if v ~= math.floor(v) then return v end
@@ -679,10 +906,90 @@ local MH_DAGGER = { ["ROGUE:subtlety"] = 0.3, ["ROGUE:assassination"] = 0.6 }
 M.MH_DAGGER = MH_DAGGER
 local MH_LOC = { INVTYPE_WEAPON = true, INVTYPE_WEAPONMAINHAND = true, INVTYPE_2HWEAPON = true }
 function M:MainHandRule(spec)
-	spec = SplitPvP(spec)
+	spec = SplitProfile(spec)
+	if spec == "" then spec = nil end
 	local class, cur = self:Spec()
 	return MH_DAGGER[(class or "") .. ":" .. (spec or cur or "")]
 end
+
+-- 착용 · 사용 · 발동 효과 점수 (기준마다)
+--  단위(unit) = 그 특성 주 능력치 1점의 값 (민첩 · 힘 · 주문력 · 치유량 · 탱커 체력 중 큰 것)
+--  이동 속도 · 은신 · 군중 제어 저항 같은 효용은 "주 능력치 몇 점어치"로 친다 (PvP · 육성에서 크게, 레이드에선 작게)
+local UTIL = {
+	--          레이드  PvP  육성   (값 1당 · 단위 배수)
+	speed    = { 0.15, 1.5, 1.2 },  -- 이동 속도 %
+	mount    = { 0,    0.1, 0.3 },  -- 탈것 속도 %
+	stealth  = { 0.5,  3,   1.5 },  -- 은신 수준 (도적 · 드루이드)
+	detect   = { 0.2,  1,   0.2 },  -- 은신 감지
+	ccres    = { 0.3,  1.5, 0.3 },  -- 군중 제어 저항 %
+	pet      = { 2,    2,   2 },    -- 소환수 강화 % (사냥꾼 · 흑마법사)
+	reflect  = { 0.05, 0.15, 0.25 }, -- 반사 피해 (점)
+	["threat-"] = { 1, 0,   0 },    -- 위협 감소 % (딜러 레이드)
+	["threat+"] = { 0, 0,   0 },
+	pvpdr    = { 0,    3,   0 },    -- 전장 · 투기장 피해 감소 %
+	res      = { 0.1,  0.3, 0.05 }, -- 모든 저항력 (점)
+	classmod = { 8,    8,   8 },    -- 직업 전용 장비의 주문 강화 (한 줄당)
+}
+M.UTIL = UTIL
+local PI = { pve = 1, pvp = 2, lvl = 3 }
+local STEALTHY = { ROGUE = true, DRUID = true }
+local PETS = { HUNTER = true, WARLOCK = true }
+local TANK_SPEC = { ["WARRIOR:prot"] = true, ["PALADIN:prot"] = true, ["DRUID:guardian"] = true }
+
+local function Unit(w)
+	return math.max(w.agi or 0, w.str or 0, w.sp or 0, w.heal or 0, (w.sta or 0) >= 1 and w.sta or 0, 0.5)
+end
+
+local function EffectPoints(tip, w, prof, class, wkey)
+	local pi = PI[prof] or 1
+	local unit = Unit(w)
+	local pts = 0
+	local melee = (w.dps or 0) >= 5 or (w.rdps or 0) >= 5
+	local apW = w.ap or ((w.str or 0) / 2) or 0
+	local spW = math.max(w.sdmg or 0, w.sp or 0, w.heal or 0)
+	-- 무기 숙련도: 1점 ≈ 적중 0.2%
+	local ws = tip.effects.wskill
+	if ws and melee then pts = pts + ws * 0.2 * (w.hit or 0) end
+	-- 사용 효과 (장신구): 지속시간 / 재사용 대기시간 만큼 켜져 있다고 보고 평균 · 레벨업 중엔 덜 챙겨 쓴다
+	local useEff = prof == "lvl" and 0.6 or (prof == "pvp" and 1.0 or 0.85)
+	for _, u in ipairs(tip.uses) do
+		local wt = w[u.stat] or (u.stat == "all" and unit) or 0
+		pts = pts + u.n * math.min(1, u.dur / math.max(u.cd, u.dur)) * wt * useEff
+	end
+	-- 발동 효과
+	for _, p in ipairs(tip.procs) do
+		local before = pts
+		if p.kind == "extra" and melee then
+			-- 추가 공격 1% ≈ 전투력 22 (레벨 60 근접 딜 기준)
+			pts = pts + (p.chance or 1.5) * p.n * 22 * apW
+		elseif p.kind == "dmg" then
+			local ppm = p.chance and (p.chance / 100 * 25) or 1
+			local dps = p.n * ppm / 60
+			if p.spell or not melee then pts = pts + dps * 3 * spW else pts = pts + dps * 14 * apW end
+		elseif p.kind == "buff" then
+			pts = pts + p.n * 0.15 * (w[p.stat] or 0)
+		elseif p.kind == "mana" then
+			pts = pts + (p.n or 0) / 60 * 5 * (w.mp5 or 0) * 0.5
+		elseif p.kind == "def" then
+			pts = pts + ((prof == "lvl" or TANK_SPEC[wkey]) and 2 or 0.5) * unit
+		end
+		if (p.cond or 1) < 1 then pts = before + (pts - before) * p.cond end
+	end
+	-- 효용
+	for _, u in ipairs(tip.utils) do
+		local kind, v = u[1], u[2] or 0
+		local row = UTIL[kind]
+		if row then
+			local ok = true
+			if kind == "stealth" then ok = STEALTHY[class] end
+			if kind == "pet" then ok = PETS[class] end
+			if kind == "threat-" and TANK_SPEC[wkey] then ok = false end
+			if ok then pts = pts + v * row[pi] * unit end
+		end
+	end
+	return pts
+end
+M.EffectPoints = EffectPoints
 
 -- spec: 다른 특성 기준으로 점수 (BIS · 던전 전리품에서 특성 아이콘을 눌렀을 때). 없으면 지금 내 특성
 function M:Score(link, asOffhand, spec)
@@ -718,11 +1025,15 @@ function M:Score(link, asOffhand, spec)
 			end
 		end
 	end
-	-- 툴팁에만 있는 장착 효과 (GetItemStats 가 못 읽는 것)
+	-- 툴팁에만 있는 효과 (GetItemStats 가 못 읽는 것): 능력치 문장 · 사용 · 발동 · 효용
 	local tip = ReadTooltip(link)
 	for short, v in pairs(tip.effects) do
-		if not stats[K[short] or ""] then total = total + v * (w[short] or 0) end
+		if short ~= "wskill" and not stats[K[short] or ""] then total = total + v * (w[short] or 0) end
 	end
+	local class = UnitClass and select(2, UnitClass("player"))
+	local prof = (sig and sig:match("#(%a+)$")) or self:Profile()
+	local wkey = sig and sig:match("^(%u+:%a+)") or ""
+	total = total + EffectPoints(tip, w, prof, class, wkey)
 	-- 주장비로 쓸 무기가 단검이 아니면 (잠행 · 암살)
 	if not asOffhand and MH_LOC[loc] then
 		local f = self:MainHandRule(spec)
