@@ -3281,6 +3281,11 @@ local function TipIcon(name, rgb)
 		math.floor(rgb[1] * 255), math.floor(rgb[2] * 255), math.floor(rgb[3] * 255))
 end
 M.TipIcon = TipIcon
+-- 툴팁 글 안의 동그라미 (TipIcon 과 같은 폭 · 아직 안 한 단계)
+local function TipDot(rgb)
+	return string.format("|T%s:12:12:0:-1:64:64:0:64:0:64:%d:%d:%d|t", Ink.tex.ring,
+		math.floor(rgb[1] * 255), math.floor(rgb[2] * 255), math.floor(rgb[3] * 255))
+end
 
 local dqIndex, qdbIndex
 local function Indexes()
@@ -3799,17 +3804,17 @@ local function QuestRow(p, i)
 	r.lvl:SetPoint("LEFT", 6, 0)
 	r.lvl:SetWidth(26)
 	r.title = Ink:Text(r, F.semi, 12, C.text, "LEFT")
-	r.title:SetPoint("TOPLEFT", 40, -8)
-	r.title:SetPoint("RIGHT", -96, 0)
+	r.title:SetPoint("TOPLEFT", 40, -7)
 	r.title:SetWordWrap(false)
 	r.sub = Ink:Text(r, F.sans, 10, C.muted, "LEFT")
-	r.sub:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -4)
+	r.sub:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -6)
 	r.sub:SetPoint("RIGHT", -8, 0)
 	r.sub:SetWordWrap(false)
 	-- 상태 칩: 진행 중 = 노란 바탕 · 보고 가능 = 초록 바탕 · 받을 수 있음 = 초록 테두리 · 완료 = 체크
+	--  칩은 제목 줄 높이 안에만 (아래 설명 줄과 겹치지 않게) · 제목은 칩 앞에서 끊는다
 	r.chip = CreateFrame("Frame", nil, r)
-	r.chip:SetHeight(18)
-	r.chip:SetPoint("TOPRIGHT", -6, -7)
+	r.chip:SetHeight(16)
+	r.chip:SetPoint("TOPRIGHT", -6, -6)
 	r.chip.bg = Ink:Round(r.chip, "BACKGROUND", true, false)
 	r.chip.bg:SetAllPoints()
 	r.chip.bd = Ink:Round(r.chip, "BORDER", true, true)
@@ -3819,6 +3824,7 @@ local function QuestRow(p, i)
 	r.chip.icon:SetPoint("LEFT", 6, 0)
 	r.state = Ink:Text(r.chip, F.semi, 10, C.green, "RIGHT")
 	r.state:SetPoint("RIGHT", -7, 0)
+	r.title:SetPoint("RIGHT", r.chip, "LEFT", -8, 0)
 	r.div = r:CreateTexture(nil, "ARTWORK")
 	r.div:SetColorTexture(1, 1, 1, 0.05)
 	r.div:SetHeight(1)
@@ -3828,7 +3834,7 @@ local function QuestRow(p, i)
 	r.chev = r:CreateTexture(nil, "ARTWORK")
 	r.chev:SetTexture(Ink.icon("Chevron"))
 	r.chev:SetSize(10, 10)
-	r.chev:SetPoint("BOTTOMRIGHT", -10, 8)
+	r.chev:SetPoint("RIGHT", -9, 0)
 	r.chev:Hide()
 	r:SetScript("OnEnter", function(self)
 		self.hl:Show()
@@ -3873,15 +3879,15 @@ local function StepSub(st)
 		if kind == KIND_IN_OBJ then t = "던전 안 물체"
 		elseif (q[13] or 0) > 0 or ((q[11] or 0) ~= 0 and q[7] == 0) then
 			local from = DropFrom(q)
-			t = "아이템으로 시작" .. (from and (" · " .. from .. " 드랍") or "")
-		elseif q[7] > 0 then t = (giver or "NPC") .. (zone and (" · " .. zone) or (kind == KIND_IN_NPC and " · 던전 안" or ""))
+			t = "아이템으로 시작" .. (from and ("  ·  " .. from .. " 드랍") or "")
+		elseif q[7] > 0 then t = (giver or "NPC") .. (zone and ("  ·  " .. zone) or (kind == KIND_IN_NPC and "  ·  던전 안" or ""))
 		else t = zone or "" end
 	else
 		local s2 = M.QuestStep(st.id)
-		t = (s2.npc or "") .. ((s2.npc and s2.zone) and " · " or "") .. (s2.zone or "")
+		t = (s2.npc or "") .. ((s2.npc and s2.zone) and "  ·  " or "") .. (s2.zone or "")
 	end
-	if st.opt then t = (t ~= "" and (t .. " · ") or "") .. "연결 · 선택" end
-	if st.side then t = (t ~= "" and (t .. " · ") or "") .. "갈래 (꼭 안 해도 됨)" end
+	if st.opt then t = (t ~= "" and (t .. "  ·  ") or "") .. "연결 퀘스트 (선택)" end
+	if st.side then t = (t ~= "" and (t .. "  ·  ") or "") .. "갈래 (꼭 안 해도 됨)" end
 	return t
 end
 M.StepSub = StepSub
@@ -3968,8 +3974,10 @@ function M:ChainTip(r)
 	tt:AddLine(" ")
 	for i, st in ipairs(g.chain) do
 		if i > 14 then tt:AddLine("… " .. (#g.chain - 14) .. "단계 더", 0.56, 0.58, 0.61) break end
-		local mark = st.state == "done" and (TipIcon("Check", { 0.44, 0.83, 0.6 }) .. " ")
-			or (st.state == "log" and (TipIcon("Wait", { 1, 0.96, 0.41 }) .. " ") or (st.current and "|cff6FD39A▶|r " or "|cff8E939B·|r "))
+		-- 표시는 모두 같은 크기 그림으로 (글자 ▶ · 는 폭이 달라 줄이 들쭉날쭉했다)
+		local mark = st.state == "done" and TipIcon("Check", { 0.44, 0.83, 0.6 })
+			or (st.state == "log" and TipIcon("Wait", { 1, 0.96, 0.41 }) or (st.current and TipDot({ 0.44, 0.83, 0.6 }) or TipDot({ 0.42, 0.44, 0.48 })))
+		mark = mark .. "  "
 		local tag = st.dung and "  |cffFFD15F던전|r" or ""
 		if st.side then tag = tag .. "  |cff8E939B갈래|r" elseif st.opt then tag = tag .. "  |cff8E939B선택|r" end
 		local dim = st.state == "done" or st.side
@@ -4114,7 +4122,8 @@ function M:PaintChainRow(r, g, y, LC)
 	else
 		sub = (now and now.id ~= g.id) and ("지금: " .. nowT .. "  ·  " .. StepSub(now)) or StepSub(now or g.head)
 	end
-	r.sub:SetPoint("RIGHT", -24, 0)
+	r.sub:SetPoint("RIGHT", -26, 0)
+	r.chip:SetPoint("TOPRIGHT", -24, -6)
 	r.sub:SetText(sub .. (g.nMain > 1 and ("  ·  " .. g.nMain .. "단계") or ""))
 	local stText, col, fill, edge, icon = "", C.muted, 0, 0, nil
 	if g.state == "log" then
@@ -4282,6 +4291,7 @@ function M:PaintQuests()
 		else
 		local q = e.q
 		r.sub:SetPoint("RIGHT", -8, 0)
+		r.chip:SetPoint("TOPRIGHT", -6, -6)
 		r.lvl:SetText(q[2] > 0 and q[2] or "–")
 		local lc = (LC and q[2] > 0) and LC(q[2]) or C.soft
 		r.lvl:SetTextColor(lc[1], lc[2], lc[3], e.state == "done" and 0.4 or 1)
