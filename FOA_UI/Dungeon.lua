@@ -3894,12 +3894,30 @@ M.StepSub = StepSub
 
 -- 타임라인 그림: 화면 픽셀에 맞춘 짝수 크기 (5K · 4K · QHD 처럼 1칸이 정수 픽셀이 아니면 원 · 선이 번지고
 --  점과 고리가 반 픽셀씩 어긋나 보였다) · 모두 같은 중심(x = RAIL)에 짝수 픽셀이라 한가운데가 맞는다
-local RAIL, ROW_S = 20, 34
-local function PxEven(f, u)
+local RAIL, ROW_S = 21, 36
+local function PPU(f)
 	local es = f.GetEffectiveScale and f:GetEffectiveScale()
-	local ppu = (es or 0) * (Ink.physH or 1080) / 768
+	return (es or 0) * (Ink.physH or 1080) / 768
+end
+local function PxEven(f, u)
+	local ppu = PPU(f)
 	if ppu <= 0 then return u end
 	return math.max(2, 2 * math.floor(u * ppu / 2 + 0.5)) / ppu
+end
+-- 원 그림은 그릴 크기에 가까운 원본을 고른다: 128점 원본을 16점으로 줄이면 (UI 그림은 단계별 축소본이 없어서)
+--  점이 팔각형처럼 깨졌다 → 32 · 43 · 128 점 원본 중 그릴 픽셀 이상에서 가장 작은 것
+local TEXDIR = "Interface\\AddOns\\FOA_UI\\Media\\Textures\\"
+local function RoundTex(f, kind, u)
+	local px = u * PPU(f)
+	local sfx = (px <= 0 or px > 43) and "" or (px > 32 and "_q" or "_s")
+	return TEXDIR .. kind .. sfx
+end
+-- 아이콘도 같은 방식 (64 · 42 · 32 점)
+local ICONDIR = "Interface\\AddOns\\FOA_UI\\Media\\Icons\\"
+local function IconTex(f, name, u)
+	local px = u * PPU(f)
+	local sfx = (px <= 0 or px > 42) and "" or (px > 32 and "_q" or "_s")
+	return ICONDIR .. name .. sfx
 end
 local function Snap(t)
 	if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(true); t:SetTexelSnappingBias(0) end
@@ -3934,12 +3952,12 @@ local function StepRow(p, i)
 	r:SetSize(DQ_W - 16, ROW_S)
 	-- 지금 단계 바탕 · 던전 단계 금색 세로 막대
 	r.band = r:CreateTexture(nil, "BACKGROUND")
-	r.band:SetPoint("TOPLEFT", 34, -2)
+	r.band:SetPoint("TOPLEFT", 36, -2)
 	r.band:SetPoint("BOTTOMRIGHT", -6, 2)
 	r.band:SetColorTexture(1, 1, 1, 0.035)
 	r.acc = Snap(r:CreateTexture(nil, "ARTWORK"))
-	r.acc:SetPoint("TOPLEFT", 34, -6)
-	r.acc:SetPoint("BOTTOMLEFT", 34, 6)
+	r.acc:SetPoint("TOPLEFT", 36, -7)
+	r.acc:SetPoint("BOTTOMLEFT", 36, 7)
 	r.acc:SetColorTexture(1, 0.82, 0.38, 0.85)
 	r.hl = r:CreateTexture(nil, "BACKGROUND", nil, 1)
 	r.hl:SetAllPoints()
@@ -3974,7 +3992,7 @@ local function StepRow(p, i)
 	r.glyph = Snap(r:CreateTexture(nil, "OVERLAY"))
 	r.glyph:SetPoint("CENTER", r, "LEFT", RAIL, 0)
 	r.title = Ink:Text(r, F.semi, 11, C.text, "LEFT")
-	r.title:SetPoint("TOPLEFT", 42, -5)
+	r.title:SetPoint("TOPLEFT", 44, -6)
 	r.title:SetWordWrap(false)
 	r.sub = Ink:Text(r, F.sans, 9, C.muted, "LEFT")
 	r.sub:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -4)
@@ -3982,7 +4000,7 @@ local function StepRow(p, i)
 	r.sub:SetWordWrap(false)
 	-- 오른쪽 알약: 지금 할 일(받기 · 진행 중 · 보고하기) · 선택 · 갈래 · 레벨
 	r.pill = Pill(r)
-	r.pill:SetPoint("TOPRIGHT", -8, -4)
+	r.pill:SetPoint("TOPRIGHT", -8, -5)
 	r.title:SetPoint("RIGHT", r.pill, "LEFT", -6, 0)
 	r:SetScript("OnEnter", function(self)
 		self.hl:Show()
@@ -4214,7 +4232,7 @@ local DONE3 = { 0.44, 0.83, 0.55 }
 function M:PaintStep(r, st, first, last, prevDone)
 	r.st, r.e = st, st.e
 	-- 선
-	local w = PxEven(r, 1.5)
+	local w = PxEven(r, 2)
 	for _, t in ipairs({ r.up, r.down }) do t:SetWidth(w) end
 	r.up:ClearAllPoints()
 	r.up:SetPoint("TOP", r, "TOPLEFT", RAIL, 0)
@@ -4233,42 +4251,46 @@ function M:PaintStep(r, st, first, last, prevDone)
 	local nowC = (st.state == "log" and not ready) and C.accent or C.green
 	if st.state == "soon" and st.current then nowC = C.orange end
 	-- 점
-	local function size(t, u) local v = PxEven(r, u); t:SetSize(v, v) end
+	local function size(t, u, kind)
+		local v = PxEven(r, u)
+		t:SetSize(v, v)
+		if kind then t:SetTexture(RoundTex(r, kind, u)) end
+	end
 	r.ring:Hide(); r.core:Hide(); r.glyph:Hide(); r.back:Show()
-	size(r.back, 16)
+	size(r.back, 19, "Disc")
 	if isDone then
-		size(r.glyph, 11)
-		r.glyph:SetTexture(Ink.icon("Check"))
+		size(r.glyph, 12)
+		r.glyph:SetTexture(IconTex(r, "Check", 12))
 		r.glyph:SetVertexColor(DONE3[1], DONE3[2], DONE3[3])
 		r.glyph:Show()
 	elseif st.dung then
 		-- 던전 단계: 금색 문 (지금이면 고리까지 밝게)
-		size(r.glyph, 10)
-		r.glyph:SetTexture(Ink.icon("Door"))
+		size(r.glyph, 11)
+		r.glyph:SetTexture(IconTex(r, "Door", 11))
 		r.glyph:SetVertexColor(GOLD3[1], GOLD3[2], GOLD3[3], now and 1 or 0.85)
 		r.glyph:Show()
-		size(r.ring, 16)
+		size(r.ring, 19, "Ring")
 		r.ring:SetVertexColor(GOLD3[1], GOLD3[2], GOLD3[3], now and 0.95 or 0.4)
 		r.ring:Show()
 	elseif now then
-		size(r.ring, 14)
+		size(r.ring, 17, "Ring")
 		r.ring:SetVertexColor(nowC[1], nowC[2], nowC[3], 0.9)
 		r.ring:Show()
-		size(r.core, 6)
+		size(r.core, 8, "Disc")
 		r.core:SetVertexColor(nowC[1], nowC[2], nowC[3], 1)
 		r.core:Show()
 	else
 		-- 남은 단계 · 선택 · 갈래: 작은 빈 고리
 		local faint = st.opt or st.side
-		size(r.ring, faint and 8 or 10)
+		size(r.ring, faint and 9 or 11, "Ring")
 		r.ring:SetVertexColor(0.6, 0.62, 0.66, faint and 0.35 or 0.6)
 		r.ring:Show()
-		size(r.back, faint and 10 or 12)
+		size(r.back, faint and 11 or 13, "Disc")
 	end
 	-- 지금 단계: 숨 쉬는 빛 + 바탕
 	if now and not isDone then
 		local hc = st.dung and GOLD3 or nowC
-		size(r.halo, 34)
+		size(r.halo, 38)
 		r.halo:SetVertexColor(hc[1], hc[2], hc[3], 1)
 		r.halo:Show()
 		if not r.halo.ag:IsPlaying() then r.halo.ag:Play() end
