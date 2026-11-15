@@ -1,6 +1,7 @@
 -- InkUI · 가방
 --  블리자드 가방 대신 하나로 합친 Ink 가방 창.
 --  분류: 고정(귀환석 + 직접 고정한 아이템) / 아이템(장비) / 소모품 / 재료 / 잡동사니
+--  재료 가방(가방 칸 5번)은 섞지 않고 맨 아래 "재료 가방" 묶음으로 따로 (빈 칸까지 보여서 끌어다 넣을 수 있다)
 --  위쪽 탭으로 분류만 골라 볼 수 있고, 제목 줄을 끌어서 위치를 옮길 수 있다 (저장됨).
 --  칸은 블리자드 ContainerFrameItemButtonTemplate 을 그대로 써서 클릭·사용·끌어놓기·툴팁은 기본과 같다.
 --  전투 중에는 칸을 새로 만들거나 다시 배치하지 않는다 (보안 버튼 오염 방지) → 전투가 끝나면 다시 정리.
@@ -26,6 +27,7 @@ local CATS = {
 }
 local TABS = { { key = "all", name = "전체" } }
 for _, c in ipairs(CATS) do TABS[#TABS + 1] = c end
+TABS[#TABS + 1] = { key = "rbag", name = "재료 가방" }   -- 재료 가방을 낀 때만 보인다
 
 local IC = Enum.ItemClass or {}
 local REAGENT_BAG = Enum.BagIndex and Enum.BagIndex.ReagentBag or 5
@@ -866,13 +868,23 @@ local function Gather()
 	M.missingQ = nil
 	local byCat = {}
 	for _, c in ipairs(CATS) do byCat[c.key] = {} end
+	local rbag = { items = {}, empty = {}, total = 0 }   -- 재료 가방: 따로 모은다
 	local firstFree, free, total = nil, 0, 0
 	for _, bag in ipairs(BagList()) do
 		local n = C_Container.GetContainerNumSlots(bag) or 0
 		local bagFree = 0
+		if bag == REAGENT_BAG then rbag.total = n end
 		for slot = 1, n do
 			local info = C_Container.GetContainerItemInfo(bag, slot)
-			if info and info.itemID then
+			if bag == REAGENT_BAG then
+				if info and info.itemID then
+					local _, _, _, _, _, classID, subID = C_Item.GetItemInfoInstant(info.itemID)
+					rbag.items[#rbag.items + 1] = { bag = bag, slot = slot, itemID = info.itemID, quality = Quality(info),
+						count = info.stackCount or 1, classID = classID, subID = subID, cat = "rbag", subOrder = 0, subName = "" }
+				else
+					rbag.empty[#rbag.empty + 1] = { bag = bag, slot = slot }
+				end
+			elseif info and info.itemID then
 				local _, _, _, _, _, classID, subID = C_Item.GetItemInfoInstant(info.itemID)
 				local it = {
 					bag = bag, slot = slot, itemID = info.itemID, quality = Quality(info),
@@ -892,7 +904,8 @@ local function Gather()
 		end
 	end
 	for _, list in pairs(byCat) do table.sort(list, SortItems) end
-	return byCat, firstFree, free, total
+	table.sort(rbag.items, SortItems)
+	return byCat, firstFree, free, total, rbag
 end
 
 function M:Layout()
@@ -904,13 +917,37 @@ function M:Layout()
 		return
 	end
 	self.dirty = nil
-	local byCat, firstFree, free, total = Gather()
+	local byCat, firstFree, free, total, rbag = Gather()
+	-- 재료 가방 탭: 가방을 낀 때만 · 빼면 전체로
+	local hasR = rbag.total > 0
+	for _, chip in ipairs(f.tabs) do if chip.key == "rbag" then chip:SetShown(hasR) end end
+	if not hasR and self.tab == "rbag" then
+		self.tab = "all"; Ink.db.bagTab = "all"
+		for _, chip in ipairs(f.tabs) do chip:SetOn(chip.key == "all") end
+	end
 
 	-- 칸 모으기 (부족하면 만든다 - 전투 밖에서만)
 	for _, h in ipairs(active) do h:Hide(); h.bag = nil end
 	wipe(active)
 	local y, used, secUsed, subUsed = 0, 0, 0, 0
 	local stride = SLOT + GAP
+	local function place(it, i, cat)
+		used = used + 1
+		local h = holders[used]
+		if not h then
+			h = NewHolder(f.content)
+			holders[used] = h
+		end
+		local col, row = (i - 1) % COLS, math.floor((i - 1) / COLS)
+		h:ClearAllPoints()
+		h:SetPoint("TOPLEFT", f.content, "TOPLEFT", col * stride, y - row * stride)
+		h.bag, h.slot, h.cat = it.bag, it.slot, cat
+		h:SetID(it.bag)
+		h.btn:SetID(it.slot)
+		h:Show()
+		h.btn:Show() -- 템플릿 버튼은 숨겨진 채로 만들어진다
+		active[#active + 1] = h
+	end
 	for _, cat in ipairs(CATS) do
 		local list = byCat[cat.key]
 		if (self.tab == "all" or self.tab == cat.key) and #list > 0 then
@@ -948,24 +985,26 @@ function M:Layout()
 					y = y - 18
 				end
 				i = i + 1
-				used = used + 1
-				local h = holders[used]
-				if not h then
-					h = NewHolder(f.content)
-					holders[used] = h
-				end
-				local col, row = (i - 1) % COLS, math.floor((i - 1) / COLS)
-				h:ClearAllPoints()
-				h:SetPoint("TOPLEFT", f.content, "TOPLEFT", col * stride, y - row * stride)
-				h.bag, h.slot, h.cat = it.bag, it.slot, cat.key
-				h:SetID(it.bag)
-				h.btn:SetID(it.slot)
-				h:Show()
-				h.btn:Show() -- 템플릿 버튼은 숨겨진 채로 만들어진다
-				active[#active + 1] = h
+				place(it, i, cat.key)
 			end
 			y = y - math.ceil(i / COLS) * stride - 8
 		end
+	end
+	-- 재료 가방: 맨 아래 따로 (전체 · 재료 · 재료 가방 탭) · 든 것 → 빈 칸 순서
+	if hasR and (self.tab == "all" or self.tab == "mat" or self.tab == "rbag") then
+		secUsed = secUsed + 1
+		local s = Section(f, secUsed)
+		s:ClearAllPoints()
+		s:SetPoint("TOPLEFT", f.content, "TOPLEFT", 0, y - (self.tab == "rbag" and 0 or 4))
+		s.name:SetText("재료 가방")
+		s.name:SetTextColor(0.44, 0.83, 0.6)
+		s.count:SetText(#rbag.items .. " / " .. rbag.total)
+		s:Show()
+		y = y - SEC_H - (self.tab == "rbag" and 0 or 4)
+		local i = 0
+		for _, it in ipairs(rbag.items) do i = i + 1; place(it, i, "rbag") end
+		for _, it in ipairs(rbag.empty) do i = i + 1; place(it, i, "rbag") end
+		y = y - math.ceil(i / COLS) * stride - 8
 	end
 	for i = secUsed + 1, #f.sections do f.sections[i]:Hide() end
 	for i = subUsed + 1, #f.subs do f.subs[i]:Hide() end
