@@ -3283,20 +3283,48 @@ end
 M.TipIcon = TipIcon
 
 local dqIndex, qdbIndex
--- 퀘스트 → 선행 목록 (던전 퀘스트 자료 + 전체 퀘스트 시작 자료)
-local function PreOf(id)
+local function Indexes()
 	if not dqIndex then
 		dqIndex = {}
 		for _, list in pairs(ns.DUNGEON_QUESTS or {}) do for _, q in ipairs(list) do dqIndex[q[1]] = q end end
 	end
-	local q = dqIndex[id]
-	if q then return q[8], q end
 	if not qdbIndex then
 		qdbIndex = {}
 		for _, r in ipairs(ns.QUEST_DB or {}) do qdbIndex[r[1]] = r end
 	end
+end
+-- 퀘스트 진영 (0 공통 · 1 호드 · 2 얼라 · 모르면 nil)
+local function FacOf(id)
+	Indexes()
+	local q = dqIndex[id]
+	if q then return q[3] end
 	local r = qdbIndex[id]
-	if r then return r[7], nil, r end
+	if r then return r[4] end
+end
+-- 선행 목록에서 다른 진영 퀘스트는 뺀다: 자료의 선행은 "둘 중 하나"(예: 바위감시자 = 얼라 위험한 시도 또는 호드 위험한 시도)가
+--  섞여 있어서, 얼라 캐릭터에게 호드 선행이 늘 "남음"으로 세지고 툴팁에 호드 연퀘가 줄줄이 나왔다
+local preCache, preFac = {}, nil
+local function MyPres(id, list)
+	local fac = UnitFactionGroup and UnitFactionGroup("player")
+	local facN = fac == "Horde" and 1 or (fac == "Alliance" and 2 or 0)
+	if preFac ~= facN then preCache, preFac = {}, facN end
+	local c = preCache[id]
+	if c then return c end
+	c = {}
+	for _, p in ipairs(list or {}) do
+		local f = FacOf(p)
+		if not f or f == 0 or facN == 0 or f == facN then c[#c + 1] = p end
+	end
+	preCache[id] = c
+	return c
+end
+-- 퀘스트 → 선행 목록 (던전 퀘스트 자료 + 전체 퀘스트 시작 자료 · 내 진영만)
+local function PreOf(id)
+	Indexes()
+	local q = dqIndex[id]
+	if q then return MyPres(id, q[8]), q end
+	local r = qdbIndex[id]
+	if r then return MyPres(id, r[7]), nil, r end
 	return {}
 end
 
@@ -3367,8 +3395,8 @@ function M.QuestStep(id)
 	return { title = QTitle(id), npc = npc, zone = zone, lvl = lvl }
 end
 
--- 내가 받을 수 있는 퀘스트 목록 + 상태
-function M:DungeonQuestList(key)
+-- 내가 받을 수 있는 퀘스트 목록 + 상태 (묶기 전)
+local function Entries(key)
 	local inst = DQ_INST[key or ""]
 	local list = inst and ns.DUNGEON_QUESTS and ns.DUNGEON_QUESTS[inst]
 	if not list then return {} end
@@ -3391,7 +3419,7 @@ function M:DungeonQuestList(key)
 			if wing and type(wing[q[1]]) == "table" then e.wingBoss = wing[q[1]] end
 			local miss = 0
 			-- 연결 퀘스트(선택)는 선행으로 세지 않는다
-			for _, p in ipairs(q[8]) do if not QDone(p) and not IsCrumb(p) then miss = miss + 1 end end
+			for _, p in ipairs((PreOf(q[1]))) do if not QDone(p) and not IsCrumb(p) then miss = miss + 1 end end
 			local crumb = IsCrumb(q[1])
 			if QDone(q[1]) then e.state, e.order = "done", 5
 			elseif QInLog(q[1]) then e.state, e.order = "log", 1
@@ -3421,8 +3449,12 @@ function M:DungeonQuestList(key)
 		end
 		out = keep
 	end
-	-- 같은 퀘스트 묶기: 이름이 같은 것(단계 · 아이템별로 나뉜 것)과 직접 묶은 것(DUNGEON_QUEST_GROUP)은 한 줄로
-	--  보여 줄 대표: 진행 중 > 받을 수 있음 > 곧 > 선행 필요 > 완료 순, 같으면 번호가 작은 것
+	return out, list
+end
+
+-- 같은 퀘스트 묶기: 이름이 같은 것(단계 · 아이템별로 나뉜 것)과 직접 묶은 것(DUNGEON_QUEST_GROUP)은 한 줄로
+--  보여 줄 대표: 진행 중 > 받을 수 있음 > 곧 > 선행 필요 > 완료 순, 같으면 번호가 작은 것
+local function MergeSame(out)
 	local groups, merged = {}, {}
 	for _, e in ipairs(out) do
 		local g = ns.DUNGEON_QUEST_GROUP and ns.DUNGEON_QUEST_GROUP[e.id]
@@ -3449,13 +3481,194 @@ function M:DungeonQuestList(key)
 			end
 		end
 	end
-	out = merged
+	return merged
+end
+local function SortEntries(out)
 	table.sort(out, function(a, b)
 		if a.order ~= b.order then return a.order < b.order end
 		if a.lvl ~= b.lvl then return a.lvl < b.lvl end
 		return a.id < b.id
 	end)
 	return out
+end
+
+function M:DungeonQuestList(key)
+	local out = Entries(key)
+	return SortEntries(MergeSame(out))
+end
+
+-- 던전 안에서 하는 단계인지: 던전 안 NPC · 물체 · 드랍에서 시작 · 아이템으로 시작 · 던전 보스 근처 메모 · 바깥 자리가 없음
+local function IsDungeonStep(q)
+	if not q then return false end
+	local kind = q[14] or 0
+	if kind == KIND_IN_NPC or kind == KIND_IN_OBJ or kind == KIND_DROP then return true end
+	if (q[13] or 0) > 0 or (q[11] or 0) ~= 0 then return true end
+	local nt = DQNote(q[1])
+	if nt and nt[1] and nt[1] > 0 then return true end
+	return (q[4] or 0) == 0 and (q[7] or 0) == 0
+end
+M.IsDungeonStep = IsDungeonStep
+
+-- 연속 퀘스트 묶기: 선행으로 이어진 퀘스트들(던전 밖 선행까지)을 한 줄로 · 펼치면 단계별 (타임라인)
+--  대표 = 마지막 던전 단계 · 상태 = 지금 해야 할 단계 기준
+--  단계 { id, e(이 던전 목록에 있으면), ext(던전 밖 선행), side(본줄기가 아닌 갈래), opt(연결 · 선택), dung(던전 안) }
+local function BuildChain(comp, inSet, byId)
+	-- 깊이: 같은 묶음 안 선행의 깊이 + 1
+	local depth = {}
+	local function D(id, guard)
+		if depth[id] then return depth[id] end
+		if guard > 30 then return 0 end
+		local d = 0
+		for _, p in ipairs((PreOf(id))) do
+			if inSet[p] then d = math.max(d, D(p, guard + 1) + 1) end
+		end
+		depth[id] = d
+		return d
+	end
+	for _, id in ipairs(comp) do D(id, 0) end
+	-- 마지막(가장 깊은) 퀘스트와 그 조상 = 본줄기 · 나머지는 갈래 (예: 수정점의 유리병 다시 받기)
+	local final
+	for _, id in ipairs(comp) do
+		if not final or depth[id] > depth[final] or (depth[id] == depth[final] and id < final) then final = id end
+	end
+	local anc = { [final] = true }
+	local function A(id, guard)
+		if guard > 30 then return end
+		for _, p in ipairs((PreOf(id))) do
+			if inSet[p] and not anc[p] then anc[p] = true; A(p, guard + 1) end
+		end
+	end
+	A(final, 0)
+	-- 던전 밖 선행 (처음부터 순서대로)
+	local steps, seen = {}, {}
+	local roots = {}
+	for _, id in ipairs(comp) do roots[#roots + 1] = id end
+	table.sort(roots, function(a, b) if depth[a] ~= depth[b] then return depth[a] < depth[b] end return a < b end)
+	for _, id in ipairs(roots) do
+		local ch = {}
+		Chain(id, ch, {}, 0)
+		for _, p in ipairs(ch) do
+			if not inSet[p] and not seen[p] then
+				seen[p] = true
+				steps[#steps + 1] = { id = p, ext = true, opt = IsCrumb(p) and true or false, side = not anc[id] }
+			end
+		end
+	end
+	local body = {}
+	for _, id in ipairs(comp) do
+		local e = byId[id]
+		body[#body + 1] = { id = id, e = e, side = not anc[id], opt = e and e.crumb and true or false, dung = IsDungeonStep(e and e.q), depth = depth[id] }
+	end
+	table.sort(body, function(a, b)
+		if a.depth ~= b.depth then return a.depth < b.depth end
+		if a.side ~= b.side then return not a.side end
+		return a.id < b.id
+	end)
+	for _, st in ipairs(body) do steps[#steps + 1] = st end
+	return steps
+end
+
+-- 단계 하나의 상태: done · log · ok · soon
+local function StepState(st, lvl)
+	if QDone(st.id) then return "done" end
+	if QInLog(st.id) then return "log" end
+	local need
+	if st.e then need = st.e.q[2] else
+		local _, dq, qr = PreOf(st.id)
+		need = dq and dq[2] or (qr and qr[3])
+	end
+	if need and need > lvl then return "soon", need end
+	return "ok"
+end
+M.StepState = StepState
+
+function M:DungeonQuestView(key)
+	local out = Entries(key)
+	local byId, inSet = {}, {}
+	for _, e in ipairs(out) do byId[e.id] = e; inSet[e.id] = true end
+	-- 묶음 나누기 (선행으로 이어진 것끼리)
+	local parent = {}
+	local function F(x) while parent[x] and parent[x] ~= x do x = parent[x] end return x end
+	for _, e in ipairs(out) do parent[e.id] = parent[e.id] or e.id end
+	for _, e in ipairs(out) do
+		for _, p in ipairs((PreOf(e.id))) do
+			if inSet[p] then
+				local a, b = F(e.id), F(p)
+				if a ~= b then parent[a] = b end
+			end
+		end
+	end
+	local comps, order = {}, {}
+	for _, e in ipairs(out) do
+		local r = F(e.id)
+		if not comps[r] then comps[r] = {}; order[#order + 1] = r end
+		table.insert(comps[r], e.id)
+	end
+	local lvl = UnitLevel("player") or 1
+	local singles, view = {}, {}
+	for _, r in ipairs(order) do
+		local comp = comps[r]
+		local steps = BuildChain(comp, inSet, byId)
+		if #steps < 2 then
+			for _, id in ipairs(comp) do singles[#singles + 1] = byId[id] end
+		else
+			-- 던전 단계를 못 찾으면(바깥 NPC 가 주고 목표만 던전 안) 본줄기의 마지막 던전 목록 퀘스트를 던전 단계로
+			local anyDung
+			for _, st in ipairs(steps) do if st.dung and not st.side then anyDung = true break end end
+			if not anyDung then
+				for i = #steps, 1, -1 do
+					local st = steps[i]
+					if st.e and not st.side and not st.opt then st.dung = true break end
+				end
+			end
+			-- 대표 · 지금 단계 · 상태
+			local head, cur, curDung, nMain, nDone, anyLog
+			for i, st in ipairs(steps) do
+				st.state, st.need = StepState(st, lvl)
+				if st.state == "log" then anyLog = st end
+				if not st.side and not st.opt then
+					nMain = (nMain or 0) + 1
+					if st.state == "done" then nDone = (nDone or 0) + 1
+					elseif not cur then cur = i end
+					if st.dung then head = st end
+					if st.dung and st.state ~= "done" and cur and not curDung then curDung = i end
+				end
+			end
+			if not head then
+				for i = #steps, 1, -1 do if not steps[i].side and steps[i].e then head = steps[i] break end end
+			end
+			head = head or steps[#steps]
+			local he = head.e or { id = head.id, lvl = 0 }
+			local g = { chain = steps, id = head.id, q = he.q, lvl = (he.q and he.q[2]) or 0, head = head,
+				nMain = nMain or #steps, nDone = nDone or 0, key = "c" .. head.id }
+			if cur then steps[cur].current = true end
+			if not cur then
+				g.state, g.order = "done", 5
+			elseif anyLog then
+				g.state, g.order, g.now = "log", 1, anyLog
+			elseif not curDung then
+				-- 던전 단계는 다 끝났고 후속만 남음
+				g.state, g.order, g.now = "after", 4.2, steps[cur]
+				local n = 0
+				for _, st in ipairs(steps) do if not st.side and not st.opt and st.state ~= "done" then n = n + 1 end end
+				g.left = n
+			elseif cur == curDung then
+				local st = steps[cur]
+				g.now = st
+				if st.state == "soon" then g.state, g.order = "soon", 3 else g.state, g.order = "ok", 2 end
+			else
+				local n = 0
+				for i = cur, curDung - 1 do
+					local st = steps[i]
+					if not st.side and not st.opt and st.state ~= "done" then n = n + 1 end
+				end
+				g.state, g.order, g.miss, g.now = "pre", 4, n, steps[cur]
+			end
+			view[#view + 1] = g
+		end
+	end
+	for _, e in ipairs(MergeSame(singles)) do view[#view + 1] = e end
+	return SortEntries(view)
 end
 
 -- 보스 NPC → 그 근처에서 시작하는 (아직 안 끝낸) 퀘스트들 · 진행 중인 게 있으면 .log
@@ -3611,20 +3824,160 @@ local function QuestRow(p, i)
 	r.div:SetHeight(1)
 	r.div:SetPoint("BOTTOMLEFT", 6, 0)
 	r.div:SetPoint("BOTTOMRIGHT", -6, 0)
-	r:SetScript("OnEnter", function(self) self.hl:Show(); M:QuestTip(self) end)
+	-- 연속 퀘스트 줄: 펼치기 · 접기 화살표
+	r.chev = r:CreateTexture(nil, "ARTWORK")
+	r.chev:SetTexture(Ink.icon("Chevron"))
+	r.chev:SetSize(10, 10)
+	r.chev:SetPoint("BOTTOMRIGHT", -10, 8)
+	r.chev:Hide()
+	r:SetScript("OnEnter", function(self)
+		self.hl:Show()
+		if self.chainKey then M:ChainTip(self) else M:QuestTip(self) end
+	end)
 	r:SetScript("OnLeave", function(self) self.hl:Hide(); GameTooltip:Hide() end)
 	r:SetScript("OnClick", function(self)
-		local q = self.e and self.e.q
-		local Q = Ink.modules.QuestMap
-		if q and q[4] > 0 and Q and Q.Waypoint then
-			Q:Waypoint({ mapID = q[4], wx = q[5] / 100, wy = q[6] / 100 })
-		elseif q and Q and Q.Waypoint then
-			local nt = DQNote(q[1])
-			if nt and nt[3] then Q:Waypoint({ mapID = nt[3], wx = nt[4] / 100, wy = nt[5] / 100 }) end
+		if self.chainKey then
+			Ink.db.dqOpen = Ink.db.dqOpen or {}
+			Ink.db.dqOpen[self.chainKey] = not Ink.db.dqOpen[self.chainKey] or nil
+			M:PaintQuests()
+			return
 		end
+		M.QuestWaypoint(self.e and self.e.q, self.e and self.e.id)
 	end)
 	p.rows[i] = r
 	return r
+end
+
+-- 퀘스트 시작(또는 보고) 자리를 지도에: 던전 목록 자료 → 메모 → 전체 퀘스트 자료
+function M.QuestWaypoint(q, id)
+	local Q = Ink.modules.QuestMap
+	if not (Q and Q.Waypoint) then return end
+	if q and q[4] > 0 then
+		Q:Waypoint({ mapID = q[4], wx = q[5] / 100, wy = q[6] / 100 })
+	elseif q then
+		local nt = DQNote(q[1])
+		if nt and nt[3] then Q:Waypoint({ mapID = nt[3], wx = nt[4] / 100, wy = nt[5] / 100 }) end
+	elseif id and Q.GiverSpot then
+		local sp = Q.GiverSpot(id)
+		if sp then Q:Waypoint({ mapID = sp[1], wx = sp[2], wy = sp[3] }) end
+	end
+end
+
+-- 단계 한 줄 설명: 누구에게서 · 어디서 (던전 안 · 아이템 · 물체)
+local function StepSub(st)
+	local t
+	if st.e then
+		local q = st.e.q
+		local kind = q[14] or 0
+		local giver, zone = NpcOf(q[7]), ZoneName(q[4])
+		if kind == KIND_IN_OBJ then t = "던전 안 물체"
+		elseif (q[13] or 0) > 0 or ((q[11] or 0) ~= 0 and q[7] == 0) then
+			local from = DropFrom(q)
+			t = "아이템으로 시작" .. (from and (" · " .. from .. " 드랍") or "")
+		elseif q[7] > 0 then t = (giver or "NPC") .. (zone and (" · " .. zone) or (kind == KIND_IN_NPC and " · 던전 안" or ""))
+		else t = zone or "" end
+	else
+		local s2 = M.QuestStep(st.id)
+		t = (s2.npc or "") .. ((s2.npc and s2.zone) and " · " or "") .. (s2.zone or "")
+	end
+	if st.opt then t = (t ~= "" and (t .. " · ") or "") .. "연결 · 선택" end
+	if st.side then t = (t ~= "" and (t .. " · ") or "") .. "갈래 (꼭 안 해도 됨)" end
+	return t
+end
+M.StepSub = StepSub
+
+local STEP_COL = { done = { 0.44, 0.83, 0.55 }, log = nil, ok = nil, soon = nil }
+local function StepRow(p, i)
+	p.srows = p.srows or {}
+	local r = p.srows[i]
+	if r then return r end
+	r = CreateFrame("Button", nil, p.body)
+	r:SetSize(DQ_W - 16, 32)
+	r.band = r:CreateTexture(nil, "BACKGROUND")
+	r.band:SetPoint("TOPLEFT", 30, -1)
+	r.band:SetPoint("BOTTOMRIGHT", -6, 1)
+	r.band:SetColorTexture(1, 0.82, 0.38, 0.08)
+	r.hl = r:CreateTexture(nil, "BACKGROUND", nil, 1)
+	r.hl:SetAllPoints()
+	r.hl:SetColorTexture(1, 1, 1, 0.04)
+	r.hl:Hide()
+	r.up = r:CreateTexture(nil, "BORDER")
+	r.up:SetWidth(2)
+	r.up:SetPoint("TOP", r, "TOPLEFT", 21, 0)
+	r.up:SetPoint("BOTTOM", r, "LEFT", 21, 0)
+	r.down = r:CreateTexture(nil, "BORDER")
+	r.down:SetWidth(2)
+	r.down:SetPoint("TOP", r, "LEFT", 21, 0)
+	r.down:SetPoint("BOTTOM", r, "BOTTOMLEFT", 21, 0)
+	r.ring = r:CreateTexture(nil, "ARTWORK")
+	r.ring:SetTexture(Ink.tex.ring)
+	r.ring:SetSize(13, 13)
+	r.ring:SetPoint("CENTER", r, "LEFT", 21, 0)
+	r.dot = r:CreateTexture(nil, "ARTWORK", nil, 1)
+	r.dot:SetTexture(Ink.tex.disc)
+	r.dot:SetSize(7, 7)
+	r.dot:SetPoint("CENTER", r.ring)
+	r.mark = r:CreateTexture(nil, "OVERLAY")
+	r.mark:SetSize(9, 9)
+	r.mark:SetPoint("CENTER", r.ring)
+	r.title = Ink:Text(r, F.semi, 11, C.text, "LEFT")
+	r.title:SetPoint("TOPLEFT", 38, -4)
+	r.title:SetPoint("RIGHT", -64, 0)
+	r.title:SetWordWrap(false)
+	r.sub = Ink:Text(r, F.sans, 9, C.muted, "LEFT")
+	r.sub:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -3)
+	r.sub:SetPoint("RIGHT", -8, 0)
+	r.sub:SetWordWrap(false)
+	r.state = Ink:Text(r, F.semi, 9, C.muted, "RIGHT")
+	r.state:SetPoint("TOPRIGHT", -10, -5)
+	r:SetScript("OnEnter", function(self)
+		self.hl:Show()
+		if self.e then M:QuestTip(self) else M:StepTip(self) end
+	end)
+	r:SetScript("OnLeave", function(self) self.hl:Hide(); GameTooltip:Hide() end)
+	r:SetScript("OnClick", function(self) M.QuestWaypoint(self.e and self.e.q, self.st and self.st.id) end)
+	p.srows[i] = r
+	return r
+end
+
+-- 던전 밖 선행 단계 툴팁 (던전 목록 자료가 없는 퀘스트)
+function M:StepTip(r)
+	local st = r.st
+	if not st then return end
+	local s2 = M.QuestStep(st.id)
+	local tt = GameTooltip
+	tt:SetOwner(r, "ANCHOR_RIGHT")
+	tt:AddLine(s2.title or ("#" .. st.id), 1, 1, 1)
+	if s2.lvl and s2.lvl > 0 then tt:AddLine(s2.lvl .. "레벨부터", 0.7, 0.72, 0.75) end
+	if s2.npc or s2.zone then Ink.TipLine(tt, "시작: " .. (s2.npc or "") .. ((s2.npc and s2.zone) and "  ·  " or "") .. (s2.zone or ""), 1, 0.82, 0.32) end
+	if Ink.TimerTipLine then Ink.TimerTipLine(tt, st.id) end
+	tt:AddLine(" ")
+	tt:AddLine(st.state == "done" and "끝냄" or (st.state == "log" and "진행 중" or "던전 밖 선행 퀘스트"), 0.56, 0.58, 0.61)
+	tt:AddLine("클릭: 시작 위치를 지도에", 0.56, 0.58, 0.61)
+	tt:Show()
+end
+
+-- 연속 퀘스트 줄 툴팁: 단계 요약
+function M:ChainTip(r)
+	local g = r.e
+	if not (g and g.chain) then return end
+	local tt = GameTooltip
+	tt:SetOwner(r, "ANCHOR_RIGHT")
+	tt:AddLine(QTitle(g.id) or M.QuestFallback(g.id), 1, 1, 1)
+	tt:AddLine("연속 퀘스트 " .. g.nMain .. "단계  ·  끝낸 단계 " .. g.nDone, 0.7, 0.72, 0.75)
+	tt:AddLine(" ")
+	for i, st in ipairs(g.chain) do
+		if i > 14 then tt:AddLine("… " .. (#g.chain - 14) .. "단계 더", 0.56, 0.58, 0.61) break end
+		local mark = st.state == "done" and (TipIcon("Check", { 0.44, 0.83, 0.6 }) .. " ")
+			or (st.state == "log" and (TipIcon("Wait", { 1, 0.96, 0.41 }) .. " ") or (st.current and "|cff6FD39A▶|r " or "|cff8E939B·|r "))
+		local tag = st.dung and "  |cffFFD15F던전|r" or ""
+		if st.side then tag = tag .. "  |cff8E939B갈래|r" elseif st.opt then tag = tag .. "  |cff8E939B선택|r" end
+		local dim = st.state == "done" or st.side
+		tt:AddLine(mark .. (QTitle(st.id) or ("#" .. st.id)) .. tag, dim and 0.6 or 0.92, dim and 0.62 or 0.92, dim and 0.65 or 0.9)
+	end
+	tt:AddLine(" ")
+	tt:AddLine("클릭: 단계 " .. ((Ink.db.dqOpen and Ink.db.dqOpen[g.key]) and "접기" or "펼치기"), 0.56, 0.58, 0.61)
+	tt:Show()
 end
 
 function M:QuestTip(r)
@@ -3737,6 +4090,105 @@ function M:QuestTip(r)
 	tt:Show()
 end
 
+-- 연속 퀘스트 한 줄 (접힌 모양): 대표 던전 퀘스트 이름 · 지금 할 단계 · 상태
+function M:PaintChainRow(r, g, y, LC)
+	local q = g.q
+	local lv = g.lvl or 0
+	r.lvl:SetText(lv > 0 and lv or "–")
+	local lc = (LC and lv > 0) and LC(lv) or C.soft
+	r.lvl:SetTextColor(lc[1], lc[2], lc[3], g.state == "done" and 0.4 or 1)
+	r.title:SetText(QTitle(g.id) or "불러오는 중…")
+	local tc = g.state == "done" and C.dim or C.text
+	r.title:SetTextColor(tc[1], tc[2], tc[3])
+	local now = g.now
+	local nowT = now and (QTitle(now.id) or "다음 퀘스트")
+	local sub
+	if g.state == "done" then
+		sub = "연속 퀘스트 " .. g.nMain .. "단계 모두 끝냄"
+	elseif g.state == "log" then
+		sub = "진행 중: " .. nowT .. (now.dung and "  ·  던전 안" or "")
+	elseif g.state == "pre" then
+		sub = "먼저 " .. nowT .. "  ·  " .. StepSub(now)
+	elseif g.state == "after" then
+		sub = "다음: " .. nowT .. "  ·  " .. StepSub(now)
+	else
+		sub = (now and now.id ~= g.id) and ("지금: " .. nowT .. "  ·  " .. StepSub(now)) or StepSub(now or g.head)
+	end
+	r.sub:SetPoint("RIGHT", -24, 0)
+	r.sub:SetText(sub .. (g.nMain > 1 and ("  ·  " .. g.nMain .. "단계") or ""))
+	local stText, col, fill, edge, icon = "", C.muted, 0, 0, nil
+	if g.state == "log" then
+		local ready = C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(now.id)
+		if ready then stText, col, fill, icon = "보고 가능", C.green, 0.18, "Check"
+		else stText, col, fill = "진행 중 " .. (g.nDone + 1) .. "/" .. g.nMain, C.accent, 0.18 end
+	elseif g.state == "ok" then stText, col, edge = "받을 수 있음", C.green, 0.55
+	elseif g.state == "soon" then stText, col = (now and now.need or lv) .. "레벨부터", C.orange
+	elseif g.state == "pre" then stText = "선행 " .. (g.miss or 0) .. "개 남음"
+	elseif g.state == "after" then stText, col = "후속 " .. (g.left or 0) .. "개", C.soft
+	elseif g.state == "done" then stText, col, icon, fill = "완료", C.green, "Check", 0.08 end
+	r.state:SetText(stText)
+	r.state:SetTextColor(col[1], col[2], col[3], g.state == "done" and 0.75 or 1)
+	r.chip.bg:SetVertexColor(col[1], col[2], col[3], fill)
+	r.chip.bd:SetVertexColor(col[1], col[2], col[3], edge)
+	if icon then
+		r.chip.icon:SetTexture(Ink.icon(icon))
+		r.chip.icon:SetVertexColor(col[1], col[2], col[3])
+		r.chip.icon:Show()
+	else
+		r.chip.icon:Hide()
+	end
+	r.chip:SetWidth(math.ceil(r.state:GetStringWidth()) + (icon and 28 or 14))
+	local open = Ink.db.dqOpen and Ink.db.dqOpen[g.key]
+	r.chev:SetRotation(open and 0 or math.rad(90))
+	r.chev:SetVertexColor(C.muted[1], C.muted[2], C.muted[3])
+	r:SetAlpha(g.state == "done" and 0.7 or 1)
+	r:ClearAllPoints()
+	r:SetPoint("TOPLEFT", self.questPanel.body, "TOPLEFT", 0, -y)
+	r:Show()
+	return y + DQ_ROW
+end
+
+-- 타임라인 한 칸: 점(상태) · 선 · 이름 · 누구에게서 · 던전 단계는 금색 띠
+function M:PaintStep(r, st, first, last)
+	r.st, r.e = st, st.e
+	local lineC = { 1, 1, 1, 0.12 }
+	r.up:SetColorTexture(lineC[1], lineC[2], lineC[3], lineC[4])
+	r.down:SetColorTexture(lineC[1], lineC[2], lineC[3], lineC[4])
+	r.up:SetShown(not first)
+	r.down:SetShown(not last)
+	local col, stText = C.muted, ""
+	r.mark:Hide()
+	r.dot:Show()
+	if st.state == "done" then
+		col, stText = { 0.44, 0.83, 0.55 }, "완료"
+		r.dot:Hide()
+		r.mark:SetTexture(Ink.icon("Check"))
+		r.mark:SetVertexColor(col[1], col[2], col[3])
+		r.mark:Show()
+	elseif st.state == "log" then
+		col, stText = C.accent, "진행 중"
+	elseif st.current then
+		col, stText = C.green, "지금"
+	elseif st.state == "soon" then
+		col, stText = C.muted, (st.need or "") .. "레벨"
+	end
+	if st.side and st.state ~= "done" then stText = "갈래" elseif st.opt and st.state ~= "done" then stText = "선택" end
+	local ringC = st.dung and { 1, 0.82, 0.38 } or col
+	r.ring:SetVertexColor(ringC[1], ringC[2], ringC[3], (st.dung or st.current or st.state == "log") and 1 or 0.5)
+	r.ring:SetSize(st.dung and 15 or 12, st.dung and 15 or 12)
+	r.dot:SetVertexColor(col[1], col[2], col[3], (st.current or st.state == "log") and 1 or 0.55)
+	r.band:SetShown(st.dung and true or false)
+	local title = QTitle(st.id) or ("#" .. st.id)
+	r.title:SetText(st.dung and ("|cffFFD15F" .. title .. "|r  |cffB89A5E던전|r") or title)
+	local dim = st.state == "done" or st.side
+	local tc = dim and C.dim or C.text
+	r.title:SetTextColor(tc[1], tc[2], tc[3])
+	r.sub:SetText(StepSub(st))
+	r.state:SetText(stText)
+	r.state:SetTextColor(col[1], col[2], col[3])
+	r:SetAlpha(dim and 0.75 or 1)
+end
+
 function M:PaintQuests()
 	local f = self.sidebar
 	local p = self.questPanel
@@ -3747,7 +4199,7 @@ function M:PaintQuests()
 		return
 	end
 	p = p or self:BuildQuestPanel()
-	local list = self:DungeonQuestList(key)
+	local list = self:DungeonQuestView(key)
 	-- 자리: 항상 전리품 칸 오른쪽 바깥 (던전 화면에서도 지도를 가리지 않게)
 	p:ClearAllPoints()
 	p.tab:ClearAllPoints()
@@ -3774,7 +4226,7 @@ function M:PaintQuests()
 	local nOk, nLog, nDone, nPre = 0, 0, 0, 0
 	for _, e in ipairs(list) do
 		if e.state == "ok" then nOk = nOk + 1 elseif e.state == "log" then nLog = nLog + 1
-		elseif e.state == "done" then nDone = nDone + 1 elseif e.state == "pre" then nPre = nPre + 1 end
+		elseif e.state == "done" then nDone = nDone + 1 elseif e.state == "pre" or e.state == "after" then nPre = nPre + 1 end
 	end
 	p.title:SetText("퀘스트 " .. #list)
 	p.sum:SetText(string.format("|cff6FD39A가능 %d|r  ·  |cffFFF468진행 %d|r  ·  선행 필요 %d  ·  완료 %d", nOk, nLog, nPre, nDone))
@@ -3782,8 +4234,9 @@ function M:PaintQuests()
 	local y = 0
 	-- 상태별 묶음 제목: 진행 중 · 받을 수 있음 · 아직 못 받음 · 완료
 	local GROUP = { log = "진행 중", ok = "받을 수 있음", crumb = "연결 퀘스트 · 선택 (던전 밖 전달)", soon = "아직 못 받음", pre = "아직 못 받음",
-		unk = "받는 곳 확인 안 됨", done = "완료" }
-	local GCOL = { log = C.accent, ok = C.green, crumb = C.soft, soon = C.muted, pre = C.muted, unk = C.dim, done = C.dim }
+		after = "던전 끝 · 후속 퀘스트 남음", unk = "받는 곳 확인 안 됨", done = "완료" }
+	local GCOL = { log = C.accent, ok = C.green, crumb = C.soft, soon = C.muted, pre = C.muted, after = C.soft, unk = C.dim, done = C.dim }
+	local nRow, nStep = 0, 0
 	local gcount = {}
 	for _, e in ipairs(list) do gcount[GROUP[e.state]] = (gcount[GROUP[e.state]] or 0) + 1 end
 	p.heads = p.heads or {}
@@ -3819,9 +4272,16 @@ function M:PaintQuests()
 			h:Show()
 			y = y + 26 + (nh > 1 and 8 or 0)
 		end
-		local r = QuestRow(p, i)
+		nRow = nRow + 1
+		local r = QuestRow(p, nRow)
 		r.e = e
+		r.chainKey = e.chain and e.key or nil
+		r.chev:SetShown(e.chain and true or false)
+		if e.chain then
+			y = self:PaintChainRow(r, e, y, LC)
+		else
 		local q = e.q
+		r.sub:SetPoint("RIGHT", -8, 0)
 		r.lvl:SetText(q[2] > 0 and q[2] or "–")
 		local lc = (LC and q[2] > 0) and LC(q[2]) or C.soft
 		r.lvl:SetTextColor(lc[1], lc[2], lc[3], e.state == "done" and 0.4 or 1)
@@ -3850,7 +4310,7 @@ function M:PaintQuests()
 			end
 		end
 		local nPre = 0
-		for _, pid in ipairs(q[8]) do if not IsCrumb(pid) then nPre = nPre + 1 end end
+		for _, pid in ipairs((PreOf(q[1]))) do if not IsCrumb(pid) then nPre = nPre + 1 end end
 		if nPre > 0 then sub = sub .. "  ·  선행 " .. nPre end
 		if e.state == "pre" then
 			-- 선행이 남았으면 주는 NPC 대신: 무엇을 먼저, 누구에게서, 어디서 (가장 앞에 남은 선행 하나)
@@ -3926,8 +4386,23 @@ function M:PaintQuests()
 		r:SetPoint("TOPLEFT", p.body, "TOPLEFT", 0, -y)
 		r:Show()
 		y = y + DQ_ROW
+		end
+		-- 펼친 연속 퀘스트: 단계 타임라인
+		if e.chain and Ink.db.dqOpen and Ink.db.dqOpen[e.key] then
+			for si, st in ipairs(e.chain) do
+				nStep = nStep + 1
+				local sr = StepRow(p, nStep)
+				self:PaintStep(sr, st, si == 1, si == #e.chain)
+				sr:ClearAllPoints()
+				sr:SetPoint("TOPLEFT", p.body, "TOPLEFT", 0, -y)
+				sr:Show()
+				y = y + 32
+			end
+			y = y + 6
+		end
 	end
-	for i = #list + 1, #p.rows do p.rows[i]:Hide() end
+	for i = nRow + 1, #p.rows do p.rows[i]:Hide() end
+	for i = nStep + 1, #(p.srows or {}) do p.srows[i]:Hide() end
 	for i = nh + 1, #(p.heads or {}) do p.heads[i]:Hide() end
 	p.body:SetHeight(math.max(10, y))
 	-- 스크롤 위치: 다른 던전으로 바뀌면 맨 위로, 목록이 짧아졌으면 끝을 넘지 않게
