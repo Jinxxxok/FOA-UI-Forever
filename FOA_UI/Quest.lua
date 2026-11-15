@@ -559,6 +559,37 @@ function M:QuestDist(id, pc, px, py)
 	return math.sqrt((x - px) ^ 2 + (y - py) ^ 2)
 end
 
+-- 던전 퀘스트 머리줄(던전 이름) → 입구가 있는 지역 지도: 그 지역에 오면 "이 지역"으로 같이 올린다
+--  (황야의 땅에 와도 울다만 퀘스트는 머리줄이 "울다만"이라 지역 강조가 안 걸렸다)
+--  자료: QuestieDB 던전 입구 지역 (support/Forever/Zones/dungeons.lua)
+local DUNGEON_ZONE = {
+	["성난불길 협곡"] = 1454, ["통곡의 동굴"] = 1413, ["죽음의 폐광"] = 1436, ["그림자송곳니 성채"] = 1421,
+	["검은심연의 나락"] = 1440, ["스톰윈드 지하감옥"] = 1453, ["가시덩굴 우리"] = 1413, ["가시덩굴 구릉"] = 1413,
+	["놈리건"] = 1426, ["붉은십자군 수도원"] = 1420, ["울다만"] = 1418, ["줄파락"] = 1446, ["마라우돈"] = 1443,
+	["가라앉은 사원"] = 1435, ["아탈학카르 신전"] = 1435, ["검은바위 나락"] = { 1427, 1428 }, ["검은바위 첨탑"] = { 1427, 1428 },
+	["혈투의 전장"] = 1444, ["스트라솔름"] = 1423, ["스칼로맨스"] = 1422, ["오닉시아의 둥지"] = 1445,
+	["발굴 현장: 저습지"] = 1437, ["로데론의 폐허"] = { 1420, 1458 }, ["달라란"] = 1416,
+}
+M.DUNGEON_ZONE = DUNGEON_ZONE
+-- 지금 있는 지역 지도 (세부 지도면 지역까지 올라가서)
+local function ZoneMap()
+	local m = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	local ZONE = Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
+	for _ = 1, 4 do
+		local info = m and C_Map.GetMapInfo and C_Map.GetMapInfo(m)
+		if not info then return end
+		if info.mapType == ZONE then return m, info.name end
+		if info.mapType and info.mapType < ZONE then return end
+		m = info.parentMapID
+	end
+end
+local function DungeonHere(name, zm)
+	local z = zm and DUNGEON_ZONE[name]
+	if not z then return false end
+	if type(z) == "table" then for _, v in ipairs(z) do if v == zm then return true end end return false end
+	return z == zm
+end
+
 -- 지금 있는 곳의 이름들 (세부 지역 · 지역 · 상위 지도) — 퀘스트 목록 머리줄 이름과 맞춰 본다
 local function HereNames()
 	local out = {}
@@ -725,8 +756,14 @@ function M:Update()
 			if d and (not gmin[g] or d < gmin[g]) then gmin[g] = d end
 		end
 	end
+	local zm, zoneName = ZoneMap()
+	local dunHere, anyHere = {}, false
+	for _, id in ipairs(quests) do
+		local g = group[id]
+		if hereSet[g] then anyHere = true elseif DungeonHere(g, zm) then dunHere[g] = true end
+	end
 	local function rank(g)
-		if g == CLASSG then return 0 elseif hereSet[g] then return 1 end
+		if g == CLASSG then return 0 elseif hereSet[g] then return 1 elseif dunHere[g] then return 1.5 end
 		if gmin[g] then return 2 + math.floor(gmin[g] / 200) * 0.001 end
 		if zorder[g] then return 10 + zorder[g] end
 		return 999
@@ -771,6 +808,28 @@ function M:Update()
 	self.classH = self:PaintClass(y - popH)
 	y = y - popH - (self.classH or 0)
 	if popH > 0 then self.classH = (self.classH or 0) + popH end
+	-- 지금 지역에 진행 중인 퀘스트가 없으면: 지역 머리줄 + 받을 수 있는 퀘스트 수 (지도 느낌표)
+	--  (지역 강조가 "안 되는" 것처럼 보였다 · 맨 위로 올릴 퀘스트가 없을 뿐)
+	local topHead = false
+	if nearOn and not anyHere and zoneName and #quests > 0 and (self.offset or 0) == 0 then
+		local avail = 0
+		local Q = Ink.modules.QuestMap
+		if Q and Q.MiniPoints and Ink.db.questMap ~= false then
+			local ok, mid, pts = pcall(Q.MiniPoints, Q)
+			if ok and pts then
+				for _, pt in ipairs(pts) do if pt.state == 1 then avail = avail + (pt.list and #pt.list or 1) end end
+			end
+		end
+		nh = nh + 1
+		local h = self:ZoneHead(nh)
+		h:ClearAllPoints()
+		h:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y - ((self.classH or 0) > 0 and 6 or 0))
+		self:PaintHead(h, "here", zoneName, nil)
+		h.n:SetText(avail > 0 and ("받을 수 있는 퀘스트 " .. avail .. "  ·  지도의 !") or "진행 중인 퀘스트 없음")
+		h:Show()
+		y = y - ((self.classH or 0) > 0 and 32 or 26)
+		topHead = true
+	end
 	local shown = 0
 	local total = #quests
 	local MAX_QUESTS = MaxQuests()
@@ -793,15 +852,19 @@ function M:Update()
 				--  (예전엔 전투 중엔 자리를 안 옮겨서, 목표 줄 수가 바뀌면 다음 퀘스트와 겹쳐 보였다)
 				local h = self:ZoneHead(nh)
 				h:ClearAllPoints()
-				h:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y - ((idx > 1 or (self.classH or 0) > 0) and 6 or 0))
+				local gap = idx > 1 or (self.classH or 0) > 0 or topHead
+				h:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y - (gap and 6 or 0))
 				if g == CLASSG then
 					self:PaintHead(h, "class", "직업 퀘스트 진행 중", gcount[g])
+				elseif dunHere[g] then
+					-- 이 지역에 입구가 있는 던전: 지역처럼 강조 + "이 지역 던전"
+					self:PaintHead(h, "here", g .. "  |cff8E939B이 지역 던전|r", gcount[g])
 				else
 					self:PaintHead(h, hereSet[g] and "here" or "zone", g, gcount[g])
 				end
 				h:Show()
 			end
-			y = y - ((idx > 1 or (self.classH or 0) > 0) and 32 or 26)
+			y = y - ((idx > 1 or (self.classH or 0) > 0 or topHead) and 32 or 26)
 		end
 		r:ClearAllPoints()
 		r:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
