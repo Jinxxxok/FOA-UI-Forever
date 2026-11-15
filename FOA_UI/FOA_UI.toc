@@ -3,7 +3,7 @@
 ## Notes: FOA (First of All) 통합 UI
 ## Author: hyeokjiny
 ## X-License: GPL-3.0-or-later
-## Version: 0.65.67
+## Version: 0.65.68
 ## SavedVariables: InkUIDB
 ## SavedVariablesPerCharacter: InkUICharDB
 ## IconTexture: Interface\AddOns\FOA_UI\Media\Textures\Logo
@@ -20,6 +20,7 @@ Range.lua
 Blizzard.lua
 MinimapArcane.lua
 ActionBars.lua
+SpecSets.lua
 Score.lua
 TalentData.lua
 TalentBuilds.lua

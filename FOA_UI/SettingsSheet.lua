@@ -410,6 +410,7 @@ function M:BuildRegistry()
 					apply = function() call("ActionBars", "ApplyLock") end }),
 				SW("autoPush", "새 주문 자동 배치", "새로 배운 주문을 빈 칸에", { hud = "bar1",
 					apply = function() call("Blizzard", "ApplyAutoPush") end }),
+				SW("specBars", "특성마다 단축바 따로", "주 특성 · 보조 특성을 바꾸면 그 특성 단축바로 · 게임이 직접 바꿔 주면 FOA 는 손대지 않아요", { hud = "bar1" }),
 			} },
 			{ t = "바로 가기", rows = {
 				{ kind = "action", id = "act:kb", label = "단축키 지정", desc = "칸에 마우스를 올리고 키를 누르면 끝", btn = "단축키 모드",

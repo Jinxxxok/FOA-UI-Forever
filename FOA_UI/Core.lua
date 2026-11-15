@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.65.67"
+Ink.version = "0.65.68"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1399,6 +1399,7 @@ local defaults = {
 	npcIcons = true,
 	hideTutorials = true,
 	autoPush = true,
+	specBars = true,
 	clock = true,
 	questObjects = true,
 	questSparkle = true,  -- 퀘스트 물체 배지 반짝임
