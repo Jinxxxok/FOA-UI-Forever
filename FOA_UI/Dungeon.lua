@@ -3892,50 +3892,98 @@ local function StepSub(st)
 end
 M.StepSub = StepSub
 
-local STEP_COL = { done = { 0.44, 0.83, 0.55 }, log = nil, ok = nil, soon = nil }
+-- 타임라인 그림: 화면 픽셀에 맞춘 짝수 크기 (5K · 4K · QHD 처럼 1칸이 정수 픽셀이 아니면 원 · 선이 번지고
+--  점과 고리가 반 픽셀씩 어긋나 보였다) · 모두 같은 중심(x = RAIL)에 짝수 픽셀이라 한가운데가 맞는다
+local RAIL, ROW_S = 20, 34
+local function PxEven(f, u)
+	local es = f.GetEffectiveScale and f:GetEffectiveScale()
+	local ppu = (es or 0) * (Ink.physH or 1080) / 768
+	if ppu <= 0 then return u end
+	return math.max(2, 2 * math.floor(u * ppu / 2 + 0.5)) / ppu
+end
+local function Snap(t)
+	if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(true); t:SetTexelSnappingBias(0) end
+	return t
+end
+local function Pill(parent)
+	local f = CreateFrame("Frame", nil, parent)
+	f:SetHeight(15)
+	f.bg = Ink:Round(f, "BACKGROUND", true, false)
+	f.bg:SetAllPoints()
+	f.bd = Ink:Round(f, "BORDER", true, true)
+	f.bd:SetAllPoints()
+	f.t = Ink:Text(f, F.semi, 9, C.text, "CENTER")
+	f.t:SetPoint("CENTER", 0, 0)
+	function f:Set(text, col, fill, edge)
+		if not text or text == "" then self:Hide() return end
+		self.t:SetText(text)
+		self.t:SetTextColor(col[1], col[2], col[3])
+		self.bg:SetVertexColor(col[1], col[2], col[3], fill or 0)
+		self.bd:SetVertexColor(col[1], col[2], col[3], edge or 0)
+		self:SetWidth(math.ceil(self.t:GetStringWidth()) + 14)
+		self:Show()
+	end
+	return f
+end
+
 local function StepRow(p, i)
 	p.srows = p.srows or {}
 	local r = p.srows[i]
 	if r then return r end
 	r = CreateFrame("Button", nil, p.body)
-	r:SetSize(DQ_W - 16, 32)
+	r:SetSize(DQ_W - 16, ROW_S)
+	-- 지금 단계 바탕 · 던전 단계 금색 세로 막대
 	r.band = r:CreateTexture(nil, "BACKGROUND")
-	r.band:SetPoint("TOPLEFT", 30, -1)
-	r.band:SetPoint("BOTTOMRIGHT", -6, 1)
-	r.band:SetColorTexture(1, 0.82, 0.38, 0.08)
+	r.band:SetPoint("TOPLEFT", 34, -2)
+	r.band:SetPoint("BOTTOMRIGHT", -6, 2)
+	r.band:SetColorTexture(1, 1, 1, 0.035)
+	r.acc = Snap(r:CreateTexture(nil, "ARTWORK"))
+	r.acc:SetPoint("TOPLEFT", 34, -6)
+	r.acc:SetPoint("BOTTOMLEFT", 34, 6)
+	r.acc:SetColorTexture(1, 0.82, 0.38, 0.85)
 	r.hl = r:CreateTexture(nil, "BACKGROUND", nil, 1)
 	r.hl:SetAllPoints()
 	r.hl:SetColorTexture(1, 1, 1, 0.04)
 	r.hl:Hide()
-	r.up = r:CreateTexture(nil, "BORDER")
-	r.up:SetWidth(2)
-	r.up:SetPoint("TOP", r, "TOPLEFT", 21, 0)
-	r.up:SetPoint("BOTTOM", r, "LEFT", 21, 0)
-	r.down = r:CreateTexture(nil, "BORDER")
-	r.down:SetWidth(2)
-	r.down:SetPoint("TOP", r, "LEFT", 21, 0)
-	r.down:SetPoint("BOTTOM", r, "BOTTOMLEFT", 21, 0)
-	r.ring = r:CreateTexture(nil, "ARTWORK")
+	-- 선 (위 · 아래 반쪽): 끝낸 구간은 초록, 남은 구간은 흐리게 = 진행 막대처럼
+	r.up = Snap(r:CreateTexture(nil, "BORDER"))
+	r.down = Snap(r:CreateTexture(nil, "BORDER"))
+	-- 점: 뒤판(선을 가림) · 빛(지금 단계, 숨 쉬듯) · 고리 · 속 · 그림(체크 · 던전 문)
+	r.halo = r:CreateTexture(nil, "BORDER", nil, 1)
+	r.halo:SetTexture(Ink.tex.glow)
+	r.halo:SetBlendMode("ADD")
+	r.halo:SetPoint("CENTER", r, "LEFT", RAIL, 0)
+	local ag = r.halo:CreateAnimationGroup()
+	ag:SetLooping("BOUNCE")
+	local an = ag:CreateAnimation("Alpha")
+	an:SetFromAlpha(0.2)
+	an:SetToAlpha(0.75)
+	an:SetDuration(1.1)
+	an:SetSmoothing("IN_OUT")
+	r.halo.ag = ag
+	r.back = Snap(r:CreateTexture(nil, "ARTWORK"))
+	r.back:SetTexture(Ink.tex.disc)
+	r.back:SetVertexColor(0.035, 0.04, 0.052, 1)
+	r.back:SetPoint("CENTER", r, "LEFT", RAIL, 0)
+	r.ring = Snap(r:CreateTexture(nil, "ARTWORK", nil, 1))
 	r.ring:SetTexture(Ink.tex.ring)
-	r.ring:SetSize(13, 13)
-	r.ring:SetPoint("CENTER", r, "LEFT", 21, 0)
-	r.dot = r:CreateTexture(nil, "ARTWORK", nil, 1)
-	r.dot:SetTexture(Ink.tex.disc)
-	r.dot:SetSize(7, 7)
-	r.dot:SetPoint("CENTER", r.ring)
-	r.mark = r:CreateTexture(nil, "OVERLAY")
-	r.mark:SetSize(9, 9)
-	r.mark:SetPoint("CENTER", r.ring)
+	r.ring:SetPoint("CENTER", r, "LEFT", RAIL, 0)
+	r.core = Snap(r:CreateTexture(nil, "ARTWORK", nil, 2))
+	r.core:SetTexture(Ink.tex.disc)
+	r.core:SetPoint("CENTER", r, "LEFT", RAIL, 0)
+	r.glyph = Snap(r:CreateTexture(nil, "OVERLAY"))
+	r.glyph:SetPoint("CENTER", r, "LEFT", RAIL, 0)
 	r.title = Ink:Text(r, F.semi, 11, C.text, "LEFT")
-	r.title:SetPoint("TOPLEFT", 38, -4)
-	r.title:SetPoint("RIGHT", -64, 0)
+	r.title:SetPoint("TOPLEFT", 42, -5)
 	r.title:SetWordWrap(false)
 	r.sub = Ink:Text(r, F.sans, 9, C.muted, "LEFT")
-	r.sub:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -3)
+	r.sub:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -4)
 	r.sub:SetPoint("RIGHT", -8, 0)
 	r.sub:SetWordWrap(false)
-	r.state = Ink:Text(r, F.semi, 9, C.muted, "RIGHT")
-	r.state:SetPoint("TOPRIGHT", -10, -5)
+	-- 오른쪽 알약: 지금 할 일(받기 · 진행 중 · 보고하기) · 선택 · 갈래 · 레벨
+	r.pill = Pill(r)
+	r.pill:SetPoint("TOPRIGHT", -8, -4)
+	r.title:SetPoint("RIGHT", r.pill, "LEFT", -6, 0)
 	r:SetScript("OnEnter", function(self)
 		self.hl:Show()
 		if self.e then M:QuestTip(self) else M:StepTip(self) end
@@ -4157,45 +4205,116 @@ function M:PaintChainRow(r, g, y, LC)
 	return y + DQ_ROW
 end
 
--- 타임라인 한 칸: 점(상태) · 선 · 이름 · 누구에게서 · 던전 단계는 금색 띠
-function M:PaintStep(r, st, first, last)
+-- 타임라인 한 칸
+--  모양으로 뜻을 나눈다: 끝낸 단계 = 초록 체크 · 지금 할 단계 = 숨 쉬는 빛 + 꽉 찬 점 · 남은 단계 = 작은 빈 고리
+--  · 던전 안 단계 = 금색 문 그림 + 금색 이름 + 왼쪽 금색 막대 · 선택 · 갈래 = 더 흐린 고리
+--  오른쪽 알약 = 지금 할 일 (받기 · 진행 중 · 보고하기 · N레벨부터) · 선택 · 갈래
+local GOLD3 = { 1, 0.82, 0.38 }
+local DONE3 = { 0.44, 0.83, 0.55 }
+function M:PaintStep(r, st, first, last, prevDone)
 	r.st, r.e = st, st.e
-	local lineC = { 1, 1, 1, 0.12 }
-	r.up:SetColorTexture(lineC[1], lineC[2], lineC[3], lineC[4])
-	r.down:SetColorTexture(lineC[1], lineC[2], lineC[3], lineC[4])
+	-- 선
+	local w = PxEven(r, 1.5)
+	for _, t in ipairs({ r.up, r.down }) do t:SetWidth(w) end
+	r.up:ClearAllPoints()
+	r.up:SetPoint("TOP", r, "TOPLEFT", RAIL, 0)
+	r.up:SetPoint("BOTTOM", r, "LEFT", RAIL, 0)
+	r.down:ClearAllPoints()
+	r.down:SetPoint("TOP", r, "LEFT", RAIL, 0)
+	r.down:SetPoint("BOTTOM", r, "BOTTOMLEFT", RAIL, 0)
+	local isDone = st.state == "done"
+	if prevDone then r.up:SetColorTexture(DONE3[1], DONE3[2], DONE3[3], 0.55) else r.up:SetColorTexture(1, 1, 1, 0.1) end
+	if isDone then r.down:SetColorTexture(DONE3[1], DONE3[2], DONE3[3], 0.55) else r.down:SetColorTexture(1, 1, 1, 0.1) end
 	r.up:SetShown(not first)
 	r.down:SetShown(not last)
-	local col, stText = C.muted, ""
-	r.mark:Hide()
-	r.dot:Show()
-	if st.state == "done" then
-		col, stText = { 0.44, 0.83, 0.55 }, "완료"
-		r.dot:Hide()
-		r.mark:SetTexture(Ink.icon("Check"))
-		r.mark:SetVertexColor(col[1], col[2], col[3])
-		r.mark:Show()
-	elseif st.state == "log" then
-		col, stText = C.accent, "진행 중"
-	elseif st.current then
-		col, stText = C.green, "지금"
-	elseif st.state == "soon" then
-		col, stText = C.muted, (st.need or "") .. "레벨"
+	-- 지금 할 일
+	local ready = st.state == "log" and C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(st.id)
+	local now = st.current or st.state == "log"
+	local nowC = (st.state == "log" and not ready) and C.accent or C.green
+	if st.state == "soon" and st.current then nowC = C.orange end
+	-- 점
+	local function size(t, u) local v = PxEven(r, u); t:SetSize(v, v) end
+	r.ring:Hide(); r.core:Hide(); r.glyph:Hide(); r.back:Show()
+	size(r.back, 16)
+	if isDone then
+		size(r.glyph, 11)
+		r.glyph:SetTexture(Ink.icon("Check"))
+		r.glyph:SetVertexColor(DONE3[1], DONE3[2], DONE3[3])
+		r.glyph:Show()
+	elseif st.dung then
+		-- 던전 단계: 금색 문 (지금이면 고리까지 밝게)
+		size(r.glyph, 10)
+		r.glyph:SetTexture(Ink.icon("Door"))
+		r.glyph:SetVertexColor(GOLD3[1], GOLD3[2], GOLD3[3], now and 1 or 0.85)
+		r.glyph:Show()
+		size(r.ring, 16)
+		r.ring:SetVertexColor(GOLD3[1], GOLD3[2], GOLD3[3], now and 0.95 or 0.4)
+		r.ring:Show()
+	elseif now then
+		size(r.ring, 14)
+		r.ring:SetVertexColor(nowC[1], nowC[2], nowC[3], 0.9)
+		r.ring:Show()
+		size(r.core, 6)
+		r.core:SetVertexColor(nowC[1], nowC[2], nowC[3], 1)
+		r.core:Show()
+	else
+		-- 남은 단계 · 선택 · 갈래: 작은 빈 고리
+		local faint = st.opt or st.side
+		size(r.ring, faint and 8 or 10)
+		r.ring:SetVertexColor(0.6, 0.62, 0.66, faint and 0.35 or 0.6)
+		r.ring:Show()
+		size(r.back, faint and 10 or 12)
 	end
-	if st.side and st.state ~= "done" then stText = "갈래" elseif st.opt and st.state ~= "done" then stText = "선택" end
-	local ringC = st.dung and { 1, 0.82, 0.38 } or col
-	r.ring:SetVertexColor(ringC[1], ringC[2], ringC[3], (st.dung or st.current or st.state == "log") and 1 or 0.5)
-	r.ring:SetSize(st.dung and 15 or 12, st.dung and 15 or 12)
-	r.dot:SetVertexColor(col[1], col[2], col[3], (st.current or st.state == "log") and 1 or 0.55)
-	r.band:SetShown(st.dung and true or false)
+	-- 지금 단계: 숨 쉬는 빛 + 바탕
+	if now and not isDone then
+		local hc = st.dung and GOLD3 or nowC
+		size(r.halo, 34)
+		r.halo:SetVertexColor(hc[1], hc[2], hc[3], 1)
+		r.halo:Show()
+		if not r.halo.ag:IsPlaying() then r.halo.ag:Play() end
+	else
+		r.halo.ag:Stop()
+		r.halo:Hide()
+	end
+	r.band:SetShown(now and not isDone)
+	r.acc:SetWidth(PxEven(r, 1.5))
+	r.acc:SetShown(st.dung and true or false)
+	r.acc:SetAlpha(isDone and 0.35 or 1)
+	-- 글자
 	local title = QTitle(st.id) or ("#" .. st.id)
-	r.title:SetText(st.dung and ("|cffFFD15F" .. title .. "|r  |cffB89A5E던전|r") or title)
-	local dim = st.state == "done" or st.side
-	local tc = dim and C.dim or C.text
-	r.title:SetTextColor(tc[1], tc[2], tc[3])
+	if st.dung then
+		r.title:SetText(title .. "  |cffB89A5E던전|r")
+		local gc = isDone and { 0.62, 0.55, 0.4 } or GOLD3
+		r.title:SetTextColor(gc[1], gc[2], gc[3])
+	else
+		r.title:SetText(title)
+		local tc = isDone and C.dim or ((now and C.text) or ((st.side or st.opt) and C.muted or C.soft))
+		r.title:SetTextColor(tc[1], tc[2], tc[3])
+	end
 	r.sub:SetText(StepSub(st))
-	r.state:SetText(stText)
-	r.state:SetTextColor(col[1], col[2], col[3])
-	r:SetAlpha(dim and 0.75 or 1)
+	local sc = isDone and C.dim or C.muted
+	r.sub:SetTextColor(sc[1], sc[2], sc[3])
+	-- 알약
+	if isDone then
+		r.pill:Hide()
+	elseif st.state == "log" then
+		if ready then r.pill:Set("보고하기", C.green, 0.2, 0.5)
+		else
+			local have, need = 0, 0
+			for _, ob in ipairs(C_QuestLog.GetQuestObjectives and C_QuestLog.GetQuestObjectives(st.id) or {}) do
+				have = have + (ob.numFulfilled or 0); need = need + (ob.numRequired or 0)
+			end
+			r.pill:Set("진행 중" .. (need > 0 and ("  " .. have .. "/" .. need) or ""), C.accent, 0.16, 0.4)
+		end
+	elseif st.current then
+		if st.state == "soon" then r.pill:Set((st.need or "") .. "레벨부터", C.orange, 0, 0.55)
+		else r.pill:Set("받기", C.green, 0.16, 0.5) end
+	elseif st.side then r.pill:Set("갈래", C.muted, 0, 0.3)
+	elseif st.opt then r.pill:Set("선택", C.muted, 0, 0.3)
+	elseif st.state == "soon" then r.pill:Set((st.need or "") .. "레벨", C.dim, 0, 0.25)
+	else r.pill:Hide() end
+	if not r.pill:IsShown() then r.pill:SetWidth(1) end
+	r:SetAlpha((st.side and not now) and 0.8 or 1)
 end
 
 function M:PaintQuests()
@@ -4402,11 +4521,12 @@ function M:PaintQuests()
 			for si, st in ipairs(e.chain) do
 				nStep = nStep + 1
 				local sr = StepRow(p, nStep)
-				self:PaintStep(sr, st, si == 1, si == #e.chain)
+				local prev = e.chain[si - 1]
+				self:PaintStep(sr, st, si == 1, si == #e.chain, prev and prev.state == "done")
 				sr:ClearAllPoints()
 				sr:SetPoint("TOPLEFT", p.body, "TOPLEFT", 0, -y)
 				sr:Show()
-				y = y + 32
+				y = y + ROW_S
 			end
 			y = y + 6
 		end

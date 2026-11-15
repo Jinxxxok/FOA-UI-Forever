@@ -1,6 +1,6 @@
 -- InkUI · 가방
 --  블리자드 가방 대신 하나로 합친 Ink 가방 창.
---  분류: 고정(귀환석 + 직접 고정한 아이템) / 아이템(장비) / 소모품 / 재료 / 잡동사니
+--  분류: 고정(귀환석 + 직접 고정한 아이템) / 퀘스트(퀘스트 아이템 · 퀘스트 시작 아이템) / 아이템(장비) / 소모품 / 재료 / 잡동사니
 --  재료 가방(가방 칸 5번)은 섞지 않고 맨 아래 "재료 가방" 묶음으로 따로 (빈 칸까지 보여서 끌어다 넣을 수 있다)
 --  위쪽 탭으로 분류만 골라 볼 수 있고, 제목 줄을 끌어서 위치를 옮길 수 있다 (저장됨).
 --  칸은 블리자드 ContainerFrameItemButtonTemplate 을 그대로 써서 클릭·사용·끌어놓기·툴팁은 기본과 같다.
@@ -20,6 +20,7 @@ local HEARTH = 6948
 
 local CATS = {
 	{ key = "pin",  name = "고정" },
+	{ key = "quest", name = "퀘스트" },
 	{ key = "gear", name = "아이템" },
 	{ key = "cons", name = "소모품" },
 	{ key = "mat",  name = "재료" },
@@ -75,10 +76,13 @@ end
 -------------------------------------------------------------------------------
 -- 분류
 -------------------------------------------------------------------------------
-local function Category(itemID, quality, bag)
+-- 퀘스트 시작 아이템: 아직 받지 않은 퀘스트를 시작하는 것 (받은 뒤엔 일반 퀘스트 아이템처럼)
+local function IsStarter(qi) return qi and qi.questID and not qi.isActive and true or false end
+local function Category(itemID, quality, bag, qi)
 	if PinOrder(itemID) then return "pin" end
-	if quality == 0 then return "misc" end
 	local _, _, _, _, _, classID = C_Item.GetItemInfoInstant(itemID)
+	if classID == (IC.Questitem or 12) or (qi and (qi.isQuestItem or qi.questID)) then return "quest" end
+	if quality == 0 then return "misc" end
 	if classID == IC.Weapon or classID == IC.Armor or classID == (IC.Profession or 19) then return "gear" end
 	if classID == IC.Consumable then return "cons" end
 	if bag == REAGENT_BAG or classID == IC.Tradegoods or classID == IC.Reagent or classID == IC.Gem
@@ -303,6 +307,32 @@ local function SkinButton(b)
 	s.qneed:SetPoint("TOPLEFT", 2, -2)
 	s.qneed:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 1)
 	s.qneed:Hide()
+
+	-- 퀘스트 시작 아이템: 왼쪽 위 금색 배지(어두운 원 + 금색 고리 + 느낌표) + 칸 안쪽 은은한 금빛
+	s.startGlow = top:CreateTexture(nil, "OVERLAY", nil, 5)
+	s.startGlow:SetTexture(Ink.tex.glow)
+	s.startGlow:SetBlendMode("ADD")
+	s.startGlow:SetPoint("TOPLEFT", -6, 6)
+	s.startGlow:SetPoint("BOTTOMRIGHT", 6, -6)
+	s.startGlow:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 0.35)
+	s.startGlow:Hide()
+	s.startBg = top:CreateTexture(nil, "OVERLAY", nil, 6)
+	s.startBg:SetTexture(Ink.tex.disc)
+	s.startBg:SetSize(16, 16)
+	s.startBg:SetPoint("TOPLEFT", -3, 3)
+	s.startBg:SetVertexColor(0.035, 0.04, 0.052, 1)
+	s.startBg:Hide()
+	s.startRing = top:CreateTexture(nil, "OVERLAY", nil, 7)
+	s.startRing:SetTexture(Ink.tex.ring)
+	s.startRing:SetAllPoints(s.startBg)
+	s.startRing:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 1)
+	s.startRing:Hide()
+	s.startIcon = top:CreateTexture(nil, "OVERLAY", nil, 7)
+	s.startIcon:SetTexture(Ink.icon("QuestBang"))
+	s.startIcon:SetSize(10, 10)
+	s.startIcon:SetPoint("CENTER", s.startBg)
+	s.startIcon:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 1)
+	s.startIcon:Hide()
 end
 
 local holders = {}      -- 만들어 둔 칸 (부모 프레임)
@@ -395,6 +425,7 @@ local function Paint(h)
 		s.new:Hide()
 		s.up:Hide()
 		if s.qneed then s.qneed:Hide() end
+		if s.startBg then s.startGlow:Hide(); s.startBg:Hide(); s.startRing:Hide(); s.startIcon:Hide() end
 		s.cd:Clear()
 		b:SetAlpha(1)
 		return
@@ -429,7 +460,12 @@ local function Paint(h)
 	s.ilvl:SetText(text)
 	s.qneed:ClearAllPoints()
 	s.qneed:SetPoint(text ~= "" and "LEFT" or "TOPLEFT", 2, text ~= "" and 0 or -2)
-	s.qneed:SetShown(qn and true or false)
+	local starter = IsStarter(quest)
+	s.qneed:SetShown((qn and not starter) and true or false)
+	s.startGlow:SetShown(starter)
+	s.startBg:SetShown(starter)
+	s.startRing:SetShown(starter)
+	s.startIcon:SetShown(starter)
 	if text ~= "" and q >= 2 then
 		local r, g, bl = C_Item.GetItemQualityColor(q)
 		s.ilvl:SetTextColor(r, g, bl)
@@ -738,6 +774,14 @@ function M:Build()
 		f.tabs[#f.tabs + 1] = chip
 		prev = chip
 	end
+	-- 탭이 창 폭을 넘으면 칩 여백을 줄인다 (분류가 늘어 재료 가방 탭이 창 밖으로 나가지 않게)
+	do
+		local total = 0
+		for _, chip in ipairs(f.tabs) do total = total + chip:GetWidth() + 2 end
+		if total > WIDTH - PAD * 2 + 10 then
+			for _, chip in ipairs(f.tabs) do chip:SetWidth(chip.text:GetStringWidth() + 8) end
+		end
+	end
 	f.div1 = f:CreateTexture(nil, "ARTWORK")
 	f.div1:SetColorTexture(1, 1, 1, 0.06)
 	f.div1:SetHeight(1)
@@ -890,8 +934,14 @@ local function Gather()
 					bag = bag, slot = slot, itemID = info.itemID, quality = Quality(info),
 					count = info.stackCount or 1, classID = classID, subID = subID,
 				}
-				it.cat = Category(info.itemID, it.quality, bag)
-				it.subOrder, it.subName = SubGroup(it.cat, classID, subID)
+				local qi = C_Container.GetContainerItemQuestInfo and C_Container.GetContainerItemQuestInfo(bag, slot)
+				it.cat = Category(info.itemID, it.quality, bag, qi)
+				if it.cat == "quest" then
+					-- 퀘스트 시작 아이템을 먼저 (작은 제목으로 나눔)
+					if IsStarter(qi) then it.subOrder, it.subName = 1, "퀘스트 시작" else it.subOrder, it.subName = 2, "퀘스트 아이템" end
+				else
+					it.subOrder, it.subName = SubGroup(it.cat, classID, subID)
+				end
 				table.insert(byCat[it.cat], it)
 			elseif bag ~= REAGENT_BAG then
 				bagFree = bagFree + 1
@@ -956,7 +1006,7 @@ function M:Layout()
 			s:ClearAllPoints()
 			s:SetPoint("TOPLEFT", f.content, "TOPLEFT", 0, y)
 			s.name:SetText(cat.name)
-			local nc = (cat.key == "pin") and C.accent or C.soft
+			local nc = (cat.key == "pin") and C.accent or (cat.key == "quest" and C.gold or C.soft)
 			s.name:SetTextColor(nc[1], nc[2], nc[3])
 			s.count:SetText(#list)
 			s:Show()
