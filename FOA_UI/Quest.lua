@@ -736,6 +736,23 @@ function M:Update()
 	local cset = ClassSet()
 	local qinfo, zorder = QuestLogInfo()
 	local hereSet = HereNames()
+	local zm, zoneName = ZoneMap()
+	-- 지금 지역(과 입구가 이 지역인 던전) 퀘스트는 추적(체크)하지 않았어도 목록에 넣는다
+	--  (퀘스트 로그에서 체크한 것만 보여서, 체크 안 한 황야의 땅 퀘스트가 안 나와 지역 강조 · 가까운 순이 안 걸렸다)
+	self.autoHere = {}
+	if Ink.db.questHere ~= false and Ink.db.questNear ~= false then
+		local seen = {}
+		for _, id in ipairs(quests) do seen[id] = true end
+		local extra = {}
+		for id, q in pairs(qinfo) do
+			if not seen[id] and q.zone and (hereSet[q.zone] or DungeonHere(q.zone, zm)) then
+				extra[#extra + 1] = id
+				self.autoHere[id] = true
+			end
+		end
+		table.sort(extra)
+		for _, id in ipairs(extra) do quests[#quests + 1] = id end
+	end
 	local CLASSG, OTHER = "\001직업", "기타"
 	local group = {}
 	if self.testing and not next(qinfo) then
@@ -756,7 +773,6 @@ function M:Update()
 			if d and (not gmin[g] or d < gmin[g]) then gmin[g] = d end
 		end
 	end
-	local zm, zoneName = ZoneMap()
 	local dunHere, anyHere = {}, false
 	for _, id in ipairs(quests) do
 		local g = group[id]
