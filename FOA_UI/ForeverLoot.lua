@@ -1,6 +1,6 @@
 -- FOA UI · 포에버 던전 보스별 전리품 (자동 생성 · tools/dungeons/gen_loot.py)
 -- 보스 · 아이템: AllTheThings (MIT License) db/Camelot · https://github.com/ATTWoWAddon/AllTheThings
--- 던전 · 보스 한글 이름 · 권장 레벨 · 진행 순서: wowf.io 던전 안내
+-- 던전 · 보스 한글 이름 · 권장 레벨 · 진행 순서: wowf.io 던전 안내 (새 던전 3곳은 아래 따로 · 보스 이름은 게임이 알면 한글로 바뀜)
 -- 보스 = { 한글 이름, { 아이템 }, NPC 번호, 희귀/선택(1), 영문 이름 }
 local _, ns = ...
 ns.FOREVER_LOOT = {
@@ -336,8 +336,40 @@ ns.FOREVER_LOOT = {
 		{ key = "onyxia", ko = "오닉시아의 둥지", en = "Onyxia's Lair", lo = 60, hi = 60, inst = 249, ui = 248, entr = { 1445, 52.3, 76.2 }, raid = true,
 			bosses = {
 			{ "오닉시아", { 18423, 18422, 18705, 17966 }, 10184, 0, "Onyxia" } } },
-		{ key = "alcaz", ko = "알카즈 감옥", en = "Alcaz Prison", lo = 48, hi = 53, soon = true, bosses = {} },
-		{ key = "blackmaw", ko = "검은아귀 요새", en = "Blackmaw Hold", lo = 55, hi = 60, soon = true, bosses = {} },
-		{ key = "shapers", ko = "구체자의 정원", en = "The Shaper's Terrace", lo = 58, hi = 60, soon = true, bosses = {} },
+		-- 1.60.1 새 던전 3곳 (2026-11-15): 보스 · NPC 번호 · 알카즈 전리품 = AllTheThings 원본 자료(.contrib/.db/forever)
+		--  검은아귀 · 구체자 전리품 = 공개 전리품 표(timesaver.gg · wowtbc.gg, 아이템은 Wowhead 포에버 번호) · 비어 있는 보스는
+		--  게임 안에서 보스 시체를 열면 FOA 가 줍는 아이템을 기억해 채운다 (Ink.db.lootSeen)
+		--  입구: Warcraft Tavern 던전 안내 · 보스 순서: 알카즈 = Warcraft Tavern, 나머지 = AllTheThings 순서
+		{ key = "alcaz", ko = "알카즈 감옥", en = "Alcaz Prison", lo = 48, hi = 53, entr = { 1445, 75.0, 15.0 },
+			bosses = {
+			{ "Tidemistress Ca'zass", { 276737, 276736, 276735 }, 255997, 0, "Tidemistress Ca'zass" },
+			{ "Overseer Wrex", {  }, 0, 0, "Overseer Wrex" },
+			{ "Katerina the Cleaner", { 276739, 276738, 276740 }, 257016, 0, "Katerina the Cleaner" },
+			{ "Blazeroar", { 276745, 276746, 276744 }, 255702, 0, "Blazeroar" },
+			{ "The Questioner", { 276741, 276743, 276742 }, 256236, 0, "The Questioner" } } },
+		{ key = "blackmaw", ko = "검은아귀 요새", en = "Blackmaw Hold", lo = 55, hi = 60, entr = { 1447, 38.7, 33.4 },
+			bosses = {
+			{ "Withermaw", { 280062, 280063, 280064 }, 247195, 0, "Withermaw" },
+			{ "Impaan the Imprisoner", { 280056, 280057, 280058 }, 247206, 0, "Impaan the Imprisoner" },
+			{ "Elder Shaman Bloodmane", { 280068, 280069, 280070 }, 247209, 0, "Elder Shaman Bloodmane" },
+			{ "Bonesnout the Unbroken", { 280059, 280060, 280061 }, 247198, 0, "Bonesnout the Unbroken" },
+			{ "Varrox Bleakhoof", { 280074, 280075, 280076 }, 247234, 0, "Varrox Bleakhoof" },
+			{ "Blackmaw Behemoth", {  }, 247207, 0, "Blackmaw Behemoth" },
+			{ "Unbound Spirit", { 280071, 280072, 280073 }, 247231, 0, "Unbound Spirit" },
+			{ "Moontouched Wanderer", { 280079, 280080 }, 0, 1, "Moontouched Wanderer" },
+			{ "Tunnelweb Matriarch", { 280085, 280086 }, 0, 1, "Tunnelweb Matriarch" } } },
+		{ key = "shapers", ko = "구체자의 정원", en = "The Shaper's Terrace", lo = 58, hi = 60, entr = { 1449, 48.1, 6.1 },
+			bosses = {
+			{ "Titanosaur", {  }, 253201, 0, "Titanosaur" },
+			{ "Ravasaur Hunters", {  }, 253214, 0, "Ravasaur Hunters" },
+			{ "Thunderhoof", {  }, 261812, 0, "Thunderhoof" },
+			{ "Venomridge", {  }, 261813, 0, "Venomridge" },
+			{ "Direhorn Matriarch", {  }, 262127, 0, "Direhorn Matriarch" },
+			{ "Cinder", { 280028, 280029 }, 261974, 0, "Cinder" },
+			{ "King Op", {  }, 0, 0, "King Op" },
+			{ "Snowtalon", {  }, 262297, 0, "Snowtalon" },
+			{ "Bolt", {  }, 262081, 0, "Bolt" },
+			{ "Vitrix", { 280026, 280027, 280032 }, 272561, 0, "Vitrix" },
+			{ "Nanaya", {  }, 261809, 0, "Nanaya" } } },
 	},
 }

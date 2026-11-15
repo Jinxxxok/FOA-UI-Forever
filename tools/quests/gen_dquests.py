@@ -13,7 +13,7 @@
 
 사용: python3 -I gen_dquests.py <Instances.lua> <Zones.lua> <출력.lua>
 """
-import sys, os
+import sys, os, re
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import att_parse
 
@@ -262,16 +262,22 @@ with open(sys.argv[3], "w", encoding="utf-8") as f:
     f.write("-- [던전 inst] = { { 퀘스트, 필요레벨, 진영(1호드 2얼라), 지도, x, y, 주는NPC, 선행{}, 보상{}, 직업{}, 드랍NPC(-1 던전 몹), 반복,\n")
     f.write("--                   시작 아이템, 위치 종류(0 주는 곳 · 1 보고하는 곳 · 2 던전 안 NPC · 3 던전 안 물체 · 4 던전 드랍), 보고 NPC }, ... }\n")
     f.write("local _, ns = ...\nlocal b = select(4, GetBuildInfo()) or 0\nif not (b >= 16001 and b < 20000) then return end\nns.DUNGEON_QUESTS = {\n")
+    # 손 정리 블록 (dquests_manual.lua): 같은 던전 번호는 자동 생성 대신 이것을 쓴다
+    mpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dquests_manual.lua")
+    manual = open(mpath, encoding="utf-8").read() if os.path.exists(mpath) else ""
+    manual = "".join(l + "\n" for l in manual.split("\n") if l and not l.startswith("-- gen_dquests") and not l.startswith("-- 빌드 자료"))
+    manual_inst = set(int(x) for x in re.findall(r"^\t\[(\d+)\] = \{", manual, re.M))
     n = 0
     for inst in sorted(out):
         rows = sorted(out[inst].values(), key=lambda r: (r[1], r[0], r[2]))
-        if not rows: continue
+        if not rows or inst in manual_inst: continue
         f.write("\t[%d] = {\n" % inst)
         for r in rows:
             n += 1
             f.write("\t\t{%d,%d,%d,%d,%g,%g,%d,{%s},{%s},{%s},%d,%d,%d,%d,%d},\n" % (r[0], r[1], r[2], r[3], r[4], r[5], r[6],
                     ",".join(map(str, r[7])), ",".join(map(str, r[8])), ",".join(map(str, r[9])), r[10], r[11], r[12], r[13], r[14]))
         f.write("\t},\n")
+    f.write(manual)
     f.write("}\n")
     # 다른 퀘스트로 안내만 하는 연결 퀘스트 (선택: 안 해도 다음 퀘스트를 받을 수 있다)
     crumbs = sorted(q for q, rs in all_q.items() if any(b.get("isBreadcrumb") for _, b in rs) and any(q in v for v in [set(r[0] for r in out[i].values()) for i in out]))

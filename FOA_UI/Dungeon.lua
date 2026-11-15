@@ -515,9 +515,19 @@ ForeverScan = function(key, quiet)
 	local d = FLoot(key)
 	if not d then return end
 	local data = { id = key, name = d.ko or d.en, lo = d.lo, hi = d.hi, bosses = {}, missing = 0, d = d }
+	local seen = Ink.db and Ink.db.lootSeen and Ink.db.lootSeen[key]
 	for bi, b in ipairs(d.bosses) do
 		local boss = { index = bi, name = b[1], npc = b[3], rare = (b[4] or 0) >= 1, kind = b[4], en = b[5], items = {} }
-		for _, id in ipairs(b[2]) do
+		-- 자료 전리품 + 게임 안에서 그 보스에게서 주운 장비
+		local ids = b[2]
+		local got = seen and b[3] and seen[b[3]]
+		if got then
+			ids = {}
+			local has = {}
+			for _, id in ipairs(b[2]) do ids[#ids + 1] = id; has[id] = true end
+			for id in pairs(got) do if not has[id] then ids[#ids + 1] = id end end
+		end
+		for _, id in ipairs(ids) do
 			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
 			-- 게임 자료에 없는 아이템(패치로 바뀐 번호)은 건너뛴다. 안 그러면 영원히 "불러오는 중"
 			if iid and not OtherFactionItem(id) then
@@ -3247,7 +3257,7 @@ local DQ_INST = {
 	strat_live = 236, strat_ud = 236, sunken = 237, stockade = 238, uldaman = 239, wailing = 240, zulfarrak = 241,
 	scholo = 246, sm_gy = 316, sm_lib = 316, sm_arm = 316, sm_cath = 316, onyxia = 760,
 	thanes = 3065, lordaeron = 2999, excavation = 2998, dalaran = 2959,
-	drowned = 2970, kroldok = 3039,
+	drowned = 2970, kroldok = 3039, alcaz = 2994, blackmaw = 2974, shapers = 3001,
 }
 M.DQ_INST = DQ_INST
 -- 붉은십자군 수도원: 네 날개가 던전 번호 하나(316)를 같이 써서 모든 날개에 같은 퀘스트가 떴다
@@ -4835,14 +4845,30 @@ function M:CheckLoot()
 	local d = FLoot(key)
 	if not d then return end
 	local boss = {}
-	for _, b in ipairs(d.bosses or {}) do if b[3] then boss[b[3]] = true end end
+	for _, b in ipairs(d.bosses or {}) do if b[3] and b[3] > 0 then boss[b[3]] = true end end
 	for i = 1, (GetNumLootItems() or 0) do
 		local src = { GetLootSourceInfo(i) }
 		for j = 1, #src, 2 do
 			local guid = plain(src[j])
 			if type(guid) == "string" then
 				local npc = tonumber((select(6, strsplit("-", guid))))
-				if npc and boss[npc] then self:MarkKill(key, npc) end
+				if npc and boss[npc] then
+					self:MarkKill(key, npc)
+					-- 보스가 떨군 장비를 기억 (자료에 전리품이 비었거나 모자란 새 던전 보스를 채운다)
+					local link = GetLootSlotLink and GetLootSlotLink(i)
+					local id = type(link) == "string" and tonumber(link:match("item:(%d+)"))
+					if id then
+						local _, _, _, loc = C_Item.GetItemInfoInstant(id)
+						local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
+						if loc and EQUIP_EJ[loc] and (q or 2) >= 2 then
+							Ink.db.lootSeen = Ink.db.lootSeen or {}
+							local t = Ink.db.lootSeen[key] or {}
+							Ink.db.lootSeen[key] = t
+							t[npc] = t[npc] or {}
+							if not t[npc][id] then t[npc][id] = true; self.cache[key] = nil; self.dirty = true end
+						end
+					end
+				end
 			end
 		end
 	end
@@ -5408,7 +5434,13 @@ function M:PaintBis()
 	local curLink = GetInventoryItemLink("player", sb.inv)
 	local curR = curID and self.ranks[curID]
 	local other = ViewSpecID() ~= CurrentSpecID()
-	p.cur:SetText("지금: " .. (curLink or "비어 있음") .. (curR and ("  (" .. RankText(curR) .. ")") or "") .. (other and "  ·  다른 전문화 보는 중" or ""))
+	-- 주장비: 잠행 · 암살은 단검 (매복 · 뒤치기)
+	local mhNote = ""
+	if sb.inv == 16 and ns.Score and ns.Score.MainHandRule then
+		local f = ns.Score:MainHandRule(FOREVER and ViewKey() or nil)
+		if f then mhNote = "  ·  |cffFFD15F주장비는 단검 (매복 · 뒤치기)|r" end
+	end
+	p.cur:SetText("지금: " .. (curLink or "비어 있음") .. (curR and ("  (" .. RankText(curR) .. ")") or "") .. (other and "  ·  다른 전문화 보는 중" or "") .. mhNote)
 	local list = bySlot[sb.ej] or {}
 	local a = C.accent
 	for i, row in ipairs(p.ranks) do

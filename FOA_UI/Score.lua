@@ -635,6 +635,17 @@ RatingPct = function(cr, v)
 	return v > 5 and v / 14 or v
 end
 
+-- 주장비 무기 종류: 잠행은 매복 · 뒤치기가 주장비 단검이어야 써져서 단검이 아니면 크게 깎고,
+--  암살도 뒤치기 위주라 단검을 먼저 (깎는 폭은 작게) · 보조장비 · 전투 특성은 그대로
+--  (예전엔 특성 가중치만 봐서 잠행 BIS 주장비에 도검이 1등으로 떴다)
+local MH_DAGGER = { ["ROGUE:subtlety"] = 0.3, ["ROGUE:assassination"] = 0.6 }
+M.MH_DAGGER = MH_DAGGER
+local MH_LOC = { INVTYPE_WEAPON = true, INVTYPE_WEAPONMAINHAND = true, INVTYPE_2HWEAPON = true }
+function M:MainHandRule(spec)
+	local class, cur = self:Spec()
+	return MH_DAGGER[(class or "") .. ":" .. (spec or cur or "")]
+end
+
 -- spec: 다른 특성 기준으로 점수 (BIS · 던전 전리품에서 특성 아이콘을 눌렀을 때). 없으면 지금 내 특성
 function M:Score(link, asOffhand, spec)
 	if not link then return 0 end
@@ -673,6 +684,14 @@ function M:Score(link, asOffhand, spec)
 	local tip = ReadTooltip(link)
 	for short, v in pairs(tip.effects) do
 		if not stats[K[short] or ""] then total = total + v * (w[short] or 0) end
+	end
+	-- 주장비로 쓸 무기가 단검이 아니면 (잠행 · 암살)
+	if not asOffhand and MH_LOC[loc] then
+		local f = self:MainHandRule(spec)
+		if f then
+			local _, _, _, _, _, classID, subID = GetItemInfoInstant(link)
+			if classID == 2 and subID ~= 15 then total = total * f end
+		end
 	end
 	-- 툴팁 줄(장착 효과 · 적중 %)이 덜 왔으면 기억하지 않는다 → 도착 후 다시 계산
 	--  (예전엔 이것 때문에 아이템이 도착할 때마다 점수 기억을 통째로 지웠다)
