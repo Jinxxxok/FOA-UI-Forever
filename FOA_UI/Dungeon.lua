@@ -1045,11 +1045,22 @@ local usableCache = {}
 local basics = {}
 local function ItemBasics(id)
 	local m = basics[id]
-	if m then return m[1], m[2], m[3] end
-	local name, link, _, _, minLv = C_Item.GetItemInfo(id)
-	if name then basics[id] = { name, link, minLv or 0 } end
-	return name, link, minLv
+	if m then return m[1], m[2], m[3], m[4] end
+	local name, link, _, ilvl, minLv = C_Item.GetItemInfo(id)
+	if name then basics[id] = { name, link, minLv or 0, ilvl or 0 } end
+	return name, link, minLv, ilvl
 end
+
+-- 지금 레벨에 실제로 얻을 수 있나 (육성)
+--  요구 레벨이 없는 장비(포에버 퀘스트 보상 · 도서관 책 · 희귀몹 드랍 등)는 요구 레벨 칸만 보면 1레벨에도 통과한다
+--  → 아이템 레벨로 가늠한다 (보통 요구 레벨 ≈ 아이템 레벨 - 5). 퀘스트 · 던전 장비는 레벨 정보가 따로 있어 조금 느슨하게
+local function Reachable(it, minLv, ilvl, lvl)
+	if lvl >= 60 or (minLv or 0) > 0 or not ilvl or ilvl <= 0 then return true end
+	if it.need and it.need > lvl then return false end
+	local slack = (it.quest or it.inst) and 12 or 8
+	return ilvl <= lvl + slack
+end
+M.Reachable = Reachable
 local function ForMyClass(it)
 	local _, cls = UnitClass("player")
 	local key = it.id .. cls .. (UnitLevel("player") or 0)
@@ -1151,6 +1162,49 @@ function M:AddCrafts(pool, lvl)
 	end
 end
 
+-- 던전 퀘스트마다 실제로 받아서 끝낼 수 있는 레벨 (한 번만 계산)
+function M:DungeonQuestNeed()
+	if self.dqNeed then return self.dqNeed end
+	local lv, pre, instOf = {}, {}, {}
+	for _, e in ipairs(ns.FOREVER_QREWARDS or {}) do
+		if (e[3] or 0) > (lv[e[2]] or 0) then lv[e[2]] = e[3] end
+	end
+	for inst, list in pairs(ns.DUNGEON_QUESTS or {}) do
+		for _, q in ipairs(list) do
+			if (q[2] or 0) > (lv[q[1]] or 0) then lv[q[1]] = q[2] end
+			pre[q[1]] = q[8]
+			instOf[q[1]] = instOf[q[1]] or inst
+		end
+	end
+	-- 던전 번호 → 그 던전(날개 중 가장 낮은 곳) 권장 최저 레벨
+	local lo = {}
+	for _, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
+		local inst = M.DQ_INST and M.DQ_INST[d.key]
+		if inst and d.lo and not d.soon and (not lo[inst] or d.lo < lo[inst]) then lo[inst] = d.lo end
+	end
+	local memo = {}
+	local function Chain(qid, depth)
+		if memo[qid] then return memo[qid] end
+		if depth > 30 then return lv[qid] or 0 end
+		memo[qid] = lv[qid] or 0 -- 고리 방지
+		local n = lv[qid] or 0
+		for _, p in ipairs(pre[qid] or {}) do
+			local c = Chain(p, depth + 1)
+			if c > n then n = c end
+		end
+		memo[qid] = n
+		return n
+	end
+	local out = {}
+	for qid, inst in pairs(instOf) do
+		local n = Chain(qid, 0)
+		if lo[inst] and lo[inst] - 4 > n then n = lo[inst] - 4 end
+		out[qid] = n
+	end
+	self.dqNeed = out
+	return out
+end
+
 -- 퀘스트 보상 장비도 후보로 (ForeverQuestRewards.lua · AllTheThings MIT)
 --  내 진영 · 내 직업 퀘스트만, 이미 끝낸 퀘스트는 빼고, 퀘스트 레벨로 대충 레벨 창을 좁힌다
 function M:AddQuestRewards(pool, lvl)
@@ -1192,10 +1246,14 @@ function M:AddQuestRewards(pool, lvl)
 		end
 	end
 	-- 던전 퀘스트 보상 (DungeonQuests.lua · 보상 목록) · 같은 규칙
+	--  받을 수 있는 레벨 = 퀘스트 필요 레벨 · 앞 퀘스트들 필요 레벨 · 그 던전 권장 최저 레벨 - 4 중 가장 높은 것
+	--  (자료에 필요 레벨이 빠진 퀘스트가 0으로 들어와 1레벨에도 스트라솔름 · 검은바위 나락 보상이 떴다)
+	local need = self:DungeonQuestNeed()
 	local added = {}
 	for inst, list in pairs(ns.DUNGEON_QUESTS or {}) do
 		for _, q in ipairs(list) do
-			local qid, qlvl, qfac, cls = q[1], q[2] or 0, q[3] or 0, q[10] or {}
+			local qid, qfac, cls = q[1], q[3] or 0, q[10] or {}
+			local qlvl = need[qid] or q[2] or 0
 			local okFac = qfac == 0 or qfac == facN
 			local okCls = #cls == 0
 			if not okCls then for _, c in ipairs(cls) do if c == classID then okCls = true break end end end
@@ -1206,7 +1264,7 @@ function M:AddQuestRewards(pool, lvl)
 					if slot and not added[id] then
 						local it = self.questById[id]
 						if not it then
-							it = { id = id, icon = icon, slot = slot, quest = qid, qlvl = qlvl, qmap = q[4], qx = q[5], qy = q[6], qnpc = q[7], dq = inst }
+							it = { id = id, icon = icon, slot = slot, quest = qid, qlvl = q[2] or 0, need = qlvl, qmap = q[4], qx = q[5], qy = q[6], qnpc = q[7], dq = inst }
 							self.questById[id] = it
 						end
 						if not it.name then
@@ -1231,7 +1289,7 @@ function M:AddQuestRewards(pool, lvl)
 end
 
 -- 월드 드랍 · 필드 몹 · 필드 희귀몹 · 상인 · 평판 · 던전 일반 몹 장비도 후보로 (ForeverSources.lua · wowf.io)
---  내 진영에서 얻을 수 있는 것만, 요구 레벨이 내 레벨 아래 15레벨 안 (요구 레벨이 없는 건 12레벨까지만)
+--  내 진영에서 얻을 수 있는 것만, 요구 레벨이 내 레벨 아래 15레벨 안 (요구 레벨이 없는 건 아이템 레벨로 가늠)
 function M:AddWorldSources(pool, lvl)
 	if Ink.db.bisWorld == false or not ns.FOREVER_SOURCES then return end
 	self.worldById = self.worldById or {}
@@ -1239,7 +1297,7 @@ function M:AddWorldSources(pool, lvl)
 	for _, list in pairs(pool) do for _, it in ipairs(list) do have[it.id] = true end end
 	for id, e in pairs(ns.FOREVER_SOURCES) do
 		local rl = e.rl or 0
-		local okLv = (rl == 0 and lvl <= 12) or (rl > 0 and rl <= lvl and rl >= lvl - 15)
+		local okLv = rl == 0 or (rl <= lvl and rl >= lvl - 15) -- 요구 레벨이 없으면 아이템 레벨로 (Reachable)
 		if okLv and not have[id] and ns.ItemSourceForMe(id) then
 			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
 			local slot = iid and loc and EQUIP_EJ[loc]
@@ -1422,11 +1480,11 @@ function M:BuildLevelRanks(pool, lvl)
 		for _, it in ipairs(list) do
 			if not seen[it.id] then
 				seen[it.id] = true
-				local name, link, minLv = ItemBasics(it.id)
+				local name, link, minLv, ilvl = ItemBasics(it.id)
 				if not name then
 					self.levelPending = true
 					RequestItem(it.id)
-				elseif (minLv or 0) <= lvl and ForMyClass(it) then
+				elseif (minLv or 0) <= lvl and ForMyClass(it) and Reachable(it, minLv, ilvl, lvl) then
 					local v = sc:Score(link or ("item:" .. it.id), off, FOREVER and ScoreSpec() or nil)
 					if v == nil then self.levelPending = true; RequestItem(it.id) end
 					if v and v > 0 then out[#out + 1] = { it = it, score = v, minLv = minLv } end

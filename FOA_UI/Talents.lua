@@ -83,6 +83,8 @@ local function TraitNodes()
 end
 M.TraitNodes = TraitNodes
 
+local IconMap, PickFor -- 아래에서 정의 (위의 빌드 비교 함수들이 먼저 쓴다)
+
 local function NodeRank(nodeID)
 	local cfg = ConfigID()
 	if not cfg then return 0 end
@@ -175,7 +177,7 @@ end
 function M:SetMode(mode)
 	if not Ink.cdb then return end
 	Ink.cdb.talentMode = mode
-	self.resolved = nil
+	self.resolved, self.autoKey = nil, nil
 end
 
 -- 전문화 순서: 게임 특성 탭 순서 (야성 곰은 야성 다음)
@@ -204,6 +206,78 @@ function M:Builds(mode)
 	return list
 end
 
+-- 아이콘 → 트리 (이 직업 1.60.1 특성 칸 표 · 두 트리에 같은 아이콘이 있으면 쓰지 않는다)
+local iconTreeCache = {}
+function M.IconTree(class)
+	if iconTreeCache[class] then return iconTreeCache[class] end
+	LoadBuilds()
+	local t, dup = {}, {}
+	for _, n in pairs(M.nodeInfo or {}) do
+		if n[6] == class then
+			if t[n[1]] and t[n[1]] ~= n[3] then dup[n[1]] = true end
+			t[n[1]] = n[3]
+		end
+	end
+	for icon in pairs(dup) do t[icon] = nil end
+	iconTreeCache[class] = t
+	return t
+end
+
+-- 지금 찍은 트리별 점수 { 1트리, 2트리, 3트리 } · 칸 번호 → 트리, 없으면 아이콘 → 트리
+function M.TreePoints(class)
+	if not TraitsMode() then return end
+	LoadBuilds()
+	class = class or select(2, UnitClass("player"))
+	local info, byIcon = M.nodeInfo or {}, M.IconTree(class)
+	local pts, any = { 0, 0, 0 }, false
+	for _, n in ipairs(TraitNodes()) do
+		local r = n.bought or n.rank or 0
+		if r > 0 then
+			local ni = info[n.node]
+			local t = (ni and ni[6] == class and ni[3]) or (n.icon and byIcon[n.icon])
+			if t then pts[t + 1] = pts[t + 1] + r; any = true end
+		end
+	end
+	return any and pts or nil
+end
+
+-- 지금 찍은 특성 중 이 빌드와 맞는 점수 (빌드마다) · 지금 찍은 전체 점수
+function M:OverlapFor(key, map, byNode)
+	local b = key and ns.TalentData.builds[key]
+	if not b then return 0 end
+	if not map then map, byNode = IconMap() end
+	local final, where = {}, {}
+	for _, s in ipairs(b.steps) do
+		local pick = PickFor(s, map, byNode)
+		if pick then
+			local k = pick.node and ("n" .. pick.node) or (pick.t .. ":" .. pick.i)
+			final[k] = math.max(final[k] or 0, math.min(s[2], pick.max or s[2]))
+			where[k] = pick
+		end
+	end
+	local match = 0
+	for k, tg in pairs(final) do
+		local p = where[k]
+		local cur = p.node and NodeRank(p.node) or select(5, TalentInfo(p.t, p.i))
+		match = match + math.min(tonumber(cur) or 0, tg)
+	end
+	return match
+end
+
+-- 이 모드에서 지금 특성과 가장 잘 맞는 빌드 (같은 전문화 우선)
+function M:BestMatch(mode, sameSpec)
+	local list = self:Builds(mode)
+	local map, byNode = IconMap()
+	local best, bestN = nil, -1
+	for _, k in ipairs(list) do
+		if not sameSpec or ns.TalentData.builds[k].spec == sameSpec then
+			local n = self:OverlapFor(k, map, byNode)
+			if n > bestN then best, bestN = k, n end
+		end
+	end
+	return best, bestN
+end
+
 function M:BuildKey()
 	local mode = self:Mode()
 	local list = self:Builds(mode)
@@ -215,12 +289,19 @@ function M:BuildKey()
 	if want and data[want] and (data[want].mode or "lvl") == mode then
 		for _, k in ipairs(list) do if k == want then return want end end
 	end
+	-- 고른 적이 없으면: 지금 전문화의 빌드 중 지금 찍은 특성과 가장 잘 맞는 것
+	if self.autoKey and self.autoMode == mode and self.autoAt and GetTime() - self.autoAt < 3 then return self.autoKey end
 	local spec
 	if ns.Score then spec = select(2, ns.Score:Spec()) end
+	local key
 	if spec then
-		for _, k in ipairs(list) do if data[k].spec == spec then return k end end
+		local ok, k = pcall(self.BestMatch, self, mode, spec)
+		key = ok and k or nil
+		if not key then for _, k2 in ipairs(list) do if data[k2].spec == spec then key = k2 break end end end
 	end
-	return list[1]
+	key = key or list[1]
+	self.autoKey, self.autoMode, self.autoAt = key, mode, GetTime()
+	return key
 end
 
 function M:PickBuild(key)
@@ -242,7 +323,7 @@ function M:BuildLabel(key)
 end
 
 -- 아이콘 → 게임 특성 위치
-local function IconMap()
+IconMap = function()
 	local map, byNode = {}, {}
 	if TraitsMode() then
 		for _, n in ipairs(TraitNodes()) do
@@ -268,6 +349,19 @@ local function IconMap()
 	return map, byNode
 end
 
+-- 데이터 단계 하나 → 게임 특성 칸 (노드 번호가 있으면 그것으로, 없으면 아이콘 + 최대 단계로)
+PickFor = function(s, map, byNode)
+	local pick = s[8] and byNode[s[8]]
+	if not pick then
+		local cands = map[s[1]]
+		if cands then
+			for _, c in ipairs(cands) do if c.max == s[3] then pick = c break end end
+			pick = pick or cands[1]
+		end
+	end
+	return pick
+end
+
 function M:Resolve()
 	local key = self:BuildKey()
 	if not key then return end
@@ -279,14 +373,7 @@ function M:Resolve()
 	for _, s in ipairs(ns.TalentData.builds[key].steps) do
 		local fid, target, max, lo, hi, en = s[1], s[2], s[3], s[4], s[5], s[6]
 		-- 노드 번호가 있으면 그것으로 (같은 아이콘 특성이 여럿이어도 정확), 없으면 아이콘 + 최대 단계로
-		local pick = s[8] and byNode[s[8]]
-		if not pick then
-			local cands = map[fid]
-			if cands then
-				for _, c in ipairs(cands) do if c.max == max then pick = c break end end
-				pick = pick or cands[1]
-			end
-		end
+		local pick = PickFor(s, map, byNode)
 		local r = { lo = lo, hi = hi, en = en, icon = (pick and pick.icon) or fid }
 		if pick then
 			r.t, r.i, r.node, r.max, r.name = pick.t, pick.i, pick.node, pick.max, pick.name
@@ -352,6 +439,32 @@ function M:Overlap()
 		end
 	end
 	return match, math.max(spent, match)
+end
+
+-- 빌드의 트리별 목표 점수 (PvE · PvP 는 자료에 있음, 육성은 게임 특성 칸 → 트리로 계산)
+function M:SplitOf(key)
+	local b = key and ns.TalentData.builds[key]
+	if not b then return end
+	if b.split then return b.split end
+	if key ~= self:BuildKey() then return end
+	local steps = self:Resolve()
+	if not steps then return end
+	local _, class = UnitClass("player")
+	local info, byIcon = M.nodeInfo or {}, M.IconTree(class)
+	local final, tree = {}, {}
+	for _, r in ipairs(steps) do
+		if r.k then
+			final[r.k] = math.max(final[r.k] or 0, r.target or 0)
+			local ni = r.node and info[r.node]
+			tree[r.k] = (ni and ni[6] == class and ni[3]) or (r.icon and byIcon[r.icon]) or tree[r.k]
+		end
+	end
+	local sp, any = { 0, 0, 0 }, false
+	for k, v in pairs(final) do
+		local t = tree[k]
+		if t then sp[t + 1] = sp[t + 1] + v; any = true end
+	end
+	return any and sp or nil
 end
 
 -------------------------------------------------------------------------------
@@ -504,32 +617,84 @@ function M:BuildPanel(f)
 		p.modes[i] = b
 	end
 
-	-- 빌드 고르기: 이름 · n / m · 트리 비율 막대
+	-- 빌드 카드: 이름 · n / m / 트리 세 칸 (빌드 목표 · 지금 찍은 만큼 막대) / 상태 한 줄
+	local CARD_H = 96
 	p.build = CreateFrame("Button", nil, p)
-	p.build:SetSize(W, 40)
+	p.build:SetSize(W, CARD_H)
 	p.build:SetPoint("TOPLEFT", 14, -64)
 	p.build:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	p.build.bg = Ink:Round(p.build, "BACKGROUND", true, false)
 	p.build.bg:SetAllPoints()
-	p.build.bg:SetVertexColor(1, 1, 1, 0.05)
-	p.build.text = Ink:Text(p.build, F.semi, 11, C.accent, "LEFT")
-	p.build.text:SetPoint("TOPLEFT", 10, -7)
-	p.build.text:SetWidth(W - 70)
+	p.build.bg:SetVertexColor(1, 1, 1, 0.045)
+	p.build.text = Ink:Text(p.build, F.semi, 12, C.accent, "LEFT")
+	p.build.text:SetPoint("TOPLEFT", 10, -9)
+	p.build.text:SetWidth(W - 64)
 	p.build.text:SetWordWrap(false)
 	p.build.hint = Ink:Text(p.build, F.latinB, 10, C.dim, "RIGHT")
-	p.build.hint:SetPoint("TOPRIGHT", -10, -8)
-	p.build.info = Ink:Text(p.build, F.sans, 10, C.muted, "LEFT")
-	p.build.info:SetPoint("BOTTOMLEFT", 10, 8)
-	p.build.info:SetWidth(W - 20)
-	p.build.info:SetWordWrap(false)
-	-- 트리 비율: 바닥에 2px 세 토막 (가장 깊은 트리가 강조색)
-	p.build.bar = {}
+	p.build.hint:SetPoint("TOPRIGHT", -10, -10)
+	-- 트리 세 칸
+	local GAP = 10
+	local colW = math.floor((W - 20 - GAP * 2) / 3)
+	p.build.cols = {}
 	for t = 1, 3 do
-		local x = p.build:CreateTexture(nil, "ARTWORK")
-		x:SetHeight(2)
-		x:SetTexture(Ink.tex.white or "Interface\\Buttons\\WHITE8X8")
-		p.build.bar[t] = x
+		local c = CreateFrame("Frame", nil, p.build)
+		c:SetSize(colW, 34)
+		c:SetPoint("TOPLEFT", 10 + (t - 1) * (colW + GAP), -31)
+		c.name = Ink:Text(c, F.sans, 10, C.muted, "LEFT")
+		c.name:SetPoint("TOPLEFT", 0, 0)
+		c.tgt = Ink:Text(c, F.latinB, 12, C.text, "RIGHT")
+		c.tgt:SetPoint("TOPRIGHT", 0, 1)
+		c.track = c:CreateTexture(nil, "ARTWORK")
+		c.track:SetTexture(Ink.tex.white or "Interface\\Buttons\\WHITE8X8")
+		c.track:SetPoint("TOPLEFT", 0, -16)
+		c.track:SetSize(colW, 3)
+		c.track:SetVertexColor(1, 1, 1, 0.08)
+		c.fill = c:CreateTexture(nil, "OVERLAY")
+		c.fill:SetTexture(Ink.tex.white or "Interface\\Buttons\\WHITE8X8")
+		c.fill:SetPoint("TOPLEFT", 0, -16)
+		c.fill:SetHeight(3)
+		c.cur = Ink:Text(c, F.sans, 9, C.dim, "LEFT")
+		c.cur:SetPoint("TOPLEFT", 0, -23)
+		c.over = Ink:Text(c, F.latinB, 9, C.orange, "RIGHT")
+		c.over:SetPoint("TOPRIGHT", 0, -23)
+		c.w = colW
+		p.build.cols[t] = c
 	end
+	-- 상태 한 줄 (지금 특성과 더 맞는 빌드가 있으면 눌러서 바로 바꾼다)
+	p.build.sep = p.build:CreateTexture(nil, "ARTWORK")
+	p.build.sep:SetColorTexture(1, 1, 1, 0.06)
+	p.build.sep:SetHeight(1)
+	p.build.sep:SetPoint("TOPLEFT", 10, -69)
+	p.build.sep:SetPoint("TOPRIGHT", -10, -69)
+	p.build.status = CreateFrame("Button", nil, p.build)
+	p.build.status:SetSize(W - 20, 18)
+	p.build.status:SetPoint("TOPLEFT", 10, -73)
+	p.build.status.dot = p.build.status:CreateTexture(nil, "OVERLAY")
+	p.build.status.dot:SetTexture(Ink.tex.round4 or Ink.tex.disc)
+	p.build.status.dot:SetSize(6, 6)
+	p.build.status.dot:SetPoint("LEFT", 0, 0)
+	p.build.status.text = Ink:Text(p.build.status, F.sans, 10, C.soft, "LEFT")
+	p.build.status.text:SetPoint("LEFT", p.build.status.dot, "RIGHT", 6, 0)
+	p.build.status.text:SetWidth(W - 34)
+	p.build.status.text:SetWordWrap(false)
+	p.build.status:SetScript("OnClick", function(self, btn)
+		if self.suggest then
+			M:PickBuild(self.suggest)
+			M:PaintFrame()
+		else
+			p.build:GetScript("OnClick")(p.build, btn)
+		end
+	end)
+	p.build.status:SetScript("OnEnter", function(self)
+		if self.suggest then self.text:SetTextColor(C.text[1], C.text[2], C.text[3]) end
+		p.build.bg:SetVertexColor(1, 1, 1, 0.075)
+		M:BuildTip(p.build)
+	end)
+	p.build.status:SetScript("OnLeave", function(self)
+		if self.suggest then self.text:SetTextColor(C.accent[1], C.accent[2], C.accent[3]) end
+		p.build.bg:SetVertexColor(1, 1, 1, 0.045)
+		GameTooltip:Hide()
+	end)
 	p.build:SetScript("OnClick", function(_, btn)
 		local list = M:Builds()
 		if #list < 2 then return end
@@ -542,19 +707,21 @@ function M:BuildPanel(f)
 		if GameTooltip:IsOwned(p.build) then M:BuildTip(p.build) end
 	end)
 	p.build:SetScript("OnEnter", function(self)
-		self.bg:SetVertexColor(1, 1, 1, 0.08)
+		self.bg:SetVertexColor(1, 1, 1, 0.075)
 		M:BuildTip(self)
 	end)
 	p.build:SetScript("OnLeave", function(self)
-		self.bg:SetVertexColor(1, 1, 1, 0.05)
+		self.bg:SetVertexColor(1, 1, 1, 0.045)
 		GameTooltip:Hide()
 	end)
+	local ROW_TOP = 64 + CARD_H + 6
+	p.rowTop = ROW_TOP
 
 	p.rows = {}
 	for i = 1, 8 do
 		local r = CreateFrame("Frame", nil, p)
 		r:SetSize(W, 28)
-		r:SetPoint("TOPLEFT", 14, -114 - (i - 1) * 30)
+		r:SetPoint("TOPLEFT", 14, -ROW_TOP - (i - 1) * 30)
 		r.icon = r:CreateTexture(nil, "ARTWORK")
 		r.icon:SetSize(24, 24)
 		r.icon:SetPoint("LEFT", 0, 0)
@@ -570,7 +737,7 @@ function M:BuildPanel(f)
 		p.rows[i] = r
 	end
 	p.foot = Ink:Text(p, F.sans, 9, C.dim, "LEFT")
-	p.foot:SetPoint("TOPLEFT", 14, -114 - 8 * 30 - 4)
+	p.foot:SetPoint("TOPLEFT", 14, -ROW_TOP - 8 * 30 - 4)
 	p.foot:SetWidth(W)
 	p.foot:SetWordWrap(true)
 	self.panel = p
@@ -602,19 +769,21 @@ function M:BuildTip(owner)
 	GameTooltip:SetOwner(owner, "ANCHOR_RIGHT", 6, 0)
 	GameTooltip:ClearLines()
 	GameTooltip:AddLine("|cffFFF468FOA|r  " .. MODE_NAME[self:Mode()] .. " 빌드")
+	local map, byNode = IconMap()
 	for _, k in ipairs(list) do
 		local b = ns.TalentData.builds[k]
 		local split = b.split and string.format("  |cff5E636B%d/%d/%d|r", b.split[1], b.split[2], b.split[3]) or ""
+		local ok, n = pcall(self.OverlapFor, self, k, map, byNode)
+		local fit = (ok and n and n > 0) and string.format("  |cff8E939B맞는 점수 %d|r", n) or ""
 		if k == cur then
-			GameTooltip:AddLine("|cffFFF468●|r  " .. self:BuildLabel(k) .. split, 1, 1, 1)
+			GameTooltip:AddLine("|cffFFF468●|r  " .. self:BuildLabel(k) .. split .. fit, 1, 1, 1)
 		else
-			GameTooltip:AddLine("|cff5E636B○|r  " .. self:BuildLabel(k) .. split, 0.71, 0.72, 0.75)
+			GameTooltip:AddLine("|cff5E636B○|r  " .. self:BuildLabel(k) .. split .. fit, 0.71, 0.72, 0.75)
 		end
 	end
-	if #list > 1 then
-		GameTooltip:AddLine(" ")
-		GameTooltip:AddLine("클릭: 다음  ·  오른쪽 클릭: 이전", 0.56, 0.58, 0.61)
-	end
+	GameTooltip:AddLine(" ")
+	GameTooltip:AddLine("트리 칸: 큰 숫자 = 빌드 목표 점수 · 막대 = 지금 찍은 만큼", 0.56, 0.58, 0.61)
+	if #list > 1 then GameTooltip:AddLine("클릭: 다음  ·  오른쪽 클릭: 이전", 0.56, 0.58, 0.61) end
 	GameTooltip:Show()
 end
 
@@ -636,39 +805,64 @@ function M:PaintPanel(f, nxt)
 	for n, k in ipairs(list) do if k == key then idx = n end end
 	p.build.hint:SetText(#list > 1 and string.format("%d / %d", idx, #list) or "")
 
-	-- 둘째 줄: 트리 점수 · 겹침 (PvE · PvP) / 레벨 범위 (육성)
-	local over, spent
-	local bar = p.build.bar
-	if b and b.split then
-		over, spent = self:Overlap()
-		local tot = math.max(1, b.split[1] + b.split[2] + b.split[3])
-		local deep = 1
-		for t = 2, 3 do if b.split[t] > b.split[deep] then deep = t end end
-		local x = 10
-		local span = W - 20
-		for t = 1, 3 do
-			local w = span * b.split[t] / tot
-			bar[t]:ClearAllPoints()
-			bar[t]:SetPoint("BOTTOMLEFT", p.build, "BOTTOMLEFT", x, 3)
-			bar[t]:SetWidth(math.max(0.01, w - (w > 2 and 1 or 0)))
-			if t == deep then Paint(bar[t], C.accent, 0.9) else Paint(bar[t], C.soft, t == 1 and 0.35 or 0.22) end
-			bar[t]:SetShown(b.split[t] > 0)
-			x = x + w
-		end
-		local info = string.format("%d · %d · %d", b.split[1], b.split[2], b.split[3])
-		if spent and spent > 0 then info = info .. string.format("   |cff8E939B겹침|r %d / %d", over, spent) end
-		p.build.info:SetText(info)
-	else
-		for t = 1, 3 do bar[t]:Hide() end
-		p.build.info:SetText("레벨 10 – 60 · 오를 때마다 하나씩")
+	-- 트리 세 칸: 빌드 목표 점수 · 지금 찍은 점수
+	local split = self:SplitOf(key)
+	local now = M.TreePoints()
+	local _, class = UnitClass("player")
+	local tabs = ns.Score and ns.Score.TABS and ns.Score.TABS[class] or {}
+	local deep = 1
+	if split then for t = 2, 3 do if split[t] > split[deep] then deep = t end end end
+	for t, c in ipairs(p.build.cols) do
+		local sk = tabs[t]
+		c.name:SetText(sk and ns.Score.SPEC_NAME and ns.Score.SPEC_NAME[sk] or ("트리 " .. t))
+		local tg = split and split[t]
+		local cur = now and now[t] or 0
+		c.tgt:SetText(tg and tostring(tg) or "–")
+		local main = split and t == deep
+		local col = main and C.accent or C.soft
+		c.name:SetTextColor((main and C.accent or C.muted)[1], (main and C.accent or C.muted)[2], (main and C.accent or C.muted)[3])
+		c.tgt:SetTextColor((main and C.accent or C.text)[1], (main and C.accent or C.text)[2], (main and C.accent or C.text)[3], (tg and tg > 0) and 1 or 0.45)
+		local f = (tg and tg > 0) and math.min(cur, tg) / tg or 0
+		c.fill:SetWidth(math.max(0.01, c.w * f))
+		c.fill:SetVertexColor(col[1], col[2], col[3], main and 0.95 or 0.6)
+		c.fill:SetShown(f > 0)
+		c.cur:SetText(now and ("지금 " .. cur) or "")
+		c.over:SetText((now and tg and cur > tg) and ("+" .. (cur - tg)) or "")
 	end
+
+	-- 상태 한 줄
+	local over, spent = self:Overlap()
+	over, spent = over or 0, spent or 0
+	local total = (b and b.total) or (split and (split[1] + split[2] + split[3])) or 0
+	local st = p.build.status
+	st.suggest = nil
+	local bestKey, bestN
+	if spent > 0 then
+		local ok, k, n = pcall(self.BestMatch, self, self:Mode())
+		if ok then bestKey, bestN = k, n end
+	end
+	local dotC, txtC, msg
+	if spent == 0 then
+		dotC, txtC, msg = C.dim, C.muted, "아직 찍은 특성이 없어요 · 아래 순서대로 찍으세요"
+	elseif bestKey and bestKey ~= key and (bestN or 0) >= over + 5 then
+		st.suggest = bestKey
+		dotC, txtC, msg = C.accent, C.accent, "지금 찍은 특성과 더 맞는 빌드  ·  " .. self:BuildLabel(bestKey) .. "  ›"
+	elseif spent > over then
+		dotC, txtC, msg = C.orange, C.soft, string.format("빌드와 다른 점수 %d점 · 초기화하면 이대로 맞춰져요", spent - over)
+	else
+		dotC, txtC = C.green, C.soft
+		msg = total > 0 and string.format("빌드대로 가는 중 · %d / %d점", over, total) or "빌드대로 가는 중"
+	end
+	st.dot:SetVertexColor(dotC[1], dotC[2], dotC[3], 1)
+	st.text:SetText(msg)
+	st.text:SetTextColor(txtC[1], txtC[2], txtC[3])
 
 	TREE_NAMES = TREE_NAMES or {}
 	for i, r in ipairs(p.rows) do
 		local n = nxt[i]
 		if n then
 			r:Show()
-			r.icon:SetTexture(n.icon)
+			r.icon:SetTexture(n.icon or 134400)
 			r.name:SetText(n.name or "?")
 			if n.t and not TREE_NAMES[n.t] and GetTalentTabInfo then
 				local a, b2 = GetTalentTabInfo(n.t)
@@ -690,7 +884,7 @@ function M:PaintPanel(f, nxt)
 	if #nxt == 0 then
 		local r = p.rows[1]
 		r:Show()
-		r.icon:SetTexture(nil)
+		r.icon:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
 		r.name:SetText("이 빌드를 다 찍었어요")
 		r.name:SetTextColor(C.green[1], C.green[2], C.green[3])
 		r.sub:SetText("")
@@ -701,16 +895,13 @@ function M:PaintPanel(f, nxt)
 	if b and b.mode ~= "lvl" then
 		local by = (b.src or ""):find("^Mobalytics") and "찍는 순서: 공략 작성자" or "찍는 순서: 위 줄부터 (FOA 정리)"
 		foot = (b.src or "") .. " · 게임 1.60.1 · 60레벨 완성\n" .. by
-		if spent and spent > over then
-			foot = foot .. string.format("\n|cffFFB75A빌드 밖에 찍은 %d점 · 특성 초기화 후 따라가면 그대로 맞아요|r", spent - over)
-		end
 	else
 		foot = SRC_NOTE[b and b.src or "wowf.io"] or ((b and b.src or "") .. " 레벨업 순서")
 	end
 	if (self.missing or 0) > 0 then foot = foot .. string.format("\n게임 특성과 안 맞는 단계 %d개는 건너뜀", self.missing) end
 	p.foot:SetText(foot)
 	local fh = p.foot.GetStringHeight and p.foot:GetStringHeight() or 24
-	p:SetHeight(114 + 8 * 30 + math.ceil(tonumber(fh) or 24) + 14)
+	p:SetHeight((p.rowTop or 166) + 8 * 30 + math.ceil(tonumber(fh) or 24) + 14)
 end
 
 function M:HookTraitFrame()
@@ -772,7 +963,7 @@ function M:Init()
 			end
 			return
 		end
-		M.resolved = nil
+		M.resolved, M.autoKey = nil, nil
 		if event == "PLAYER_LEVEL_UP" then
 			C_Timer.After(1, function() M:Remind() end)
 		elseif event == "CHARACTER_POINTS_CHANGED" or event:find("^TRAIT_") then

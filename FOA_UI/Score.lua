@@ -355,15 +355,21 @@ local function RankOf(ranks, name)
 end
 
 -- 포에버: { 트리별 점수 }, 가장 많은 트리 key, 곰 여부, 신성 충격 여부
+--  트리별 점수는 1.60.1 특성 칸 표(TalentBuilds: 칸 번호 → 트리)로 먼저 센다 → 새 특성도 정확
+--  (예전 아이콘 목록은 1.60.1 이전 계산기 기준이라 새 잠행 특성을 못 세서, 잠행 38점인데 암살로 판단한 적이 있다)
 local function ForeverTree(class)
 	local ranks = TraitRanks()
 	if not ranks then return end
-	local map = TreeMap(class)
-	if not map then return end
-	local pts = { 0, 0, 0 }
-	for icon, r in pairs(ranks) do
-		local t = map[icon]
-		if t then pts[t] = pts[t] + r end
+	local T = ns.Talents
+	local pts = T and T.TreePoints and T.TreePoints(class)
+	if not pts then
+		local map = TreeMap(class)
+		if not map then return end
+		pts = { 0, 0, 0 }
+		for icon, r in pairs(ranks) do
+			local t = map[icon]
+			if t then pts[t] = pts[t] + r end
+		end
 	end
 	local best, bestN = nil, 0
 	for t = 1, 3 do if pts[t] > bestN then best, bestN = t, pts[t] end end
