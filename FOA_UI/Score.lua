@@ -797,6 +797,7 @@ M.ParseLine = ParseLine
 
 -- 툴팁 줄: 못 쓰면 "no", 레벨이 모자라면 요구 레벨, 장착 효과 능력치
 local tipCache = {}
+local PCT_KEYS = { "hit", "crit", "shit", "scrit", "haste", "exp", "dodge", "parry", "block" }
 -- 아이템 정보가 게임에 들어와 있나 (번호만 보고 판단 · 서버에 묻지 않음)
 local function ItemCached(link)
 	if not (C_Item and C_Item.IsItemDataCachedByID) then return true end
@@ -832,6 +833,13 @@ local function ReadTooltip(link)
 	-- 아직 안 배운 무기 종류는 빨간 줄로 나오지만, 무기 전문가에게 배우면 쓸 수 있는 종류면 못 쓰는 걸로 치지 않는다
 	local learnable, subID = CanLearnWeapon(link)
 	local subName = subID and GetItemSubClassInfo and GetItemSubClassInfo(2, subID)
+	-- 세트 효과 줄 ("(5) 세트 효과: … 치명타 및 극대화율이 20초 동안 2%만큼 증가" · 갖춘 세트는 "세트 효과: …")
+	--  아이템 자체 능력치가 아니다. 예전엔 이 줄의 % 를 아이템의 치명타로 읽어서
+	--  데피아즈단 집행자의 어깨덧대(치명타 0.5%)가 치명타 2% 로 계산돼 PvP 계급 견장보다 위로 올라갔다
+	local setPrefix = (type(ITEM_SET_BONUS) == "string" and ITEM_SET_BONUS:gsub("%%s.*$", ""):gsub("%s+$", "")) or "세트 효과:"
+	local function SetLine(t)
+		return t:find("^%s*%(%d+%)") or t:find(setPrefix, 1, true) or t:find("세트 효과", 1, true) or t:lower():find("^%s*set:")
+	end
 	local function SkillLine(t)
 		return learnable and type(t) == "string" and subName and (t == subName or t:find(subName, 1, true))
 	end
@@ -858,7 +866,7 @@ local function ReadTooltip(link)
 			if t:find(onEquip, 1, true) == 1 then pcall(ParseLine, t, "equip", r, classItem)
 			elseif t:find(onUse, 1, true) == 1 then pcall(ParseLine, t, "use", r, classItem)
 			elseif t:find(onProc, 1, true) == 1 then pcall(ParseLine, t, "proc", r, classItem)
-			elseif t:find("%%") then
+			elseif t:find("%%") and not SetLine(t) then
 				-- 포에버 능력치 줄의 % ("적중률 0.3%") → 등급을 % 로 바꿀 때 그대로 쓴다
 				local n = tonumber(t:match("(%d+%.?%d*)%%"))
 				if n then
@@ -876,6 +884,11 @@ local function ReadTooltip(link)
 				end
 			end
 		end
+	end
+	-- 착용 효과 문장에 % 로 적힌 능력치 ("치명타 및 극대화율이 0.5%만큼 증가")가 곧 그 아이템의 % 값
+	--  (GetItemStats 가 같은 능력치를 등급 수로 줄 때 % 로 바꾸는 기준)
+	for _, k in ipairs(PCT_KEYS) do
+		if r.pcts[k] == nil and type(r.effects[k]) == "number" then r.pcts[k] = r.effects[k] end
 	end
 	r.complete = complete
 	if complete then tipCache[link] = r else M.missed = true end
