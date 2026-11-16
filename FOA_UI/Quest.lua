@@ -1304,8 +1304,43 @@ function M:SetTest(on)
 end
 
 -------------------------------------------------------------------------------
+-- 지도 옆 퀘스트 설명을 내려서 보상을 보고 있으면 맨 위로 튀어 올라가던 문제
+--  블리자드는 퀘스트 목록이 바뀔 때마다(QUEST_LOG_UPDATE · 추적 목록 변경) 보고 있는 퀘스트 설명을 다시 그리면서
+--  스크롤을 맨 위로 돌린다 → 같은 퀘스트를 다시 그린 거면 내려 둔 자리로 되돌린다 (다른 퀘스트를 열면 맨 위부터)
+function M:KeepDetailScroll()
+	local df = QuestMapFrame and QuestMapFrame.DetailsFrame
+	local sf = df and df.ScrollFrame
+	if self.detailHooked or not (sf and sf.GetVerticalScroll and QuestMapFrame_ShowQuestDetails and QuestInfo_Display) then return end
+	self.detailHooked = true
+	local shown, pending
+	-- 설명을 다시 채운 직후(맨 위로 돌리기 전)의 스크롤 자리를 잡아 둔다
+	hooksecurefunc("QuestInfo_Display", function(template, parent)
+		if parent ~= sf.Contents or not df.questID then return end
+		local ok, v = pcall(sf.GetVerticalScroll, sf)
+		pending = (ok and type(v) == "number" and v > 0) and { id = df.questID, v = v } or nil
+	end)
+	local function Restore(v)
+		local ok, range = pcall(sf.GetVerticalScrollRange, sf)
+		if ok and type(range) == "number" and range > 0 then
+			pcall(sf.SetVerticalScroll, sf, math.min(v, range))
+		end
+	end
+	hooksecurefunc("QuestMapFrame_ShowQuestDetails", function(questID)
+		local p = pending
+		pending = nil
+		if p and p.id == questID and shown == questID then
+			Restore(p.v)
+			-- 설명 길이가 다음 화면에서야 정해지는 경우가 있어서 한 번 더
+			C_Timer.After(0, function() if df.questID == questID then Restore(p.v) end end)
+		end
+		shown = questID
+	end)
+	if df.HookScript then df:HookScript("OnHide", function() shown, pending = nil, nil end) end
+end
+
 function M:Init()
 	pcall(self.GuardAbandon, self)
+	pcall(self.KeepDetailScroll, self)
 	self:Build()
 	local blz = Ink.modules.Blizzard
 	self.anchor = blz and blz.questAnchor
