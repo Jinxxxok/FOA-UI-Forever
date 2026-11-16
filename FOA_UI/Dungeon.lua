@@ -374,6 +374,19 @@ end
 --  수백 개를 계속 돌려 물으면 먼저 받은 것 · 착용 중인 장비 정보가 밀려났다가 다시 오기를 반복했다)
 --  화면에 보이는 것(prio)은 6번, 순위 계산용은 3번까지
 local tries = {}
+-- 아이템 등급은 한 번 알면 기억해 둔다
+--  게임이 아이템 정보를 내려놓으면 등급이 비어서 기본값(녹색)으로 그렸다가, 다시 받으면 파랑으로 —
+--  전리품 표를 다시 만들 때마다 녹색 · 파랑 테두리가 번갈아 보였다
+local qualityMemo = {}
+local function QualityOf(id)
+	if not id then return end
+	local q = qualityMemo[id]
+	if q then return q end
+	q = C_Item.GetItemQualityByID and plain(C_Item.GetItemQualityByID(id))
+	if type(q) == "number" and q >= 0 then qualityMemo[id] = q return q end
+end
+M.QualityOf = QualityOf
+
 local function RequestItem(id, prio)
 	if not id then return end
 	if C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(id) then return end
@@ -570,7 +583,7 @@ ForeverScan = function(key, quiet)
 					data.missing = data.missing + 1
 					if not quiet then RequestItem(id, true) end
 				end
-				local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
+				local q = QualityOf(id)
 				table.insert(boss.items, {
 					id = id, name = name, link = link, icon = icon, slot = loc and EQUIP_EJ[loc], quality = q or 2,
 					inst = key, boss = bi, bossName = b[1], npc = b[3], rare = (b[4] or 0) >= 1, kind = b[4],
@@ -1046,8 +1059,9 @@ local basics = {}
 local function ItemBasics(id)
 	local m = basics[id]
 	if m then return m[1], m[2], m[3], m[4] end
-	local name, link, _, ilvl, minLv = C_Item.GetItemInfo(id)
+	local name, link, q, ilvl, minLv = C_Item.GetItemInfo(id)
 	if name then basics[id] = { name, link, minLv or 0, ilvl or 0 } end
+	if type(q) == "number" and not qualityMemo[id] then qualityMemo[id] = q end
 	return name, link, minLv, ilvl
 end
 
@@ -2680,8 +2694,9 @@ function M:PaintList(f, data, mode)
 				local r = self.ranks[it.id]
 				local bName, bLink = ItemBasics(it.id)
 				row.itemID, row.link = it.id, it.link or bLink
-				row.icon:Set(it.icon, it.quality, SLOT_GLYPH[it.slot or -1])
-				local q = QCOL[it.quality or 1] or QCOL[1]
+				local quality = QualityOf(it.id) or it.quality
+				row.icon:Set(it.icon, quality, SLOT_GLYPH[it.slot or -1])
+				local q = QCOL[quality or 1] or QCOL[1]
 				row.name:SetText(it.name or bName or (((self.sbRetry or 0) >= 40) and ("아이템 #" .. it.id .. " (마우스를 올려 보기)") or "불러오는 중…"))
 				row.name:SetTextColor(q[1], q[2], q[3])
 				local sub = it.slotText or SLOT_NAME[it.slot or -1] or ""
@@ -5375,7 +5390,7 @@ local function SetLine(r, id, label, name, quality)
 			RequestItem(id)
 			M.prepMissing = true
 		end
-		local q = quality or (C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)) or 1
+		local q = quality or QualityOf(id) or 1
 		r.icon:Set(icon, q, "")
 		local c = QCOL[q] or QCOL[1]
 		r.name:SetText(nm or name or "불러오는 중…")
@@ -5622,7 +5637,7 @@ function M:PaintBis()
 			-- 이름 · 링크 · 등급은 한 번 받은 값을 기억해 두고 쓴다
 			--  (순위를 다시 만들 때마다 새 표가 되어 이름이 비고, 게임이 아이템 정보를 내려놓으면 "불러오는 중…"과 번갈아 보였다)
 			local bName, bLink = ItemBasics(it.id)
-			local quality = it.quality or (C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(it.id)) or nil
+			local quality = QualityOf(it.id) or it.quality
 			row.itemID, row.link, row.it = it.id, it.link or bLink, it
 			row.icon:Set(it.icon or (C_Item.GetItemIconByID and C_Item.GetItemIconByID(it.id)), quality, SLOT_GLYPH[it.slot or -1])
 			local q = QCOL[quality or 1] or QCOL[1]
