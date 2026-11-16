@@ -420,7 +420,8 @@ function M:WatchPortals()
 		if not (m and watch[m]) then last = nil return end
 		local pos = C_Map.GetPlayerMapPosition(m, "player")
 		local x, y = pos and pos:GetXY()
-		if not x then return end
+		if plain then x, y = plain(x), plain(y) end
+		if type(x) ~= "number" or type(y) ~= "number" then return end
 		local now = GetTime()
 		if last and last.m ~= m and now - last.t < 2 then
 			for _, pt in ipairs(PORTALS) do

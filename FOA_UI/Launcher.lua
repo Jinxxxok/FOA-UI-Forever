@@ -212,8 +212,13 @@ function M:Build()
 	tray.bd:SetPoint("TOPLEFT")
 	tray.bd:SetPoint("BOTTOMLEFT")
 	local x, n = 6, 0
+	-- 포에버에는 하우징 · 모험 안내서가 없어서 블리자드 버튼을 누르면 오류만 났다 (11-11 오류 기록)
+	local build = select(4, GetBuildInfo()) or 0
+	local forever = build >= 16001 and build < 20000
+	local NO_FOREVER = { HousingMicroButton = true, EJMicroButton = true }
 	for _, it in ipairs(ITEMS) do
 		local target = _G[it.click]
+		if forever and NO_FOREVER[it.click] then target = nil end
 		if target then
 			n = n + 1
 			local b = CreateFrame("Button", nil, tray, "SecureActionButtonTemplate")

@@ -786,6 +786,27 @@ function M:Init()
 	end)
 end
 
+-- 숨긴 블리자드 기본 단축바의 이벤트 틀 끄기 (FOA 단축바를 쓸 때만 · 전투 밖)
+--  블리자드 버튼은 숨겨도 이벤트 틀(ActionBarButtonEventsFrame)이 쿨다운 · 칸 변경을 계속 나눠 주고,
+--  실행이 한 번 FOA 로 오염되면(가방 · 주문책에서 끌어다 놓기 등) 전투 중 쿨다운마다 "비밀 값" 오류를 냈다
+--  (11-11 ~ 11-17 오류 기록 11만 번 · 은신 때마다 블리자드가 숨은 바를 다시 배치하려다 막힘 수백 번)
+--  · 단축바 행동 이벤트 틀: 모두 끔 (FOA 단축바는 자기 이벤트로 그린다)
+--  · 단축바 버튼 이벤트 틀: 칸 변경만 남김 (추가 행동 단추가 뜨는 데 필요)
+--  · 단축바 관리자: 설정 불러오기 · 추가 행동 바만 남김 (페이지 · 은신 · 탈것은 FOA 1번 바 상태가 맡는다)
+--  다른 대형 UI 애드온과 같은 방식 · 블리자드 바로 돌아가려면 FOA 단축바를 끄고 /reload
+function M:QuietBlizzEvents()
+	if self.quieted or not self.on or InCombatLockdown() then return end
+	self.quieted = true
+	local function quiet(f, keep)
+		if not (f and f.UnregisterAllEvents) then return end
+		pcall(f.UnregisterAllEvents, f)
+		for _, e in ipairs(keep or {}) do pcall(f.RegisterEvent, f, e) end
+	end
+	quiet(_G.ActionBarActionEventsFrame)
+	quiet(_G.ActionBarButtonEventsFrame, { "ACTIONBAR_SLOT_CHANGED" })
+	quiet(_G.ActionBarController, { "SETTINGS_LOADED", "UPDATE_EXTRA_ACTIONBAR" })
+end
+
 function M:HideAllBlizz()
 	for _, d in ipairs(BARS) do
 		-- 이름 후보 중 처음 있는 것 하나만 (MainActionBar 가 있으면 MainMenuBar 는 다른 틀일 수 있다)
@@ -807,6 +828,7 @@ function M:HideAllBlizz()
 			ToHidden(f)
 		end
 	end
+	if InCombatLockdown() then self.pendingHide = true else self:QuietBlizzEvents() end
 end
 
 function M:FirstImport()

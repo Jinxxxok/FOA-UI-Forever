@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.65.78"
+Ink.version = "0.65.79"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1282,6 +1282,17 @@ function Ink:StartErrorSession()
 	local build = select(4, GetBuildInfo())
 	L.sessions[#L.sessions + 1] = { t = date("%m-%d %H:%M:%S"), ver = Ink.version, build = build }
 	while #L.sessions > 20 do table.remove(L.sessions, 1) end
+	-- 사흘 넘게 다시 안 난 오류는 지운다 (고친 오류가 기록에 계속 남아 새 오류를 가렸다)
+	do
+		local keep, now = {}, time()
+		for _, e in ipairs(L.list or {}) do
+			if now - (e.lastT or now) <= 3 * 86400 then keep[#keep + 1] = e else errIndex[e.sig or ""] = nil end
+		end
+		L.list = keep
+		for k, b in pairs(L.blocked or {}) do
+			if now - (b.lastT or now) > 3 * 86400 then L.blocked[k] = nil end
+		end
+	end
 	local pend = pendingErr
 	pendingErr = {}
 	for _, p in ipairs(pend) do
@@ -1311,10 +1322,25 @@ do
 	-- 숨겨 둔 블리자드 기본 단축바 버튼의 "비밀 값" 쿨다운 오류인가
 	--  FOA 단축바를 쓰면 블리자드 1~8번 바는 숨긴 채 남는데, 실행이 한 번 꼬이면(레벨업 뒤 등)
 	--  그 숨은 버튼들이 전투 중 쿨다운을 그릴 때마다 오류를 낸다. 보이지도 않는 버튼이라 기능엔 영향이 없다.
+	local BarNoise
 	local function HiddenBarNoise(msg)
 		if type(msg) ~= "string" or (Ink.db and Ink.db.actionBars == false) then return false end
 		if not msg:find("Secret values are only allowed during untainted execution", 1, true) then return false end
 		return msg:find("Blizzard_ActionBar/", 1, true) ~= nil or msg:find("Blizzard_GamepadActionBars/", 1, true) ~= nil
+	end
+	local noiseRec, noiseN = {}, 0
+	BarNoise = function(msg)
+		local key = msg:sub(1, 120)
+		local e = noiseRec[key]
+		if e then
+			e.n = (e.n or 1) + 1
+			noiseN = noiseN + 1
+			if noiseN % 200 == 0 then e.last, e.lastVer = date("%m-%d %H:%M:%S"), Ink.version end
+			return
+		end
+		local st = debugstack and debugstack(3, 14, 4) or nil
+		local rec = ErrRecord(msg, st, nil)
+		if type(rec) == "table" then noiseRec[key] = rec end
 	end
 	-- 처음 한 번만: 전투가 끝나면 채팅에 알림 (/reload 하면 깨끗해진다)
 	local noted
@@ -1339,15 +1365,17 @@ do
 		if cur == mine then return end
 		orig = cur
 		mine = function(msg, ...)
+			-- 숨은 블리자드 단축바 소음: 전투 중 초당 수십 번 오는 오류라 호출 경로 · 지역 이름을 매번 읽지 않는다
+			--  (접속마다 처음 한 번만 자세히 적고, 그 뒤로는 횟수만 · 오류 창에는 안 띄움)
+			if HiddenBarNoise(msg) then
+				pcall(BarNoise, msg)
+				pcall(NoteBarNoise)
+				return
+			end
 			local st = debugstack and debugstack(2, 14, 4) or nil
 			local loc
 			if type(msg) == "string" and (msg:find("FOA_UI", 1, true) or (st and st:find("FOA_UI", 1, true))) then loc = Locals() end
 			pcall(ErrRecord, msg, st, loc)
-			-- 숨은 블리자드 단축바 소음은 기록만 하고 오류 창에는 띄우지 않는다
-			if HiddenBarNoise(msg) then
-				pcall(NoteBarNoise)
-				return
-			end
 			if orig then return orig(msg, ...) end
 		end
 		seterrorhandler(mine)

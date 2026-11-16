@@ -870,9 +870,11 @@ local TRACKERS = {
 	"ProfessionsRecipeTracker", "BonusObjectiveTracker", "WorldQuestObjectiveTracker", "InitiativeTasksObjectiveTracker",
 }
 
+-- 입힌 기록은 FOA 쪽 표에 (블리자드 틀에 값을 써 넣으면 그 틀을 읽는 블리자드 코드가 오염된다)
+local trackerSkinned = setmetatable({}, { __mode = "k" })
 local function SkinTrackerHeader(h)
-	if not h or h.inkSkinned then return end
-	h.inkSkinned = true
+	if not h or trackerSkinned[h] then return end
+	trackerSkinned[h] = true
 	if h.Background then h.Background:SetAlpha(0) end
 	for _, r in ipairs({ h:GetRegions() }) do
 		if r.IsObjectType and r:IsObjectType("Texture") then r:SetAlpha(0) end
@@ -1625,9 +1627,13 @@ function M:SkinActionBars()
 			for i = 1, def[2] do SkinActionButton(_G[def[1] .. i]) end
 		end
 	end
-	for i = 1, 10 do
-		SkinActionButton(_G["StanceButton" .. i], true)
-		SkinActionButton(_G["PetActionButton" .. i], true)
+	-- 태세 · 소환수 바도 FOA 바를 쓰면 블리자드 것은 숨겨진다 → 스킨을 입히면 그 버튼이 오염돼서
+	--  은신 · 형상 변환 때마다 "막힌 동작: StanceButton1:SetShown()" 이 수천 번 쌓였다 (11-16 오류 기록)
+	if not own then
+		for i = 1, 10 do
+			SkinActionButton(_G["StanceButton" .. i], true)
+			SkinActionButton(_G["PetActionButton" .. i], true)
+		end
 	end
 	for _, holder in ipairs(own and {} or { _G.MainActionBar, _G.MainMenuBar }) do
 		if holder then
