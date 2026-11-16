@@ -460,6 +460,7 @@ function M:BuildRegistry()
 				SW("mapEntrances", "던전 입구", "누르면 전리품 · 진행 경로", { apply = worldMap }),
 				SW("mapFieldTrainers", "마을의 내 상급자", "필드 마을엔 내 직업 · 배운 전문기술 상급자만 · 지나가면 자리를 배워요", { apply = worldMap }),
 				SW("mapMounts", "탈것 전문가", "내 진영 모든 종족 · 다른 종족은 필요한 평판(확고한 동맹)과 지금 평판까지", { apply = worldMap }),
+				SW("mapSkyborne", "스카이본 지맥 · 합일점", "스카이본 캐릭터만 · 지역 지도에 알려진 자리 · 조율(충전)이 넉넉하면 흐리게", { apply = worldMap }),
 				SW("mapZoneLevel", "지역 적정 레벨", "지도 왼쪽 위 · 대륙 지도에선 마우스를 올린 지역 · 내 레벨에 맞춰 색", { def = true, apply = worldMap }),
 				SW("mapScaleUp", "창 지도 크게", "창으로 띄운 세계 지도 크기", { def = false,
 					apply = function() call("Map", "ApplyScale") end }),

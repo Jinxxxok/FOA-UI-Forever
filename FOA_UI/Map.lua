@@ -3,6 +3,7 @@
 --  2) 주요 NPC: 여관 · 은행 · 경매장 · 우편함 · 훈련사 · 상인 · 수리 · 비행 · 사서 …
 --     NPC와 대화하거나 창을 열면 그 자리를 기억해 두고 지도에 이름표로 찍는다 (계정 공용, 갈수록 채워짐)
 --  3) 도서관 책: 지금 보는 지역에 있는 책과 위치 이름을 지도 구석에 목록으로
+--  4) 스카이본 지맥 · 정기의 합일점: 지역 지도에만 (Skyborne.lua)
 --  블리자드 지도가 이미 비행 지점을 그리는 지도에서는 겹치지 않게 FOA 비행 표시를 쉰다.
 
 local _, ns = ...
@@ -868,6 +869,12 @@ function M:Refresh()
 	for i = n + 1, #(self.pins or {}) do self.pins[i]:Hide() end
 	self:DrawBooks(mapID, cv, pinScale)
 	self:PaintBooks(mapID)
+	-- 스카이본 지맥 · 정기의 합일점 (지역 지도에만 · Skyborne.lua)
+	local S = Ink.modules.Skyborne
+	if S and S.Draw then
+		local ok, err = pcall(S.Draw, S, mapID, cv, pinScale, self.layer, wide)
+		if not ok and Ink.LogError then Ink:LogError("Skyborne.Draw: " .. tostring(err)) end
+	end
 	pcall(self.DrawEntrances, self, mapID, cv, pinScale)
 	self:QueueDeclutter()
 end
@@ -993,6 +1000,8 @@ function M:Declutter()
 		end
 	end
 	for _, p in ipairs(self.bookPins or {}) do if p:IsShown() then add(p, p.art or p, nil) end end
+	local S = Ink.modules.Skyborne
+	for _, p in ipairs((S and S.pins) or {}) do if p:IsShown() then add(p, p.art or p, nil) end end
 	if Q then
 		for _, pool in ipairs({ Q.pins or {}, Q.tpins or {} }) do
 			for _, p in ipairs(pool) do

@@ -58,6 +58,7 @@ FOA UI 는 **GNU General Public License v3.0 (또는 그 이후 버전)** 으로
 ## 자료 출처
 
 - 던전 보스 · 전리품, 퀘스트 · 비행 지점 자료: [AllTheThings](https://github.com/ATTWoWAddon/AllTheThings) (MIT License · `FOA_UI/LICENSE-AllTheThings.txt`)
+- 스카이본 지맥 · 정기의 합일점 자리: [Skyborne Leyline & Convergence Marker](https://www.curseforge.com/wow/addons/sllcm) v1.3.0 · tr0tsky (MIT License · `FOA_UI/LICENSE-SLLCM.txt`)
 - 던전 한글 이름 · 권장 레벨 · 보스 순서, 직업 기술 레벨, 전문기술 빠른 레벨링 경로, 특성 레벨업 순서: [wowf.io](https://wowf.io/ko)
 - 퀘스트 선행 · 택일 · 연결 퀘스트 · 조건(숙련도 · 평판 · 레벨) · 보고 NPC 와 자리: [QuestieDB](https://github.com/Questie/QuestieDB) 포에버 합본 자료 (GPL-3.0 · 포에버 실제 플레이 기록으로 확인한 선행 관계 포함 · `FOA_UI/LICENSE-QuestieDB.txt` · 만드는 방법은 `tools/quests/questie_export.py` → `tools/quests/gen_quests.py`)
 - 포에버에서 바뀐 지도 경계(스톰윈드 · 동부 역병지대 · 멀고어 · 붉은마루 산맥) 변환식: QuestieDB 자료와 대조해 확인 (`tools/maps/forever_frame_fixes.json`)
