@@ -1642,6 +1642,7 @@ local CHIPS = {
 	{ "prof", "전문기술", "Professions", "C9A8FF" }, { "flight", "비행", "NpcFlight", "86DDF2" },
 	{ "boat", "배", "NpcBoat", "7FD8C8" }, { "mount", "탈것", "NpcMount", "9BD66B" },
 }
+local CHIP_PAD, CHIP_ICON, CHIP_GAP = 9, 12, 5
 function M:BuildCityLegend()
 	local wm = WorldMapFrame
 	local bar = CreateFrame("Frame", nil, wm)
@@ -1659,12 +1660,11 @@ function M:BuildCityLegend()
 		b.bd:SetAllPoints()
 		b.icon = b:CreateTexture(nil, "ARTWORK")
 		b.icon:SetTexture(Ink.icon(c[3]))
-		b.icon:SetSize(12, 12)
-		b.icon:SetPoint("LEFT", 8, 0)
+		b.icon:SetSize(CHIP_ICON, CHIP_ICON)
+		b.icon:SetPoint("LEFT", CHIP_PAD, 0)
 		b.t = Ink:Text(b, F.semi, 11, C.text, "LEFT")
-		b.t:SetPoint("LEFT", b.icon, "RIGHT", 4, 0)
+		b.t:SetPoint("LEFT", b.icon, "RIGHT", CHIP_GAP, 0)
 		b.t:SetText(c[2])
-		b:SetWidth(b.t:GetStringWidth() + 26)
 		b.key, b.rgb = c[1], Ink.hex(c[4])
 		b:SetPoint("LEFT", prev or bar, prev and "RIGHT" or "LEFT", prev and 4 or 0, 0)
 		b:SetScript("OnClick", function(self)
@@ -1675,11 +1675,23 @@ function M:BuildCityLegend()
 		bar.chips[i] = b
 		prev = b
 	end
-	local w = 0
-	for _, b in ipairs(bar.chips) do w = w + b:GetWidth() + 4 end
-	bar:SetWidth(w - 4)
-	bar:Hide()
 	self.cityBar = bar
+	self:SizeCityLegend()
+	bar:Hide()
+end
+
+-- 칩 폭: 왼쪽 여백 · 아이콘 · 간격 · 글자 · 오른쪽 여백 (양쪽 여백 같게)
+--  글자 폭은 글꼴이 다 불러와진 뒤에야 정확해서 그릴 때마다 다시 잰다
+function M:SizeCityLegend()
+	local bar = self.cityBar
+	if not bar then return end
+	local w = 0
+	for _, b in ipairs(bar.chips) do
+		local cw = math.floor(CHIP_PAD + CHIP_ICON + CHIP_GAP + (b.t:GetStringWidth() or 0) + CHIP_PAD + 0.5)
+		b:SetWidth(cw)
+		w = w + cw + 4
+	end
+	bar:SetWidth(math.max(1, w - 4))
 end
 
 function M:PaintCityLegend(mapID)
@@ -1695,6 +1707,7 @@ function M:PaintCityLegend(mapID)
 		b.icon:SetVertexColor(c[1], c[2], c[3], on and 1 or 0.35)
 		b.t:SetTextColor(on and C.text[1] or C.dim[1], on and C.text[2] or C.dim[2], on and C.text[3] or C.dim[3])
 	end
+	self:SizeCityLegend()
 	bar:Show()
 	self:LayoutUnder()
 end

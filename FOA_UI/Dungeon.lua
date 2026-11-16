@@ -3933,6 +3933,24 @@ function M:BuildQuestPanel()
 	return p
 end
 
+-- 상태 칩 열: 모든 줄의 칩 오른쪽 끝을 한 줄로 (연속 퀘스트 화살표 자리를 모든 줄에 비워 둔다)
+--  폭도 그 목록에서 가장 긴 칩에 맞춰 모두 같게 · 글자(와 체크)는 칩 가운데
+local DQ_CHIP_R = -24
+local function ChipLayout(r, w)
+	r.chip:SetWidth(w)
+	r.state:ClearAllPoints()
+	r.chip.icon:ClearAllPoints()
+	if r.chip.icon:IsShown() then
+		local tw = math.ceil(r.state:GetStringWidth() or 0)
+		local left = math.floor((w - (10 + 4 + tw)) / 2 + 0.5)
+		r.chip.icon:SetPoint("LEFT", left, 0)
+		r.state:SetPoint("LEFT", r.chip.icon, "RIGHT", 4, 0)
+	else
+		r.chip.icon:SetPoint("LEFT", 6, 0)
+		r.state:SetPoint("CENTER", r.chip, "CENTER", 0, 0)
+	end
+end
+
 local function QuestRow(p, i)
 	local r = p.rows[i]
 	if r then return r end
@@ -3956,7 +3974,7 @@ local function QuestRow(p, i)
 	--  칩은 제목 줄 높이 안에만 (아래 설명 줄과 겹치지 않게) · 제목은 칩 앞에서 끊는다
 	r.chip = CreateFrame("Frame", nil, r)
 	r.chip:SetHeight(16)
-	r.chip:SetPoint("TOPRIGHT", -6, -6)
+	r.chip:SetPoint("TOPRIGHT", DQ_CHIP_R, -6)
 	r.chip.bg = Ink:Round(r.chip, "BACKGROUND", true, false)
 	r.chip.bg:SetAllPoints()
 	r.chip.bd = Ink:Round(r.chip, "BORDER", true, true)
@@ -4142,7 +4160,7 @@ local function StepRow(p, i)
 	r.sub:SetWordWrap(false)
 	-- 오른쪽 알약: 지금 할 일(받기 · 진행 중 · 보고하기) · 선택 · 갈래 · 레벨
 	r.pill = Pill(r)
-	r.pill:SetPoint("TOPRIGHT", -8, -5)
+	r.pill:SetPoint("TOPRIGHT", DQ_CHIP_R, -5)
 	r.title:SetPoint("RIGHT", r.pill, "LEFT", -6, 0)
 	r:SetScript("OnEnter", function(self)
 		self.hl:Show()
@@ -4331,7 +4349,7 @@ function M:PaintChainRow(r, g, y, LC)
 		sub = (now and now.id ~= g.id) and ("지금: " .. nowT .. "  ·  " .. StepSub(now)) or StepSub(now or g.head)
 	end
 	r.sub:SetPoint("RIGHT", -26, 0)
-	r.chip:SetPoint("TOPRIGHT", -24, -6)
+	r.chip:SetPoint("TOPRIGHT", DQ_CHIP_R, -6)
 	r.sub:SetText(sub .. (g.nMain > 1 and ("  ·  " .. g.nMain .. "단계") or ""))
 	local stText, col, fill, edge, icon = "", C.muted, 0, 0, nil
 	if g.state == "log" then
@@ -4354,7 +4372,7 @@ function M:PaintChainRow(r, g, y, LC)
 	else
 		r.chip.icon:Hide()
 	end
-	r.chip:SetWidth(math.ceil(r.state:GetStringWidth()) + (icon and 28 or 14))
+	r.chipNat = math.ceil(r.state:GetStringWidth()) + (icon and 34 or 22)
 	local open = Ink.db.dqOpen and Ink.db.dqOpen[g.key]
 	r.chev:SetRotation(open and 0 or math.rad(90))
 	r.chev:SetVertexColor(C.muted[1], C.muted[2], C.muted[3])
@@ -4574,7 +4592,7 @@ function M:PaintQuests()
 		else
 		local q = e.q
 		r.sub:SetPoint("RIGHT", -8, 0)
-		r.chip:SetPoint("TOPRIGHT", -6, -6)
+		r.chip:SetPoint("TOPRIGHT", DQ_CHIP_R, -6)
 		r.lvl:SetText(q[2] > 0 and q[2] or "–")
 		local lc = (LC and q[2] > 0) and LC(q[2]) or C.soft
 		r.lvl:SetTextColor(lc[1], lc[2], lc[3], e.state == "done" and 0.4 or 1)
@@ -4673,7 +4691,7 @@ function M:PaintQuests()
 		else
 			r.chip.icon:Hide()
 		end
-		r.chip:SetWidth(math.ceil(r.state:GetStringWidth()) + (icon and 28 or 14))
+		r.chipNat = math.ceil(r.state:GetStringWidth()) + (icon and 34 or 22)
 		r:SetAlpha(e.state == "done" and 0.7 or 1)
 		r:ClearAllPoints()
 		r:SetPoint("TOPLEFT", p.body, "TOPLEFT", 0, -y)
@@ -4695,6 +4713,11 @@ function M:PaintQuests()
 			y = y + 6
 		end
 	end
+	-- 칩 폭 맞추기 (이 목록에서 가장 긴 칩 기준 · 72~124)
+	local cw = 72
+	for i = 1, nRow do cw = math.max(cw, p.rows[i].chipNat or 0) end
+	cw = math.min(124, cw)
+	for i = 1, nRow do ChipLayout(p.rows[i], cw) end
 	for i = nRow + 1, #p.rows do p.rows[i]:Hide() end
 	for i = nStep + 1, #(p.srows or {}) do p.srows[i]:Hide() end
 	for i = nh + 1, #(p.heads or {}) do p.heads[i]:Hide() end
