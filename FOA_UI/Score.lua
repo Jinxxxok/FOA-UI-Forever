@@ -696,14 +696,19 @@ local function IsProc(t)
 	return false
 end
 
-local function ParseProc(t, r)
+local function ParseProc(t, r, kind)
 	local p = { chance = tonumber(t:match("(%d+%.?%d*)%%의 확률")) }
-	-- 확률 없이 매번 ("근접 공격 시 N의 추가 화염 피해" · "모든 원거리 자동 공격이 …")
-	if not p.chance and not t:find("일정 확률") and (t:find("의 추가") or t:find("자동 공격이")) then p.chance = 100 end
+	local extra = t:find("추가 공격") or t:find("추가로 %d* ?회 공격") or t:find("회의 추가")
+	-- 확률 없이 매번 ("근접 공격 시 N의 추가 화염 피해" · "모든 원거리 자동 공격이 …") — 착용 효과 줄만
+	--  "발동 효과"(적중 시 일정 확률) 줄은 확률이 안 적혀 있어도 매번이 아니다
+	--  (도리깨 검 "다음 근접 공격 시 1회의 추가 공격" 이 "의 추가"에 걸려 매번 추가 공격으로 쳐서 점수가 5배로 뛰었다)
+	if not p.chance and kind ~= "proc" and not extra and not t:find("일정 확률") and (t:find("의 추가") or t:find("자동 공격이")) then p.chance = 100 end
+	-- 확률이 안 적힌 적중 시 효과: 분당 1회쯤 (무기 속도로 한 번 칠 때 확률을 구한다)
+	if not p.chance then p.ppm = 1 end
 	-- 특정 지역에서만 ("악몽의 영향을 받는 지역 바깥에서는 효과를 발휘하지 않습니다")
 	p.cond = (t:find("지역 바깥에서는") or t:find("지역에서만") or t:find("에서는 효과를 발휘하지")) and 0.25 or 1
 	local defensive = t:find("가격 당했을 때") or t:find("가격당했을 때") or t:find("공격을 받") or t:find("공격자") or t:find("막기에 성공") or t:find("적중 당했을 때")
-	if t:find("추가 공격") or t:find("추가로 %d* ?회 공격") or t:find("회의 추가") then
+	if extra then
 		p.kind, p.n = "extra", tonumber(t:match("(%d+)회")) or 1
 	elseif t:find("초 동안") and not defensive then
 		local body = t:gsub("^.-초 동안", "")
@@ -712,7 +717,8 @@ local function ParseProc(t, r)
 		if k and n then p.kind, p.stat, p.n, p.dur = "buff", k, n, tonumber(t:match("(%d+)초 동안")) end
 	end
 	if not p.kind then
-		local d = tonumber(t:match("(%d+)의 [가-힣 ]-피해")) or tonumber(t:match("(%d+)의 추가"))
+		local lo, hi = t:match("(%d+)%s*~%s*(%d+)의 [가-힣 ]-피해")
+		local d = (lo and (tonumber(lo) + tonumber(hi)) / 2) or tonumber(t:match("(%d+)의 [가-힣 ]-피해")) or tonumber(t:match("(%d+)의 추가"))
 		if d and not defensive then
 			p.kind, p.n = "dmg", d
 			p.spell = (t:find("주문") and (t:find("시전") or t:find("적중하여"))) and true or nil
@@ -763,7 +769,7 @@ local function ParseLine(t, kind, r, classItem)
 		end
 	end
 	if kind == "proc" or IsProc(t) then
-		if not ParseProc(t, r) then ClassMod() end
+		if not ParseProc(t, r, kind) then ClassMod() end
 		return
 	end
 	local cond = Condition(first)
@@ -843,6 +849,11 @@ local function ReadTooltip(link)
 			end
 			if type(rt) == "string" and IsRed(line.rightColor) then
 				if SkillLine(rt) then r.skill = true else r.no = true end
+			end
+			-- 무기 속도 ("속도 2.70") · 적중 시 효과 확률 계산용
+			if type(rt) == "string" and not r.speed and (rt:find("속도", 1, true) or rt:lower():find("speed", 1, true)) then
+				local sp = rt:match("(%d+[%.,]%d+)")
+				r.speed = sp and tonumber((sp:gsub(",", "."))) or nil
 			end
 			if t:find(onEquip, 1, true) == 1 then pcall(ParseLine, t, "equip", r, classItem)
 			elseif t:find(onUse, 1, true) == 1 then pcall(ParseLine, t, "use", r, classItem)
@@ -965,11 +976,13 @@ local function EffectPoints(tip, w, prof, class, wkey)
 	-- 발동 효과
 	for _, p in ipairs(tip.procs) do
 		local before = pts
+		-- 확률이 안 적힌 적중 시 효과 = 분당 p.ppm 회 → 한 번 칠 때 확률 = ppm × 무기 속도 / 60
+		local chance = p.chance or (p.ppm and tip.speed and (p.ppm * tip.speed / 60 * 100)) or nil
 		if p.kind == "extra" and melee then
 			-- 추가 공격 1% ≈ 전투력 22 (레벨 60 근접 딜 기준)
-			pts = pts + (p.chance or 1.5) * p.n * 22 * apW
+			pts = pts + (chance or 1.5) * p.n * 22 * apW
 		elseif p.kind == "dmg" then
-			local ppm = p.chance and (p.chance / 100 * 25) or 1
+			local ppm = p.chance and (p.chance / 100 * 25) or p.ppm or 1
 			local dps = p.n * ppm / 60
 			if p.spell or not melee then pts = pts + dps * 3 * spW else pts = pts + dps * 14 * apW end
 		elseif p.kind == "buff" then
