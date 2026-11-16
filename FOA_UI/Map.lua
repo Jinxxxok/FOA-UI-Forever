@@ -1313,8 +1313,10 @@ local function EntranceGroups()
 	for _, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
 		if not d.soon then
 			local pts = {}
-			if d.entr and not SKIP_ATT_ENTR[d.key] then pts[#pts + 1] = d.entr end
-			for _, e in ipairs(EXTRA_ENTR[d.key] or {}) do pts[#pts + 1] = e end
+			-- 날개로 나눈 던전(검은바위 나락 하층 · 상층)은 옛 이름(alias)의 입구 자료를 같이 쓴다
+			local ak = d.alias or d.key
+			if d.entr and not (SKIP_ATT_ENTR[d.key] or SKIP_ATT_ENTR[ak]) then pts[#pts + 1] = d.entr end
+			for _, e in ipairs(EXTRA_ENTR[d.key] or EXTRA_ENTR[ak] or {}) do pts[#pts + 1] = e end
 			for _, e in ipairs(pts) do
 				local k = e[1] .. ":" .. math.floor(e[2] * 2 + 0.5) .. ":" .. math.floor(e[3] * 2 + 0.5)
 				local g = byPos[k]

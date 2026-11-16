@@ -527,6 +527,55 @@ FLoot = function(key)
 end
 M.FLoot = FLoot
 
+-- 검은바위 나락: 보스 20마리 · 희귀 14칸이라 한 장에 넣으면 진행 경로가 칸을 다 차지해 전리품이 안 보였다
+--  → 하층 · 상층 두 날개로 나눈다 (대격변 던전 찾기와 같은 경계)
+--   하층 = 입구 ~ 사령관 앵거포지 · 골렘 군주 아젤마크 (수용소 · 법의 심판장 · 용광로 · 금고)
+--   상층 = 험악한 무쇠로 술집 ~ 제왕 다그란 타우릿산 (술집 · 일곱 현자 · 마그무스 · 왕좌)
+--  희귀 · 상자 · 투기장 챔피언은 모두 하층 · 일반 몹 전리품은 두 날개 모두
+--  자료 파일(ForeverLoot · ForeverLootExtra · ForeverSources)은 그대로 두고 여기서 나눈다 (다시 만들어도 유지)
+--  예전 이름(brd)으로 찾는 곳(경로 · 지도 층 · 출처 글자)은 d.alias 로 이어 준다
+local BRD_UPPER = { [9537] = true, [9502] = true, [9543] = true, [9499] = true, [9156] = true, [9039] = true,
+	[9938] = true, [8929] = true, [9019] = true }
+local BRD_UPPER_EN = { ["Hurley Blackbreath"] = true, ["Phalanx"] = true, ["Ribbly Screwspigot"] = true,
+	["Plugger Spazzring"] = true, ["Ambassador Flamelash"] = true, ["The Seven"] = true, ["Magmus"] = true,
+	["Emperor Dagran Thaurissan"] = true }
+do
+	local list = ns.FOREVER_LOOT and ns.FOREVER_LOOT.list
+	for i, d in ipairs(list or {}) do
+		if d.key == "brd" and d.bosses then
+			local function Wing(key, wing, en, lo, hi)
+				local w = {}
+				for k, v in pairs(d) do w[k] = v end
+				w.key, w.wing, w.en, w.lo, w.hi = key, wing, en, lo, hi
+				w.group, w.groupKo, w.alias = "brd", d.ko, "brd"
+				w.ko = d.ko .. " " .. wing
+				w.bosses = {}
+				return w
+			end
+			local low = Wing("brd_low", "하층", "Blackrock Depths: Detention Block", 52, 57)
+			local up = Wing("brd_up", "상층", "Blackrock Depths: Upper City", 55, 60)
+			for _, b in ipairs(d.bosses) do
+				if b[5] == "Trash" or b[5] == "Any mob" then
+					table.insert(low.bosses, b)
+					table.insert(up.bosses, b)
+				elseif BRD_UPPER[b[3] or 0] or BRD_UPPER_EN[b[5] or ""] then
+					table.insert(up.bosses, b)
+				else
+					table.insert(low.bosses, b)
+				end
+			end
+			list[i] = low
+			table.insert(list, i + 1, up)
+			break
+		end
+	end
+end
+local function AliasOf(key)
+	local d = key and FLoot(key)
+	return d and d.alias
+end
+M.AliasOf = AliasOf
+
 -- quiet: 이름이 없어도 서버에 요청하지 않는다 (추천 계산용으로 모든 던전을 훑을 때)
 -- 퀘스트를 시작하는 아이템 → 그 퀘스트를 받을 수 있는 진영 (다른 진영 것은 전리품 목록에서 뺀다:
 --  "티탄의 유물"처럼 얼라 · 호드용이 따로 있어서 같은 이름이 두 번 보였다)
@@ -1734,6 +1783,24 @@ function M:RememberWingSpot(key)
 	list[#list + 1] = { math.floor(x * 1000 + 0.5) / 1000, math.floor(y * 1000 + 0.5) / 1000, key }
 	while #list > 80 do table.remove(list, 1) end
 end
+-- 지금 층에서 가장 가까운 보스가 어느 날개인지 (보스 자리: DungeonMaps.pos)
+--  같은 층을 나눠 쓰는 날개(검은바위 나락 하층 · 상층 · 혈투의 전장 · 스트라솔름 · 검은바위 첨탑)를 자리로 가린다
+local function WingByBoss(ui, x, y, cands)
+	local pos = ns.DUNGEON_MAPS and ns.DUNGEON_MAPS.pos
+	if not (pos and ui and x and y and x > 0 and y > 0) then return end
+	local best, bd
+	for _, d in ipairs(cands) do
+		for _, b in ipairs(d.bosses or {}) do
+			local p = b[3] and b[3] > 0 and pos[b[3]]
+			if p and p[1] == ui then
+				local dist = (p[2] - x) ^ 2 + (p[3] - y) ^ 2
+				if not bd or dist < bd then best, bd = d.key, dist end
+			end
+		end
+	end
+	return best, bd and math.sqrt(bd)
+end
+
 local function WingBySpot(ui, x, y, ok)
 	local list = ui and x and y and Ink.db and Ink.db.wingSpots and Ink.db.wingSpots[ui]
 	if not list then return end
@@ -1778,8 +1845,13 @@ function M:MatchInstance()
 	if self.wingVisit == self.visit and self.wingSeen and ok[self.wingSeen] then return self.wingSeen, true end
 	local sp = WingBySpot(ui, px, py, ok)
 	if sp then return sp, true end
+	-- 보스 바로 옆이면 그 날개 (확실) · 조금 떨어져 있으면 추측으로
+	local nb, nd = WingByBoss(ui, px, py, cands)
+	if nb and nd < 0.06 then return nb, true end
 	-- 추측
+	if Ink.cdb and Ink.cdb.fDungeon == "brd" then Ink.cdb.fDungeon = "brd_low" end
 	local sel = Ink.cdb and Ink.cdb.fDungeon
+	if nb and nd < 0.15 then return nb, false end
 	if sel and ok[sel] then return sel, false end
 	local lv, best, bestD = UnitLevel("player") or 1, nil, 999
 	for _, d in ipairs(cands) do
@@ -2083,7 +2155,13 @@ function M:PaintMenu(toSel)
 	local y, nr, nh, selY = 4, 0, 0, nil
 	for _, sec in ipairs(sections) do
 		local items = {}
-		for _, d in ipairs(list) do if sec[3](d) then items[#items + 1] = d end end
+		for i, d in ipairs(list) do if sec[3](d) then items[#items + 1] = d; d.menuOrd = i end end
+		-- 권장 레벨 순 (새로 생긴 던전이 자료 끝에 붙어 있어도 제자리로) · 같으면 높은 쪽 레벨 · 자료 순서
+		table.sort(items, function(a, b)
+			if a.lo ~= b.lo then return a.lo < b.lo end
+			if a.hi ~= b.hi then return a.hi < b.hi end
+			return (a.menuOrd or 0) < (b.menuOrd or 0)
+		end)
 		if #items > 0 then
 			nh = nh + 1
 			local h = m.heads[nh]
@@ -2859,7 +2937,7 @@ end
 local MAP_W, MAP_H = 1002, 668
 function M:BoardFloors(key, data)
 	local dm = ns.DUNGEON_MAPS
-	local fl = dm and dm.floors and dm.floors[key]
+	local fl = dm and dm.floors and (dm.floors[key] or dm.floors[AliasOf(key) or ""])
 	if not (fl and #fl > 0) then return end
 	local withBoss, any = {}, false
 	local nMain, nPos = 0, 0
@@ -3030,7 +3108,7 @@ function M:PaintRouteLines(mf, floor, pts, w, h, data)
 	for _, a in ipairs(mf.arrows or {}) do a:Hide() end
 	if mf.entr then mf.entr:Hide(); mf.entrLabel:Hide() end
 	if not mf.CreateLine then return end
-	local R = ns.DUNGEON_ROUTES and ns.DUNGEON_ROUTES[self.showing] or {}
+	local R = ns.DUNGEON_ROUTES and (ns.DUNGEON_ROUTES[self.showing] or ns.DUNGEON_ROUTES[AliasOf(self.showing) or ""]) or {}
 	local via = R.via or {}
 	local sk = ns.DUNGEON_SKETCH and ns.DUNGEON_SKETCH[floor]
 	-- 입구 (이 층에 있을 때)
@@ -3399,7 +3477,7 @@ end
 --  · 클릭하면 시작 위치를 지도에
 -------------------------------------------------------------------------------
 local DQ_INST = {
-	deadmines = 63, shadowfang = 64, ragefire = 226, blackfathom = 227, brd = 228, lbrs = 229, ubrs = 229,
+	deadmines = 63, shadowfang = 64, ragefire = 226, blackfathom = 227, brd_low = 228, brd_up = 228, lbrs = 229, ubrs = 229,
 	dm_east = 230, dm_west = 230, dm_north = 230, gnomeregan = 231, maraudon = 232, downs = 233, kraul = 234,
 	strat_live = 236, strat_ud = 236, sunken = 237, stockade = 238, uldaman = 239, wailing = 240, zulfarrak = 241,
 	scholo = 246, sm_gy = 316, sm_lib = 316, sm_arm = 316, sm_cath = 316, onyxia = 760,
@@ -3418,6 +3496,10 @@ local DQ_WING = {
 	sm_lib = { [1049] = true, [1050] = true, [1951] = true, [1160] = true, [1113] = true, [1048] = SM_LOKSEY, [1053] = SM_LOKSEY },
 	sm_arm = { [1113] = true, [1048] = SM_HEROD, [1053] = SM_HEROD },
 	sm_cath = { [1113] = true, [1048] = SM_CATH, [1053] = SM_CATH },
+	-- 검은바위 나락: 목표가 있는 쪽 날개로 (수용소 · 윈저 · 칼란 · 불의군주 · 골렘 · 앵거포지 = 하층 / 술집 · 일곱 현자 · 제왕 · 로크토스 = 상층)
+	--  던전 전체에서 하는 것(검은무쇠 처치 · 정수 모으기 · 바깥 연결)은 두 날개 모두
+	brd_low = { [3701] = true, [3702] = true, [3801] = true, [3802] = true, [3906] = true, [3907] = true, [3981] = true, [3982] = true, [4001] = true, [4002] = true, [4022] = true, [4023] = true, [4024] = true, [4061] = true, [4062] = true, [4063] = true, [4081] = true, [4082] = true, [4121] = true, [4122] = true, [4123] = true, [4132] = true, [4182] = true, [4183] = true, [4184] = true, [4185] = true, [4186] = true, [4223] = true, [4224] = true, [4241] = true, [4242] = true, [4262] = true, [4263] = true, [4264] = true, [4282] = true, [4286] = true, [4295] = true, [4322] = true, [4341] = true, [4342] = true, [4361] = true, [6402] = true, [6403] = true, [6501] = true, [7201] = true },
+	brd_up = { [3701] = true, [3702] = true, [4003] = true, [4004] = true, [4081] = true, [4082] = true, [4083] = true, [4121] = true, [4122] = true, [4126] = true, [4128] = true, [4133] = true, [4134] = true, [4136] = true, [4182] = true, [4201] = true, [4286] = true, [4295] = true, [4324] = true, [4362] = true, [4363] = true, [6642] = true, [6643] = true, [6644] = true, [6645] = true, [6646] = true, [7201] = true },
 }
 M.DQ_WING = DQ_WING
 local DQ_W = 300
@@ -4821,6 +4903,7 @@ end
 function M:ForeverCurrent()
 	local list = ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}
 	local here = self:MatchInstance()
+	if Ink.cdb and Ink.cdb.fDungeon == "brd" then Ink.cdb.fDungeon = "brd_low" end
 	local sel = Ink.cdb and Ink.cdb.fDungeon
 	if here then
 		local iname = GetInstanceInfo()

@@ -78,6 +78,8 @@ end
 local function DungeonName(key)
 	for _, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
 		if d.key == key then return d.ko or d.en end
+		-- 날개로 나눈 던전(검은바위 나락 → 하층 · 상층): 옛 이름이면 묶음 이름
+		if d.alias == key then return d.groupKo or d.ko end
 	end
 	return key
 end
