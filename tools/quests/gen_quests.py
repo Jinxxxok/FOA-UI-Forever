@@ -132,11 +132,25 @@ KIND = {"q": "quest"}
 root = value()
 
 quests = {}
+# 진영마다 주는 NPC · 자리가 다른 퀘스트: q(id, _.ResolveQuestData({aqd={...}, hqd={...}, 공통...}))
+#  → 얼라(2) · 호드(1) 두 벌로 나눠 split[id][진영] 에 (예: 8233 간단한 부탁 · 도시마다 도적 상급자)
+split = {}
 def walk(node):
     if isinstance(node, tuple) and node[0] == "call":
         name, args = node[1], node[2]
         body = args[-1] if args and isinstance(args[-1], dict) else None
-        if name == "q" and args and isinstance(args[0], int) and body is not None:
+        last = args[-1] if args else None
+        if (name == "q" and args and isinstance(args[0], int) and isinstance(last, tuple) and last[0] == "call"
+                and last[1].endswith("ResolveQuestData") and last[2] and isinstance(last[2][0], dict)):
+            d = last[2][0]
+            common = {k: v for k, v in d.items() if k not in ("aqd", "hqd")}
+            for key, r in (("aqd", 2), ("hqd", 1)):
+                sub = d.get(key)
+                if isinstance(sub, dict):
+                    b = dict(common); b.update(sub); b["r"] = r
+                    split.setdefault(args[0], {})[r] = b
+            body = d
+        elif name == "q" and args and isinstance(args[0], int) and body is not None:
             quests.setdefault(args[0], body)
         if body is not None:
             for ch in body.get("g", []) or []:
@@ -224,11 +238,10 @@ if QQ:
 
 stat = {"pre": 0, "ender": 0, "ender_same": 0, "skill": 0, "crumb": 0, "alt": 0}
 rows, skipped = [], {"nocoord": 0, "u": 0, "removed": 0, "event": 0}
-for qid in sorted(quests):
-    q = quests[qid]
-    if "u" in q: skipped["u"] += 1; continue
-    if "rwp" in q: skipped["removed"] += 1; continue
-    if "e" in q or q.get("isYearly"): skipped["event"] += 1; continue
+def make(qid, q, rows):
+    if "u" in q: skipped["u"] += 1; return
+    if "rwp" in q: skipped["removed"] += 1; return
+    if "e" in q or q.get("isYearly"): skipped["event"] += 1; return
     co = q.get("coords")
     pts = []
     if isinstance(co, dict):
@@ -238,7 +251,7 @@ for qid in sorted(quests):
                     if isinstance(p, list) and len(p) >= 2:
                         pts.append((m, float(p[0]), float(p[1])))
     if not pts:
-        skipped["nocoord"] += 1; continue
+        skipped["nocoord"] += 1; return
     rep = q.get("minReputation")
     rep = ilist(rep)[:2] if isinstance(rep, list) and len(rep) >= 2 else []
     flags = (1 if (q.get("repeatable") or q.get("isDaily")) else 0) | (2 if q.get("isBreadcrumb") else 0)
@@ -325,7 +338,51 @@ for qid in sorted(quests):
                  skill, rep, int(q.get("awp", 0) or 0), flags, item,
                  giver[0] if giver else 0, extra, ender))
 
+for qid in sorted(quests):
+    make(qid, quests[qid], rows)
+rows_fac = []
+for qid in sorted(split):
+    if qid in quests: continue
+    for r in (2, 1):
+        if r in split[qid]: make(qid, split[qid][r], rows_fac)
+
 L = lambda xs: "{" + ",".join(str(x) for x in xs) + "}"
+def row_text(r):
+    p = []
+    for (m, x, y) in r[1]:
+        p += [m, round(x, 1), round(y, 1)]
+    ex = ""
+    if r[14]:
+        ex = "," + "{" + ",".join(L(v) if isinstance(v, list) else str(v) for v in r[14]) + "}"
+    if r[15] is not None:
+        if not ex: ex = ",false"
+        ex += ",0" if r[15] == 0 else "," + L(r[15])
+    return "{%d,%s,%d,%d,%s,%s,%s,%s,%d,%s,%d,%d,%d,%d%s},\n" % (
+        r[0], L(p), r[2], r[3], L(r[4]), L(r[5]), L(r[6]), L(r[7]), r[8], L(r[9]), r[10], r[11], r[12], r[13], ex)
+
+FAC_HEAD = """-- 진영마다 주는 곳이 다른 퀘스트 (얼라 · 호드 두 줄 · ATT ResolveQuestData)
+--  같은 퀘스트 번호가 두 줄이면 번호로 찾는 곳마다 한쪽이 덮여서, 불러올 때 내 진영 줄만 QUEST_DB 에 더한다
+local FAC = {
+"""
+FAC_TAIL = """}
+local function AddMine(fac)
+	for _, r in ipairs(FAC) do if r[4] == fac then ns.QUEST_DB[#ns.QUEST_DB + 1] = r end end
+end
+local fg = UnitFactionGroup and UnitFactionGroup("player")
+if fg == "Alliance" or fg == "Horde" then
+	AddMine(fg == "Horde" and 1 or 2)
+else
+	-- 진영을 아직 모르면 접속이 끝난 뒤에
+	local f = CreateFrame("Frame")
+	f:RegisterEvent("PLAYER_LOGIN")
+	f:SetScript("OnEvent", function(self)
+		self:UnregisterAllEvents()
+		local g = UnitFactionGroup("player")
+		if g == "Alliance" or g == "Horde" then AddMine(g == "Horde" and 1 or 2) end
+	end)
+end
+"""
+
 with open(sys.argv[2], "w", encoding="utf-8") as f:
     f.write("-- FOA UI · 포에버 퀘스트 (자동 생성: tools/quests/gen_quests.py) · GPL-3.0-or-later\n")
     f.write("-- 자료: AllTheThings (MIT License) db/Camelot · https://github.com/ATTWoWAddon/AllTheThings\n")
@@ -335,17 +392,12 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
     f.write("-- [보고] = 0 (받은 NPC 에게) · {지도, x, y, NPC} (다른 NPC · 물체면 NPC 0) · 없으면 모름\n")
     f.write("local _, ns = ...\nlocal b = select(4, GetBuildInfo()) or 0\nif not (b >= 16001 and b < 20000) then return end\nns.QUEST_DB = {\n")
     for r in rows:
-        p = []
-        for (m, x, y) in r[1]:
-            p += [m, round(x, 1), round(y, 1)]
-        ex = ""
-        if r[14]:
-            ex = "," + "{" + ",".join(L(v) if isinstance(v, list) else str(v) for v in r[14]) + "}"
-        if r[15] is not None:
-            if not ex: ex = ",false"
-            ex += ",0" if r[15] == 0 else "," + L(r[15])
-        f.write("{%d,%s,%d,%d,%s,%s,%s,%s,%d,%s,%d,%d,%d,%d%s},\n" % (
-            r[0], L(p), r[2], r[3], L(r[4]), L(r[5]), L(r[6]), L(r[7]), r[8], L(r[9]), r[10], r[11], r[12], r[13], ex))
+        f.write(row_text(r))
     f.write("}\n")
-print("quests:", len(quests), "written:", len(rows), "skipped:", skipped)
+    if rows_fac:
+        f.write(FAC_HEAD)
+        for r in rows_fac:
+            f.write(row_text(r))
+        f.write(FAC_TAIL)
+print("quests:", len(quests), "written:", len(rows), "skipped:", skipped, "faction split:", len(rows_fac))
 if QQ: print("questie:", stat)
