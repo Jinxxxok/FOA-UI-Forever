@@ -138,6 +138,17 @@ local TWINKLE = { { 0, 0.78 }, { 0.4, 1 }, { 0.65, 0.62 }, { 1, 0.78 } }
 local HUM_P, HUM0, HUMW = 2.4, 1.0, 1.6
 local HUM = { { 0, 0.74, 1 }, { 0.28, 1, 1.14 }, { 0.55, 0.84, 1.03 }, { 1, 0.74, 1 } }
 local LHUM = { { 0, 0.6 }, { 0.28, 1 }, { 0.55, 0.72 }, { 1, 0.6 } }
+-- 성운 심장박동: "쿵-쿵" 두 번 뛰고 쉼 (별자리 맥박과 같은 2.4초 · 박동이 먼저 뛰고 빛이 별자리를 타고 퍼진다)
+local HB_DELAY = HUM0 + 0.28 * HUM_P - 0.19
+local HB = { { 0, 0 }, { 0.03, 1 }, { 0.09, 0.077 }, { 0.13, 0.615 }, { 0.21, 0 }, { 1, 0 } }
+local HB_SCALE = 0.026                                -- 뛸 때 양옆이 캐릭터 기준으로 2.6% 벌어졌다 모인다
+
+-- 글자: 시안 크기를 쓰되 화면에서 이 픽셀보다 작아지지 않게 (1080p 에서도 읽히게)
+local function FontPx(fs, file, design, minPx, k)
+	local size = max(design, minPx / max(k or 1, 0.1))
+	if not fs:SetFont(file, size, "") then fs:SetFont(F.sans, size, "") end
+end
+
 local function hum(t, hl, i)              -- i = 2 밝기 · 3 크기
 	if t < hl then
 		local base = (i == 2) and 0.74 or 1
@@ -206,7 +217,7 @@ local function PhysH()
 	if not ph and GetPhysicalScreenSize then ph = select(2, GetPhysicalScreenSize()) end
 	return (ph and ph > 0) and ph or 1080
 end
-local DEF_SCALE = 0.6
+local DEF_SCALE, DEF_Y = 0.6, -40                    -- 기본: 별자리 크기 0.6 · 높이 -40
 
 
 local function Create()
@@ -274,7 +285,7 @@ local function Create()
 	V.lab = lab
 	lab.glow = Tex(lab, "BACKGROUND", 0, TEX .. "Spill")
 	lab.name = lab:CreateFontString(nil, "OVERLAY")
-	lab.name:SetFont(F.bold, 23, "")
+	lab.name:SetFont(F.bold, 19, "")
 	lab.name:SetShadowColor(0, 0, 0, 0.65)
 	lab.name:SetShadowOffset(0, -2)
 	lab.name:SetPoint("TOP", lab, "TOP", 0, 0)
@@ -394,10 +405,10 @@ local function Bind(cls)
 				fs:SetJustifyH("LEFT")
 				fs:SetPoint("TOPLEFT", ov, "TOPLEFT", d[1], -d[2])
 			end
-			fs.x, fs.y, fs.dl, fs.cap, fs.r = d[1], d[2], d[5], nil, d[6] == "R"
+			fs.x, fs.y, fs.dl, fs.cap, fs.r, fs.fsz = d[1], d[2], d[5], nil, d[6] == "R", d[7]
 		else
 			local d = a.cap
-			if not fs:SetFont(F.latinB, 10, "") then fs:SetFont(F.sans, 10, "") end
+			if not fs:SetFont(F.latinB, 8, "") then fs:SetFont(F.sans, 8, "") end
 			fs:SetText((d[3]:gsub("(.)", "%1 "):gsub(" $", "")))   -- 글자 사이 띄움 (시안 .34em)
 			fs:SetWidth(240)
 			fs:SetJustifyH("CENTER")
@@ -420,7 +431,7 @@ local function Bind(cls)
 		if m.white then m.t:SetVertexColor(1, 1, 1) else Col(m.t, c) end
 	end
 	local lab = V.lab
-	lab.name:SetFont(F.bold, 23, "")
+	lab.name:SetFont(F.bold, 19, "")
 	Col(lab.glow, c, 0.32)
 	pcall(lab.l.SetGradient, lab.l, "HORIZONTAL", CreateColor(c[1], c[2], c[3], 0), CreateColor(c[1], c[2], c[3], 1))
 	pcall(lab.r.SetGradient, lab.r, "HORIZONTAL", CreateColor(c[1], c[2], c[3], 1), CreateColor(c[1], c[2], c[3], 0))
@@ -461,6 +472,12 @@ local function ApplyTex()
 	for _, m in ipairs(V.motes) do m.t:SetTexture(Pick("Ember", m.s * k)) end
 	for _, m in ipairs(V.meteors) do m.t:SetTexture(Pick("Meteor", 3 * k)) end
 	V.lab.bar.core:SetTexture(Pick("DotHot", 9 * k))
+	for _, fs in ipairs(V.labels) do
+		if not fs:IsShown() then break end
+		if fs.cap then FontPx(fs, F.latinB, 8, 7.5, k)
+		else FontPx(fs, SERIF, fs.fsz or 10, (fs.fsz or 10) >= 9.5 and 10 or 8, k) end
+	end
+	FontPx(V.lab.name, F.bold, 19, 14, k)
 	-- 1px 선 · 2px 게이지는 화면 픽셀에 딱 맞춘다 (1080p 에서 흐려지지 않게)
 	local function snap(px) return max(1, floor(px * k + 0.5)) / k end
 	V.lab.l:SetHeight(snap(1))
@@ -506,6 +523,7 @@ function S.Frame()
 	V.t = t
 	local ov, lab = V.ov, V.lab
 	local alpha, boost, labA, labY, labS = 1, 0, 1, 0, 1
+	local beat = 0
 
 	if V.ending == "consume" then
 		local p = (now - V.tEnd) / 0.32
@@ -524,6 +542,12 @@ function S.Frame()
 		labA = 1 - smooth(p / 0.85)
 	else
 		alpha = clamp(t / 0.1)
+		if t >= HB_DELAY then beat = kf(HB, ((t - HB_DELAY) % HUM_P) / HUM_P, 2) end
+		local sc = 1 + HB_SCALE * beat
+		if math.abs(sc - (V.lastSc or 0)) > 0.0002 then
+			ov:SetScale(V.base * sc)
+			V.lastSc = sc
+		end
 		local q = outQ((t - 0.08) / 0.25)
 		labA, labY = q, 8 * (1 - q)                 -- 위에서 8 내려와 자리 잡음
 		if (t - 0.08) < 0 then labA = 0 end
@@ -531,7 +555,7 @@ function S.Frame()
 	ov:SetAlpha(alpha)
 
 	-- 바탕 빛 · 섬광 · 퍼지는 고리
-	local br = (t < 0.8) and lerp(1, 0.55, smooth((t - 0.35) / 0.45)) or lerp(0.55, 0.95, (sin((t - 0.8) / 4.8 * 2 * math.pi - math.pi / 2) + 1) / 2)
+	local br = (t < HB_DELAY) and lerp(1, 0.6, smooth((t - 0.9) / 0.58)) or (0.6 + 0.4 * beat)
 	V.spill:SetAlpha(0.12 * clamp(t / 0.35) * br * (1 + 1.6 * boost))
 	local fp = (t - 0.12) / 0.6
 	V.flash:SetAlpha(0.55 * ((fp <= 0 or fp >= 1) and 0 or (fp < 0.18 and fp / 0.18 * 0.4 or 0.4 * (1 - (fp - 0.18) / 0.82))) + 0.25 * boost)
@@ -542,7 +566,7 @@ function S.Frame()
 		Reveal(o.haze, o, sd.n0, 0.32, sd.flip)
 		Reveal(o.field, o, sd.s0, 0.32, sd.flip)
 		Reveal(o.grat, o, sd.g0, 0.25, sd.flip)
-		local hz = (t < sd.d2) and 0.55 * clamp((t - sd.n0) / 0.32) or kf({ { 0, 0.45 }, { 0.5, 0.62 }, { 1, 0.45 } }, ((t - sd.d2) % 5) / 5, 2)
+		local hz = (t < HB_DELAY) and 0.55 * clamp((t - sd.n0) / 0.32) or (0.5 + 0.22 * beat)
 		o.haze:SetAlpha(hz)
 		o.field:SetAlpha(0.9 * twinkle(t - sd.d2, 3.4))
 		o.grat:SetAlpha(0.5)
@@ -700,7 +724,7 @@ local function Layout()
 	V.base = k * (db.scale or DEF_SCALE)
 	V.pxk = PhysH() / 900 * (db.scale or DEF_SCALE)
 	V.holder:ClearAllPoints()
-	V.holder:SetPoint("CENTER", UIParent, "CENTER", 0, (50 + (db.y or 0)) * k)
+	V.holder:SetPoint("CENTER", UIParent, "CENTER", 0, (50 + (db.y or DEF_Y)) * k)
 	V.ov:SetScale(V.base)
 end
 
@@ -722,7 +746,7 @@ function S.Start(e)
 	if V.cls ~= cls and not Bind(cls) then return end
 	Layout()
 	ApplyTex()
-	V.t0, V.ending, V.t = GetTime(), nil, 0
+	V.t0, V.ending, V.t, V.lastSc = GetTime(), nil, 0, nil
 	SetCur(e)
 	V.holder:Show()
 	S.Frame()
@@ -1046,7 +1070,7 @@ local function Say(s) print("|cffFFF468FOA|r " .. s) end
 
 function S.Diag()
 	Say(string.format("별자리 · 직업 %s · 효과 %s · 크기 %.2f · 높이 %d", tostring(S.class), FX_ON() and "켜짐" or "꺼짐",
-		Ink.db.stars.scale or DEF_SCALE, Ink.db.stars.y or 0))
+		Ink.db.stars.scale or DEF_SCALE, Ink.db.stars.y or DEF_Y))
 	for _, d in ipairs(defs) do
 		local st
 		if d.kind == "react" then st = "주문 " .. tostring(d.cast or "모름") .. (d.cast and (Usable(d.cast) and " · 누를 수 있음" or " · 대기") or "")
@@ -1073,10 +1097,10 @@ function S.Slash(arg)
 	elseif cmd == "높이" or cmd == "y" or cmd == "height" then
 		local v = tonumber(rest)
 		if v then db.y = max(-300, min(300, floor(v + 0.5))) end
-		Say(string.format("별자리 높이 %d (기본 0 · 위로 +, 아래로 -)", db.y or 0))
+		Say(string.format("별자리 높이 %d (기본 %d · 위로 +, 아래로 -)", db.y or DEF_Y, DEF_Y))
 		S.Preview(V.cls ~= S.class and V.cls or nil, 1, 6)
 	elseif cmd == "초기화" or cmd == "reset" then
-		db.scale, db.y = nil, 0
+		db.scale, db.y = nil, nil
 		Say("별자리 크기 · 높이를 기본으로 되돌렸어요.")
 		S.Preview(nil, 1, 6)
 	elseif cmd == "사용" or cmd == "use" then
@@ -1118,7 +1142,7 @@ end
 --  자리: 캐릭터 발밑 · 거리 표시와 쿨다운 줄 사이 (시안 y 540). 별 둘레 궤도가 남은 시간만큼 시계 방향으로 줄고,
 --  시간이 없는 계시는 숨 쉬다가 다음 주문에 캐릭터 쪽으로 빨려 든다. 색은 직업색이 아니라 마법부여 고유색.
 --  순간 피해만 주는 마법부여(불타는 무기 · 생명력 흡수 · 빙결 · 부정의 무기)는 띄우지 않는다.
---  /foa 마부 · /foa 마부 계시 · /foa 마부 시전 · /foa 마부 크기 0.8 · /foa 마부 높이 10
+--  /foa 마부 · /foa 마부 계시 · /foa 마부 시전 · /foa 마부 크기 0.7 · /foa 마부 높이 -40
 -------------------------------------------------------------------------------
 local EKEY = "enchMarks"
 local function EN_ON() return not ns.FX or ns.FX.on(EKEY) end
@@ -1131,7 +1155,7 @@ local ENCH = {
 S.ENCH = ENCH
 local E = { slots = {}, pool = {}, active = {} }
 S.E = E
-local E_DEF_SCALE = 0.8
+local E_DEF_SCALE, E_DEF_Y = 0.7, -40                -- 기본: 마부 표식 크기 0.7 · 높이 -40
 local ROW_Y, GAP, CHAR_X, CHAR_Y = 540, 50, 800, 460
 local MET_L, MET_H, MET_DX, MET_DY = 120, 11, 170, -119       -- 유성: 길이 · 두께 · 오른쪽 위에서 날아오는 거리
 local MET_UX, MET_UY = math.cos(rad(145)), math.sin(rad(145))  -- 꼬리 → 머리 (화면 아래로 +): 왼쪽 아래
@@ -1144,7 +1168,7 @@ local function ELayoutFrame()
 	local sc = db.scale or E_DEF_SCALE
 	E.base, E.pxk = k * sc, PhysH() / 900 * sc
 	E.holder:ClearAllPoints()
-	E.holder:SetPoint("CENTER", UIParent, "CENTER", 0, (50 + (db.y or 0)) * k)
+	E.holder:SetPoint("CENTER", UIParent, "CENTER", 0, (50 + (db.y or E_DEF_Y)) * k)
 	E.ov:SetScale(E.base)
 end
 
@@ -1225,7 +1249,7 @@ local function EBind(o)
 	Col(o.star, c)
 	o.hot:SetVertexColor(1, 1, 1)
 	if o.cd.SetSwipeColor then pcall(o.cd.SetSwipeColor, o.cd, c[1], c[2], c[3], 1) end
-	if not o.name:SetFont(F.semi, 10, "") then o.name:SetFont(F.sans, 10, "") end
+	FontPx(o.name, F.semi, 8.5, 8, E.pxk)
 	o.name:SetText(e.label)
 	o.name:SetTextColor(hi[1], hi[2], hi[3])
 	if e.timed then
@@ -1474,11 +1498,11 @@ function S.ESlash(arg)
 	elseif cmd == "높이" or cmd == "y" then
 		local v = tonumber(rest)
 		if v then db.y = max(-300, min(300, floor(v + 0.5))) end
-		Say(string.format("마법부여 표식 높이 %d (기본 0 · 위로 +, 아래로 -)", db.y or 0))
+		Say(string.format("마법부여 표식 높이 %d (기본 %d · 위로 +, 아래로 -)", db.y or E_DEF_Y, E_DEF_Y))
 		if E.holder then ELayoutFrame() end
 		S.EPreview()
 	elseif cmd == "초기화" or cmd == "reset" then
-		db.scale, db.y = nil, 0
+		db.scale, db.y = nil, nil
 		if E.holder then ELayoutFrame() end
 		Say("마법부여 표식 크기 · 높이를 기본으로 되돌렸어요.")
 		S.EPreview()
@@ -1493,7 +1517,7 @@ function S.ESlash(arg)
 	elseif ENCH_KO[cmd] or (cmd == "crusader" or cmd == "revelation" or cmd == "insight") then
 		S.EPreview(ENCH_KO[cmd] or cmd)
 	else
-		Say("/foa 마부 [성전사|계시|통찰|시전|크기 0.8|높이 10|초기화|끄기|켜기]")
+		Say("/foa 마부 [성전사|계시|통찰|시전|크기 0.7|높이 -40|초기화|끄기|켜기]")
 	end
 end
 
@@ -1505,6 +1529,11 @@ end
 function M:Init()
 	Ink.db.stars = Ink.db.stars or {}
 	Ink.db.ench = Ink.db.ench or {}
+	if not Ink.db.stars.v90 then
+		for _, t in ipairs({ Ink.db.stars, Ink.db.ench }) do if t.y == 0 then t.y = nil end end
+		if Ink.db.ench.scale == 0.8 then Ink.db.ench.scale = nil end
+		Ink.db.stars.v90 = true
+	end
 	Prepare()
 	EPrepare()
 	local ev = CreateFrame("Frame")
