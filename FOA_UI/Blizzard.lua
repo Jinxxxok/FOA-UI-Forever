@@ -1325,13 +1325,13 @@ end
 local skinnedButtons = {}
 
 -- 단축키 표기를 짧은 영문으로 (한글이 남으면 한글 글꼴로)
---  숫자키(1~0)는 N1 · N2 … (그냥 "1" 이면 중첩 · 쿨타임 숫자와 헷갈려서) · 숫자패드는 NP1 …
+--  숫자키(1~0)는 그대로 1 · 2 …, 숫자패드는 N1 · N2 …
 local KEY_REPL = {
 	{ "마우스 휠 위로", "WU" }, { "마우스 휠 아래로", "WD" }, { "가운데 마우스 버튼", "M3" },
-	{ "마우스 버튼 (%d+)", "M%1" }, { "마우스 (%d+)", "M%1" }, { "숫자패드 ", "NP" }, { "숫자 패드 ", "NP" },
+	{ "마우스 버튼 (%d+)", "M%1" }, { "마우스 (%d+)", "M%1" }, { "숫자패드 ", "N" }, { "숫자 패드 ", "N" },
 	{ "SHIFT%-", "s" }, { "CTRL%-", "c" }, { "ALT%-", "a" }, { "s%-", "s" }, { "c%-", "c" }, { "a%-", "a" },
 	{ "Mouse Wheel Up", "WU" }, { "Mouse Wheel Down", "WD" }, { "Middle Mouse", "M3" }, { "Mouse Button (%d+)", "M%1" },
-	{ "Num Pad ", "NP" }, { "Spacebar", "Spc" }, { "스페이스 바", "Spc" }, { "스페이스", "Spc" },
+	{ "Num Pad ", "N" }, { "Spacebar", "Spc" }, { "스페이스 바", "Spc" }, { "스페이스", "Spc" },
 }
 
 -- FOA 단축바(LibActionButton)는 게임 키 이름을 그대로 준다 ("SHIFT-W" · "BUTTON4" · "NUMPAD1" · "1")
@@ -1339,7 +1339,7 @@ local RAW_BASE = {
 	MOUSEWHEELUP = "WU", MOUSEWHEELDOWN = "WD", MIDDLEMOUSE = "M3", SPACE = "Spc", ESCAPE = "Esc",
 	BACKSPACE = "BS", CAPSLOCK = "Caps", INSERT = "Ins", DELETE = "Del", HOME = "Hm", END = "End",
 	PAGEUP = "PU", PAGEDOWN = "PD", TAB = "Tab", ENTER = "Ent", NUMLOCK = "NL",
-	NUMPADPLUS = "NP+", NUMPADMINUS = "NP-", NUMPADMULTIPLY = "NP*", NUMPADDIVIDE = "NP/", NUMPADDECIMAL = "NP.",
+	NUMPADPLUS = "N+", NUMPADMINUS = "N-", NUMPADMULTIPLY = "N*", NUMPADDIVIDE = "N/", NUMPADDECIMAL = "N.",
 	UP = "Up", DOWN = "Dn", LEFT = "Lt", RIGHT = "Rt",
 }
 local RAW_MOD = { SHIFT = "s", CTRL = "c", ALT = "a", META = "m" }
@@ -1351,9 +1351,8 @@ local function RawKey(txt)
 		if not (m and RAW_MOD[m]) then break end
 		mods, base = mods .. RAW_MOD[m], rest
 	end
-	if base:match("^%d$") then return mods .. "N" .. base end
 	local np = base:match("^NUMPAD(%d)$")
-	if np then return mods .. "NP" .. np end
+	if np then return mods .. "N" .. np end
 	local mb = base:match("^BUTTON(%d+)$")
 	if mb then return mods .. "M" .. mb end
 	if RAW_BASE[base] then return mods .. RAW_BASE[base] end
@@ -1366,9 +1365,6 @@ M.ShortKey = function(txt)
 	if not out then
 		out = txt
 		for _, r in ipairs(KEY_REPL) do out = out:gsub(r[1], r[2]) end
-		-- 블리자드 단축바가 준 숫자키 ("1" · "s1")
-		local mods, d = out:match("^([scam]*)(%d)$")
-		if d then out = mods .. "N" .. d end
 	end
 	return out
 end
