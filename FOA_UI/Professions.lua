@@ -611,8 +611,8 @@ local function SpecTip(prof, s, def, isMaster, withSwitch)
 	local st = s.start and PickWho(s.start)
 	local w = PickWho(s.who)
 	t[#t + 1] = TipH("배우는 법")
-	if st then WhoLines(t, "① 퀘스트 시작", st) end
-	WhoLines(t, st and "② 배우는 곳" or "배우는 곳", w)
+	if st then WhoLines(t, "|cffE3C07A1|r  퀘스트 시작", st) end
+	WhoLines(t, st and "|cffE3C07A2|r  배우는 곳" or "배우는 곳", w)
 	if s.how then t[#t + 1] = TipT(s.how, TIP_MUTED) end
 	if s.items then
 		t[#t + 1] = TipH("가져갈 것")
@@ -666,7 +666,7 @@ local function FitTable(def, t)
 				if s.fit and s.fit[c] and s.fit[c][1] == sc then names[#names + 1] = s.short or s.name end
 			end
 			local right = table.concat(names, " · ") .. (sc >= 2 and "" or "  (판매용)")
-			t[#t + 1] = TipKV((c == me and "▸ " or "") .. ClassText(c), right, TIP_SOFT, c == me and TIP_GOLD or (sc >= 2 and TIP_WHITE or TIP_MUTED))
+			t[#t + 1] = TipKV((c == me and "|cffFFD15F●|r " or "") .. ClassText(c), right, TIP_SOFT, c == me and TIP_GOLD or (sc >= 2 and TIP_WHITE or TIP_MUTED))
 		end
 	end
 	t[#t + 1] = TipT("클래식 기준 일반론 · 포에버 패치로 바뀔 수 있어요", TIP_DIM)

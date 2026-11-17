@@ -1205,12 +1205,17 @@ function M:BookPin(i)
 			elseif b[8] == 2 then GameTooltip:AddLine("스톰윈드 사서(가리온 웬델)에게만 반납", 0.75, 0.77, 0.8) end
 			GameTooltip:AddLine(" ")
 			GameTooltip:AddLine(done and ("|cff6FD39A모음|r · " .. (how or "")) or "|cffC9A8FF아직 안 모음|r", 1, 1, 1)
-			GameTooltip:AddLine("클릭: 모음 체크 · 우클릭: 길 안내", 0.56, 0.58, 0.61)
+			if self.wide then
+				GameTooltip:AddLine("지역 지도에서 눌러 체크 · 길 안내", 0.56, 0.58, 0.61)
+			else
+				GameTooltip:AddLine("클릭: 모음 체크 · 우클릭: 길 안내", 0.56, 0.58, 0.61)
+			end
 		end
 		GameTooltip:Show()
 	end)
 	p:SetScript("OnLeave", function(self) GameTooltip:Hide(); self.grow:Stop(); self.art:SetScale(1) end)
 	p:SetScript("OnClick", function(self, btn)
+		if self.wide then return end   -- 대륙 · 세계 지도에선 눌리지 않게 (클릭 통과가 안 되는 클라이언트 대비)
 		if btn == "RightButton" or self.lib then
 			local mapID = WorldMapFrame:GetMapID()
 			if mapID and C_Map.CanSetUserWaypointOnMap and C_Map.CanSetUserWaypointOnMap(mapID) then
@@ -1253,6 +1258,10 @@ function M:DrawBooks(mapID, cv, pinScale)
 		p:SetPoint("CENTER", cv, "TOPLEFT", x * W / sc, -y * H / sc)
 		p:SetFrameLevel(self.layer:GetFrameLevel() + 20)
 		p.wx, p.wy = x, y
+		-- 대륙 · 세계 지도: 책은 보기만 (마우스를 올리면 툴팁) · 클릭은 지도로 통과
+		--  지역을 고르려고 누르다가 책 모음 체크가 잘못 눌리는 일이 없게
+		p.wide = wide
+		if p.SetMouseClickEnabled then pcall(p.SetMouseClickEnabled, p, not wide) end
 		p:Show()
 		return p
 	end

@@ -3521,7 +3521,7 @@ function M:PaintBoard(data)
 	local guess = d and d.group and self.showing == self.hereKey and self.hereSure == false
 	b.sub:SetText(string.format("|cff%02x%02x%02x권장 %d–%d 레벨|r   ·   보스 %d%s%s", math.floor(col[1] * 255), math.floor(col[2] * 255), math.floor(col[3] * 255),
 		d and d.lo or 0, d and d.hi or 0, nMain, nRare > 0 and ("   ·   희귀 " .. nRare) or "",
-		guess and "   ·   |cffFFB347날개 추측 중 · 보스를 보면 자동으로 · 오른쪽 이름 옆 ∨ 로 고르기|r" or ""))
+		guess and "   ·   |cffFFB347날개 추측 중 · 보스를 보면 자동으로 · 오른쪽 이름 옆 ▼ 로 고르기|r" or ""))
 	b.prog:SetMinMaxValues(0, math.max(1, nMain))
 	b.prog:SetValue(nDown)
 	b.progT:SetText(nDown >= nMain and nMain > 0 and "|cff6FD39A모두 처치!|r" or (nDown .. " / " .. nMain .. " 처치"))
@@ -5161,7 +5161,7 @@ function M:OnForeverEnter()
 		if self.lastToast == tk then return end
 		self.lastToast = tk
 		C_Timer.After(2.5, function()
-			M:Toast(d.groupKo, nil, nil, "날개 확인 중  ·  보스를 보면 자동으로  ·  지도(M) 이름 옆 ∨ 로 직접 고르기")
+			M:Toast(d.groupKo, nil, nil, "날개 확인 중  ·  보스를 보면 자동으로  ·  지도(M) 이름 옆 ▼ 로 직접 고르기")
 		end)
 		return
 	end

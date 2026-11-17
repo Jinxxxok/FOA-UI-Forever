@@ -846,7 +846,7 @@ function M:PaintPanel(f, nxt)
 		dotC, txtC, msg = C.dim, C.muted, "아직 찍은 특성이 없어요 · 아래 순서대로 찍으세요"
 	elseif bestKey and bestKey ~= key and (bestN or 0) >= over + 5 then
 		st.suggest = bestKey
-		dotC, txtC, msg = C.accent, C.accent, "지금 찍은 특성과 더 맞는 빌드  ·  " .. self:BuildLabel(bestKey) .. "  ›"
+		dotC, txtC, msg = C.accent, C.accent, "지금 찍은 특성과 더 맞는 빌드  ·  " .. self:BuildLabel(bestKey) .. "  →"
 	elseif spent > over then
 		dotC, txtC, msg = C.orange, C.soft, string.format("빌드와 다른 점수 %d점 · 초기화하면 이대로 맞춰져요", spent - over)
 	else
