@@ -134,14 +134,15 @@ local function kf(frames, p, i)
 	return frames[#frames][i]
 end
 local TWINKLE = { { 0, 0.78 }, { 0.4, 1 }, { 0.65, 0.62 }, { 1, 0.78 } }
--- 지속 시간 동안 "우웅 우웅": 별자리가 그어진 순서대로 빛의 맥박이 번진다 (시안과 같은 값)
-local HUM_P, HUM0, HUMW = 2.4, 1.0, 1.6
-local HUM = { { 0, 0.74, 1 }, { 0.28, 1, 1.14 }, { 0.55, 0.84, 1.03 }, { 1, 0.74, 1 } }
-local LHUM = { { 0, 0.6 }, { 0.28, 1 }, { 0.55, 0.72 }, { 1, 0.6 } }
--- 성운 심장박동: "쿵-쿵" 두 번 뛰고 쉼 (별자리 맥박과 같은 2.4초 · 박동이 먼저 뛰고 빛이 별자리를 타고 퍼진다)
-local HB_DELAY = HUM0 + 0.28 * HUM_P - 0.19
-local HB = { { 0, 0 }, { 0.03, 1 }, { 0.09, 0.077 }, { 0.13, 0.615 }, { 0.21, 0 }, { 1, 0 } }
-local HB_SCALE = 0.026                                -- 뛸 때 양옆이 캐릭터 기준으로 2.6% 벌어졌다 모인다
+-- 지속 시간 동안 "우웅~ 우웅~": 마력의 원천이 울리듯 끊김 없이 부풀었다 가라앉는다 (시안과 같은 값)
+--  별 · 선은 그어진 순서대로 물결처럼 번지고, 양옆 성운 전체가 같은 호흡으로 부푼다
+local HUM_P, HUM0, HUMW = 1.8, 1.0, 1.6
+local HUM = { { 0, 0.74, 1 }, { 0.5, 1, 1.12 }, { 1, 0.74, 1 } }
+local LHUM = { { 0, 0.62 }, { 0.5, 1 }, { 1, 0.62 } }
+-- 성운 울림: 양옆 성운이 캐릭터 기준으로 2.5% 부풀었다(벌어졌다) 가라앉는다 · 첫 별보다 살짝 먼저 차오른다
+local HB_DELAY = HUM0 - 0.15
+local HB = { { 0, 0 }, { 0.5, 1 }, { 1, 0 } }
+local HB_SCALE = 0.025
 
 -- 글자: 시안 크기를 쓰되 화면에서 이 픽셀보다 작아지지 않게 (1080p 에서도 읽히게)
 local function FontPx(fs, file, design, minPx, k)
@@ -555,7 +556,7 @@ function S.Frame()
 	ov:SetAlpha(alpha)
 
 	-- 바탕 빛 · 섬광 · 퍼지는 고리
-	local br = (t < HB_DELAY) and lerp(1, 0.6, smooth((t - 0.9) / 0.58)) or (0.6 + 0.4 * beat)
+	local br = (t < HB_DELAY) and lerp(1, 0.6, smooth((t - 0.35) / 0.5)) or (0.6 + 0.35 * beat)
 	V.spill:SetAlpha(0.12 * clamp(t / 0.35) * br * (1 + 1.6 * boost))
 	local fp = (t - 0.12) / 0.6
 	V.flash:SetAlpha(0.55 * ((fp <= 0 or fp >= 1) and 0 or (fp < 0.18 and fp / 0.18 * 0.4 or 0.4 * (1 - (fp - 0.18) / 0.82))) + 0.25 * boost)
@@ -566,7 +567,7 @@ function S.Frame()
 		Reveal(o.haze, o, sd.n0, 0.32, sd.flip)
 		Reveal(o.field, o, sd.s0, 0.32, sd.flip)
 		Reveal(o.grat, o, sd.g0, 0.25, sd.flip)
-		local hz = (t < HB_DELAY) and 0.55 * clamp((t - sd.n0) / 0.32) or (0.5 + 0.22 * beat)
+		local hz = (t < HB_DELAY) and lerp(0.55 * clamp((t - sd.n0) / 0.32), 0.48, smooth((t - 0.5) / 0.35)) or (0.48 + 0.18 * beat)
 		o.haze:SetAlpha(hz)
 		o.field:SetAlpha(0.9 * twinkle(t - sd.d2, 3.4))
 		o.grat:SetAlpha(0.5)
@@ -1084,6 +1085,8 @@ function S.Diag()
 	for i = max(1, #l - 7), #l do print("|cff8E939B  " .. l[i] .. "|r") end
 end
 
+-- 정신 집중은 마법사 · 드루이드 · 주술사가 같이 쓰는 이름 → 전체 미리 보기는 직업을 대표하는 강조로
+local SIG = { SHAMAN = 2, MAGE = 2, DRUID = 2 }
 local allToken = 0
 function S.Slash(arg)
 	arg = (arg or ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -1118,7 +1121,7 @@ function S.Slash(arg)
 		for i, cls in ipairs(ORDER) do
 			C_Timer.After((i - 1) * 3.4, function()
 				if allToken ~= tok then return end
-				S.Preview(cls, 1, 2.9, true)
+				S.Preview(cls, SIG[cls] or 1, 2.9, true)
 				Say(string.format("%d/9 %s", i, cls))
 			end)
 		end
