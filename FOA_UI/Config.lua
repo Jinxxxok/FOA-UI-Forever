@@ -2482,6 +2482,8 @@ SlashCmdList.INKUI = function(msg)
 	elseif msg == "reset" then
 		M:ResetAll()
 		print("|cffFFF468FOA|r 모든 위치를 기본값으로 되돌렸어요.")
+	elseif msg:match("^별자리") or msg:match("^stars") then
+		if ns.Stars then ns.Stars.Slash((msg:gsub("^%S+%s*", ""))) end
 	elseif msg == "cast" or msg == "시전" then
 		local U = Ink.modules.Units
 		if U and U.CastDiag then U:CastDiag() end
