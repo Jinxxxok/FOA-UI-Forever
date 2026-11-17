@@ -12,10 +12,21 @@ on:
 permissions:
   contents: write
 
+# 연달아 올리면 마지막 것 하나만 릴리스한다 (WowUp 에서 "받았는데 또 업데이트" 방지)
+#  새 push 가 오면 기다리던 이전 실행은 취소 · push 후 15분 동안 조용하면 그때 릴리스
+concurrency:
+  group: release
+  cancel-in-progress: true
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
+      - name: Wait for a quiet period
+        if: github.event_name == 'push'
+        run: sleep 900
+
       - uses: actions/checkout@v4
 
       - name: Read version

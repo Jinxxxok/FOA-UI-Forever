@@ -31,6 +31,8 @@ local INV = {
 	{ 10, 6, "손" }, { 6, 7, "허리" }, { 7, 8, "다리" }, { 8, 9, "발" }, { 11, 12, "반지 1" }, { 12, 12, "반지 2" },
 	{ 13, 13, "장신구 1" }, { 14, 13, "장신구 2" }, { 16, 10, "주장비" }, { 17, 11, "보조장비" },
 }
+local INV_NAME = {}
+for _, e in ipairs(INV) do INV_NAME[e[1]] = e[3] end
 local QCOL = {
 	[0] = { 0.62, 0.62, 0.62 }, [1] = { 0.95, 0.95, 0.95 }, [2] = { 0.37, 0.83, 0.37 }, [3] = { 0.29, 0.62, 1 },
 	[4] = { 0.76, 0.42, 1 }, [5] = { 1, 0.55, 0.15 }, [6] = { 0.9, 0.8, 0.5 }, [7] = { 0, 0.8, 1 }, [8] = { 0, 0.8, 1 },
@@ -649,7 +651,9 @@ function M:BuildRanksForever()
 	local lvl = UnitLevel("player") or 60
 	local view = BisView()
 	local skey = SpecKey()
-	local key = skey .. ":" .. lvl .. ":" .. view .. (Ink.db.bisCrafts == false and "" or ":c") .. (Ink.db.bisQuests == false and "" or ":q") .. (Ink.db.bisWorld == false and "" or ":w")
+	local own, osig = self:OwnedItems()
+	self.ownMap = own
+	local key = skey .. ":" .. lvl .. ":" .. view .. (Ink.db.bisCrafts == false and "" or ":c") .. (Ink.db.bisQuests == false and "" or ":q") .. (Ink.db.bisWorld == false and "" or ":w") .. ":" .. osig
 	if self.rankKey == key and not self.dirty then return end
 	-- 아이템이 도착할 때마다(dirty) 곧바로 다시 만들면, 0.2초마다 다시 그려지는 아이템 툴팁이
 	--  수천 개 후보를 계속 훑었다 → 같은 조건이면 2초에 한 번만, 미뤄진 건 잠시 뒤 한 번에
@@ -700,6 +704,7 @@ function M:BuildRanksForever()
 		self:AddQuestRewards(pool, plv)
 		self:AddWorldSources(pool, plv)
 		if view == "pvp" then self:AddPvP(pool) end
+		self:AddOwned(pool, plv)
 		return self:BuildLevelRanks(pool, plv)
 	end
 	self:AddQuestRewards(pool, plv)
@@ -1268,6 +1273,90 @@ function M:DungeonQuestNeed()
 	return out
 end
 
+-- 내 장비 (착용 · 가방 · 은행): BIS 목록에서 빼지 않고 성능 순서 그대로 같이 보여 준다
+--  예전엔 끝낸 퀘스트 보상 · 출처 자료에 없는 장비가 목록에서 빠져서, 지금 낀 템보다 낮은 템이 "최고"로 보였다
+--  은행은 마지막으로 은행을 열었을 때 기준 (ItemCount 가 남겨 둔 기록)
+function M:OwnedItems()
+	local own, sig = {}, {}
+	for inv = 1, 19 do
+		local okL, link = false, nil
+		if GetInventoryItemLink then okL, link = pcall(GetInventoryItemLink, "player", inv) end
+		link = okL and plain(link) or nil
+		local id = link and select(2, pcall(C_Item.GetItemInfoInstant, link))
+		if type(id) ~= "number" then id = nil end
+		if id then
+			if not own[id] then own[id] = { kind = "equipped", link = link, inv = inv } end
+			sig[#sig + 1] = "e" .. id
+		end
+	end
+	if C_Container and C_Container.GetContainerNumSlots then
+		for bag = 0, (NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4) do
+			local okN, n = pcall(C_Container.GetContainerNumSlots, bag)
+			for slot = 1, (okN and n or 0) do
+				local ok, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
+				local id = ok and info and plain(info.itemID)
+				if id and not own[id] then
+					local loc = select(4, C_Item.GetItemInfoInstant(id))
+					if loc and EQUIP_EJ[loc] then
+						own[id] = { kind = "bag", link = plain(info.hyperlink) }
+						sig[#sig + 1] = "b" .. id
+					end
+				end
+			end
+		end
+	end
+	local realm = Ink.db.inv and Ink.db.inv[GetRealmName and GetRealmName() or "?"]
+	local me = realm and realm[(UnitName and UnitName("player")) or "?"]
+	for id in pairs(me and me.bank or {}) do
+		if not own[id] then
+			local loc = select(4, C_Item.GetItemInfoInstant(id))
+			if loc and EQUIP_EJ[loc] then
+				own[id] = { kind = "bank" }
+				sig[#sig + 1] = "k" .. id
+			end
+		end
+	end
+	table.sort(sig)
+	return own, table.concat(sig, ",")
+end
+
+function M:AddOwned(pool)
+	local own = self.ownMap or {}
+	local have = {}
+	for _, list in pairs(pool) do
+		for _, it in ipairs(list) do
+			it.ownLink = nil
+			have[it.id] = it
+		end
+	end
+	self.ownById = self.ownById or {}
+	for id, o in pairs(own) do
+		local _, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
+		local slot = loc and EQUIP_EJ[loc]
+		if slot then
+			local it = have[id]
+			if not it then
+				it = self.ownById[id]
+				if not it then
+					it = { id = id, icon = icon, slot = slot, owned = true }
+					self.ownById[id] = it
+				end
+				if not it.srcText then
+					local src = (self.DropSource and self:DropSource(id)) or (ns.ItemSourceText and ns.ItemSourceText(id))
+					it.srcText = src or "내 장비 · 획득처 자료 없음"
+				end
+				if ForMyClass(it) then
+					pool[slot] = pool[slot] or {}
+					table.insert(pool[slot], it)
+					have[id] = it
+				end
+			end
+			-- 무작위 접미사(원숭이 · 매 …) 장비는 내 것 그대로의 능력치로 점수
+			it.ownLink = o.link
+		end
+	end
+end
+
 -- 퀘스트 보상 장비도 후보로 (ForeverQuestRewards.lua · AllTheThings MIT)
 --  내 진영 · 내 직업 퀘스트만, 이미 끝낸 퀘스트는 빼고, 퀘스트 레벨로 대충 레벨 창을 좁힌다
 function M:AddQuestRewards(pool, lvl)
@@ -1284,7 +1373,9 @@ function M:AddQuestRewards(pool, lvl)
 		if not okCls then for _, c in ipairs(cls) do if c == classID then okCls = true break end end end
 		-- 필요 레벨이 지금 레벨보다 높으면 아직 받을 수 없어서 "지금 레벨 최고"에 넣지 않는다
 		--  (예: 3625 마력이 깃든 아즈샤리트 퇴마검 · 45레벨부터 · 슬픔의 늪부터 14단계 연퀘)
-		if okFac and okCls and qlvl <= lvl and qlvl >= lvl - 22 and not (done and done(qid)) then
+		-- 끝낸 퀘스트 보상: 내가 가진 것(착용 · 가방 · 은행)은 그대로 순위에 · 안 고른 보상은 더 못 받으니 뺀다
+		local owned = self.ownMap and self.ownMap[id]
+		if okFac and okCls and qlvl <= lvl and (owned or (qlvl >= lvl - 22 and not (done and done(qid)))) then
 			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
 			local slot = iid and loc and EQUIP_EJ[loc]
 			if slot then
@@ -1320,11 +1411,13 @@ function M:AddQuestRewards(pool, lvl)
 			local okFac = qfac == 0 or qfac == facN
 			local okCls = #cls == 0
 			if not okCls then for _, c in ipairs(cls) do if c == classID then okCls = true break end end end
-			if okFac and okCls and q[12] ~= 1 and qlvl <= lvl and qlvl >= lvl - 22 and not (done and done(qid)) then
+			local qdone = done and done(qid)
+			if okFac and okCls and q[12] ~= 1 and qlvl <= lvl then
 				for _, id in ipairs(q[9] or {}) do
 					local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
 					local slot = iid and loc and EQUIP_EJ[loc]
-					if slot and not added[id] then
+					local owned = self.ownMap and self.ownMap[id]
+					if slot and not added[id] and (owned or (qlvl >= lvl - 22 and not qdone)) then
 						local it = self.questById[id]
 						if not it then
 							it = { id = id, icon = icon, slot = slot, quest = qid, qlvl = q[2] or 0, need = qlvl, qmap = q[4], qx = q[5], qy = q[6], qnpc = q[7], dq = inst }
@@ -1528,7 +1621,9 @@ function M:QuestRewardTooltip(it, tt)
 	if info then tt:AddLine("클릭: 퀘스트 주는 곳을 지도에", 0.56, 0.58, 0.61) end
 end
 
--- 만렙 전 "레벨 최고템": 부위마다 지금 착용 가능한(요구 레벨 ≤ 내 레벨) 내 직업 장비를 FOA 점수 순으로 4개
+-- 만렙 전 "레벨 최고템": 부위마다 지금 착용 가능한(요구 레벨 ≤ 내 레벨) 내 직업 장비를 FOA 점수 순으로 (12개까지 · 휠로 넘겨 봄)
+--  내가 가진 장비(착용 · 가방 · 은행)도 빼지 않고 같은 순서로 · 착용 중이면 "착용 중"
+local LEVEL_LIST = 12
 --  두 손 무기를 드는 직업(도적 · 20레벨부터 전사 · 사냥꾼)은 한손 무기를 보조장비 칸에도 (보조 손 점수로)
 function M:BuildLevelRanks(pool, lvl)
 	local pvpView = self.viewNow == "pvp" or nil
@@ -1547,15 +1642,29 @@ function M:BuildLevelRanks(pool, lvl)
 				if not name then
 					self.levelPending = true
 					RequestItem(it.id)
-				elseif (minLv or 0) <= lvl and ForMyClass(it) and Reachable(it, minLv, ilvl, lvl) then
-					local v = sc:Score(link or ("item:" .. it.id), off, FOREVER and ScoreSpec() or nil)
-					if v == nil then self.levelPending = true; RequestItem(it.id) end
-					if v and v > 0 then out[#out + 1] = { it = it, score = v, minLv = minLv } end
+				else
+					local own = self.ownMap and self.ownMap[it.id]
+					if (minLv or 0) <= lvl and ForMyClass(it) and (own or Reachable(it, minLv, ilvl, lvl)) then
+						local v = sc:Score(it.ownLink or link or ("item:" .. it.id), off, FOREVER and ScoreSpec() or nil)
+						if v == nil then self.levelPending = true; RequestItem(it.id) end
+						if v and (v > 0 or (own and own.kind == "equipped")) then out[#out + 1] = { it = it, score = v, minLv = minLv } end
+					end
 				end
 			end
 		end
 		table.sort(out, function(a2, b2) return a2.score > b2.score end)
 		return out
+	end
+	-- 위에서 LEVEL_LIST 개 + 그 밑으로 밀린 내 장비(착용 · 가방 · 은행)도 순위 그대로 붙인다 (착용 중인 템이 목록에서 사라지지 않게)
+	local function Take(ranked, slot)
+		local l = {}
+		for i = 1, #ranked do
+			local own = self.ownMap and self.ownMap[ranked[i].it.id]
+			if i <= LEVEL_LIST or own then
+				l[#l + 1] = { rank = i - 1, slot = slot, it = ranked[i].it, lvlMode = true, pvp = pvpView, score = ranked[i].score }
+			end
+		end
+		return l
 	end
 	for slot, list in pairs(pool) do
 		local src = list
@@ -1567,11 +1676,7 @@ function M:BuildLevelRanks(pool, lvl)
 				if loc == "INVTYPE_WEAPON" then src[#src + 1] = it end
 			end
 		end
-		local ranked = Rank(src, slot == 11 and dual)
-		local l = {}
-		for i = 1, math.min(4, #ranked) do
-			l[i] = { rank = i - 1, slot = slot, it = ranked[i].it, lvlMode = true, pvp = pvpView, score = ranked[i].score }
-		end
+		local l = Take(Rank(src, slot == 11 and dual), slot)
 		if #l > 0 then self.levelRanks[slot] = l end
 	end
 	if dual and not self.levelRanks[11] and pool[10] then
@@ -1579,16 +1684,14 @@ function M:BuildLevelRanks(pool, lvl)
 		for _, it in ipairs(pool[10]) do
 			if select(4, C_Item.GetItemInfoInstant(it.id)) == "INVTYPE_WEAPON" then src[#src + 1] = it end
 		end
-		local ranked = Rank(src, true)
-		local l = {}
-		for i = 1, math.min(4, #ranked) do l[i] = { rank = i - 1, slot = 11, it = ranked[i].it, lvlMode = true, pvp = pvpView } end
+		local l = Take(Rank(src, true), 11)
 		if #l > 0 then self.levelRanks[11] = l end
 	end
-	-- 아이템 → 순위 (전리품 칸 "추천" · 툴팁용. 두 칸에 다 있으면 높은 순위로)
+	-- 아이템 → 순위 (전리품 칸 "추천" · 툴팁용. 두 칸에 다 있으면 높은 순위로) · 추천은 4위까지만
 	for _, l in pairs(self.levelRanks) do
 		for _, r in ipairs(l) do
 			local cur = self.ranks[r.it.id]
-			if not cur or r.rank < cur.rank then self.ranks[r.it.id] = r end
+			if r.rank < 4 and (not cur or r.rank < cur.rank) then self.ranks[r.it.id] = r end
 		end
 	end
 	for _, r in pairs(self.ranks) do
@@ -5277,7 +5380,7 @@ function M:BuildBisPanel()
 		b.dot:SetSize(7, 7)
 		b.dot:SetPoint("RIGHT", -8, 0)
 		b.inv, b.ej, b.name = s[1], s[2], s[3]
-		b:SetScript("OnClick", function() M.bisSel = i; M:PaintBis() end)
+		b:SetScript("OnClick", function() M.bisSel = i; M.bisOff = 0; M:PaintBis() end)
 		b:SetScript("OnEnter", function(self) if M.bisSel ~= i then self.hl:SetVertexColor(1, 1, 1, 0.05) end end)
 		b:SetScript("OnLeave", function(self) if M.bisSel ~= i then self.hl:SetVertexColor(1, 1, 1, 0) end end)
 		p.slots[i] = b
@@ -5327,6 +5430,8 @@ function M:BuildBisPanel()
 			end
 		end)
 		r:SetScript("OnLeave", GameTooltip_Hide)
+		r:EnableMouseWheel(true)
+		r:SetScript("OnMouseWheel", function(_, delta) M:ScrollBisRanks(delta) end)
 		-- 제작템: 클릭하면 제조법 상인 위치를 지도에
 		r:SetScript("OnMouseUp", function(self)
 			local it = self.it
@@ -5344,6 +5449,16 @@ function M:BuildBisPanel()
 		end)
 		p.ranks[i] = r
 	end
+	-- 목록이 5개보다 길면 오른쪽에 얇은 스크롤 막대 (휠로 넘겨 봄)
+	p.rankBar = p:CreateTexture(nil, "ARTWORK")
+	p.rankBar:SetColorTexture(1, 1, 1, 0.06)
+	p.rankBar:SetPoint("TOPLEFT", p, "TOPLEFT", BP_W - 13, -156)
+	p.rankBar:SetSize(2, 5 * 60 - 6)
+	p.rankThumb = p:CreateTexture(nil, "OVERLAY")
+	p.rankThumb:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.7)
+	p.rankThumb:SetWidth(2)
+	p:EnableMouseWheel(true)
+	p:SetScript("OnMouseWheel", function(_, delta) M:ScrollBisRanks(delta) end)
 	p.hint = Ink:Text(p, F.sans, 10, C.dim, "LEFT")
 	p.hint:SetPoint("BOTTOMLEFT", 186, 16)
 	p.hint:SetWidth(BP_W - 204)
@@ -5644,6 +5759,16 @@ function M:PaintPrep()
 	end
 end
 
+function M:ScrollBisRanks(delta)
+	local maxOff = self.bisMaxOff or 0
+	if maxOff <= 0 then return end
+	local nv = math.max(0, math.min(maxOff, (self.bisOff or 0) - delta))
+	if nv ~= self.bisOff then
+		self.bisOff = nv
+		self:PaintBis()
+	end
+end
+
 function M:PaintBis()
 	local p = self.bisPanel
 	if not p or not p:IsShown() then return end
@@ -5736,8 +5861,23 @@ function M:PaintBis()
 	p.cur:SetText("지금: " .. (curLink or "비어 있음") .. (curR and ("  (" .. RankText(curR) .. ")") or "") .. (other and "  ·  다른 전문화 보는 중" or "") .. mhNote)
 	local list = bySlot[sb.ej] or {}
 	local a = C.accent
+	local nRows = #p.ranks
+	local maxOff = math.max(0, #list - nRows)
+	self.bisOff = math.max(0, math.min(self.bisOff or 0, maxOff))
+	local off = self.bisOff
+	self.bisMaxOff = maxOff
+	local barH = nRows * 60 - 6
+	p.rankBar:SetShown(maxOff > 0)
+	p.rankThumb:SetShown(maxOff > 0)
+	if maxOff > 0 then
+		local th = math.max(18, barH * nRows / #list)
+		p.rankThumb:SetHeight(th)
+		p.rankThumb:ClearAllPoints()
+		p.rankThumb:SetPoint("TOP", p.rankBar, "TOP", 0, -(barH - th) * off / maxOff)
+	end
+	local own = self.ownMap or {}
 	for i, row in ipairs(p.ranks) do
-		local r = list[i]
+		local r = list[i + off]
 		if r then
 			local it = r.it
 			-- 이름 · 링크 · 등급은 한 번 받은 값을 기억해 두고 쓴다
@@ -5756,9 +5896,19 @@ function M:PaintBis()
 			row.rank:SetShown(not isBis)
 			row.rank:SetText(r.rank)
 			row.bg:SetVertexColor(isBis and a[1] or 1, isBis and a[2] or 1, isBis and a[3] or 1, isBis and 0.06 or 0.025)
+			-- 내 장비: 이 칸에 착용 중 · 다른 칸(반지 · 장신구 · 주장비)에 착용 중 · 가방 · 은행
+			local o = own[it.id]
 			local worn = curID == it.id
-			row.bd:SetVertexColor(worn and C.green[1] or (isBis and a[1] or 1), worn and C.green[2] or (isBis and a[2] or 1), worn and C.green[3] or (isBis and a[3] or 1), worn and 0.45 or (isBis and 0.45 or 0.06))
-			row.state:SetText(worn and "착용 중" or "")
+			local wornElse = not worn and o and o.kind == "equipped"
+			local state, sc = "", C.green
+			if worn then state = "착용 중"
+			elseif wornElse then state = (INV_NAME[o.inv] or "다른 칸") .. "에 착용 중"
+			elseif o and o.kind == "bag" then state, sc = "가방에 있음", C.soft
+			elseif o and o.kind == "bank" then state, sc = "은행에 있음", C.soft end
+			local hl = worn or wornElse
+			row.bd:SetVertexColor(hl and C.green[1] or (isBis and a[1] or 1), hl and C.green[2] or (isBis and a[2] or 1), hl and C.green[3] or (isBis and a[3] or 1), hl and 0.45 or (isBis and 0.45 or 0.06))
+			row.state:SetText(state)
+			row.state:SetTextColor(sc[1], sc[2], sc[3])
 			row:Show()
 		else
 			row:Hide()
@@ -5947,7 +6097,7 @@ function M:Init()
 		if ns.FOREVER_LOOT then self:HookMap() end
 		local e = CreateFrame("Frame")
 		for _, ev in ipairs({ "ADDON_LOADED", "PLAYER_EQUIPMENT_CHANGED", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT",
-			"CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE", "PLAYER_LEVEL_UP", "QUEST_DATA_LOAD_RESULT" }) do pcall(e.RegisterEvent, e, ev) end
+			"CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE", "PLAYER_LEVEL_UP", "QUEST_DATA_LOAD_RESULT", "BAG_UPDATE_DELAYED" }) do pcall(e.RegisterEvent, e, ev) end
 		-- 던전 입장 · 보스 처치 (진행 경로)
 		local w = CreateFrame("Frame")
 		for _, ev in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ENCOUNTER_END", "BOSS_KILL", "PLAYER_TARGET_CHANGED",
@@ -5999,6 +6149,14 @@ function M:Init()
 				return
 			end
 			if event == "CHARACTER_POINTS_CHANGED" or event == "PLAYER_TALENT_UPDATE" then M.dirty = true end
+			-- 가방이 바뀜 (득템 · 판매): BIS 창이 열려 있을 때만 다시 그린다 (내 장비가 바뀌었으면 순위도 새로)
+			if event == "BAG_UPDATE_DELAYED" then
+				if M.bisPanel and M.bisPanel:IsShown() and not M.bagPend then
+					M.bagPend = true
+					C_Timer.After(0.6, function() M.bagPend = nil pcall(M.PaintBis, M) end)
+				end
+				return
+			end
 			if pending then return end
 			pending = true
 			C_Timer.After(0.5, function()

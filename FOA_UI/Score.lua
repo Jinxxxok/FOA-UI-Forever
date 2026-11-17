@@ -172,11 +172,11 @@ end
 --  시전자: 주문력 > 치명 > 지능 > 정신력(레벨업에선 과소평가된 능력치) > 체력 · 냉기 마법사는 적중을 그대로 높게
 --  힐러: 혼자 사냥할 땐 피해도 필요 → 주문력(피해 + 치유)을 치유량보다 위로 · 탱커: 레벨업은 딜 위주 (무기 · 힘 · 적중)
 local LVL_BASE = { set = {}, mul = { hit = 0.7, shit = 0.7, exp = 0.5, haste = 0.8 } }
-local LVL_MELEE = { set = { sta = 0.5, armor = 0.02 }, mul = {} }
-local LVL_CASTER = { set = { sta = 0.35 }, mul = { int = 1.2, spi = 2.5, mp5 = 1.2, crit = 0.9, scrit = 0.9 } }
+local LVL_MELEE = { set = { sta = 0.5, armor = 0.02, hp5 = 0.6 }, mul = {} }
+local LVL_CASTER = { set = { sta = 0.35, hp5 = 0.3 }, mul = { int = 1.2, spi = 2.5, mp5 = 1.2, crit = 0.9, scrit = 0.9 } }
 local LVL_HEAL = { set = { sp = 1.0, sdmg = 0.6, sta = 0.35 }, mul = { heal = 0.9, spi = 1.0, int = 1.05, mp5 = 1.0 } }
 local LVL_PROFILE = {
-	WARRIOR = LVL_MELEE, ROGUE = LVL_MELEE, HUNTER = { set = { sta = 0.4 }, mul = {} },
+	WARRIOR = LVL_MELEE, ROGUE = LVL_MELEE, HUNTER = { set = { sta = 0.4, hp5 = 0.4 }, mul = {} },
 	["PALADIN:ret"] = LVL_MELEE, ["PALADIN:retshock"] = LVL_MELEE, ["SHAMAN:enh"] = LVL_MELEE, ["DRUID:feral"] = LVL_MELEE,
 	MAGE = LVL_CASTER, ["PRIEST:shadow"] = LVL_CASTER, ["DRUID:balance"] = LVL_CASTER, ["SHAMAN:ele"] = LVL_CASTER,
 	-- 흑마법사: 생명력 전환으로 마나를 채워서 정신력보다 체력 · 주문력 > 치명 (고통은 대재앙(Pandemic) 뒤로 치명 ↑)
@@ -670,8 +670,25 @@ local function StatOf(t)
 end
 M.StatOf = StatOf
 
+-- 특정 종족 상대로만 ("악마에 대한 전투력이 21만큼 증가") · 육성 중 그 종족을 만나는 비율만큼만 친다
+--  예전엔 이걸 일반 전투력으로 쳐서, 악마 상대 전투력 21 장신구가 전투력 · 적중 장신구보다 위("최고")에 올라갔다
+local VERSUS = {
+	{ "언데드", 0.2 }, { "인간형", 0.25 }, { "야수", 0.25 }, { "악마", 0.12 }, { "정령", 0.12 }, { "용족", 0.08 }, { "거인", 0.08 },
+	{ "undead", 0.2 }, { "humanoid", 0.25 }, { "beast", 0.25 }, { "demon", 0.12 }, { "elemental", 0.12 }, { "dragonkin", 0.08 }, { "giant", 0.08 },
+}
+local function Versus(t)
+	local low = t:lower()
+	if not (t:find("에 대한") or t:find("에게 주는") or t:find("상대") or low:find("against") or low:find("versus")) then return nil end
+	for _, v in ipairs(VERSUS) do
+		if t:find(v[1], 1, true) or low:find(v[1], 1, true) then return v[2] end
+	end
+end
+M.Versus = Versus
+
 -- 지역 · 상태 조건 (그때만 켜지는 효과는 일부만 친다)
 local function Condition(t)
+	local vs = Versus(t)
+	if vs then return vs end
 	if t:find("지역에서") or t:find("숲 및 초원") or t:find("숲과 초원") or t:find("에서는") then return 0.25 end
 	if t:find("변신 상태일 때") then return 1 end -- 야성 전투력 (드루이드는 늘 변신해서 싸운다)
 	if t:find("활성화된 동안") or t:find("걸리면") or t:find("상태일 때") or t:find("체력이 %d+%%") then return 0.5 end
@@ -780,6 +797,11 @@ local function ParseLine(t, kind, r, classItem)
 			for _, s in ipairs({ "str", "agi", "sta", "int", "spi" }) do r.effects[s] = (r.effects[s] or 0) + n * cond end
 		else
 			r.effects[k] = (r.effects[k] or 0) + n * cond
+		end
+		-- 포에버 지형 보너스 ("숲 및 초원 지역에서는 효과가 3배로 증가합니다"): 늘어나는 몫은 그 지역에 있는 동안만 → 30%
+		local mult = k ~= "all" and t:match("효과가%s*(%d+)배")
+		if mult and (t:find("지역에서는") or t:find("지역에서")) and tonumber(mult) and tonumber(mult) > 1 then
+			r.effects[k] = (r.effects[k] or 0) + n * cond * (tonumber(mult) - 1) * 0.3
 		end
 		-- "…공격력이 N만큼, 방어도가 N만큼" 같이 한 문장에 둘: 쉼표 뒤를 한 번 더
 		local rest = first:match("만큼,%s*(.+)$")
