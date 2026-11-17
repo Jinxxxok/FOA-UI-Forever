@@ -134,6 +134,21 @@ local function kf(frames, p, i)
 	return frames[#frames][i]
 end
 local TWINKLE = { { 0, 0.78 }, { 0.4, 1 }, { 0.65, 0.62 }, { 1, 0.78 } }
+-- 지속 시간 동안 "우웅 우웅": 별자리가 그어진 순서대로 빛의 맥박이 번진다 (시안과 같은 값)
+local HUM_P, HUM0, HUMW = 2.4, 1.0, 1.6
+local HUM = { { 0, 0.74, 1 }, { 0.28, 1, 1.14 }, { 0.55, 0.84, 1.03 }, { 1, 0.74, 1 } }
+local LHUM = { { 0, 0.6 }, { 0.28, 1 }, { 0.55, 0.72 }, { 1, 0.6 } }
+local function hum(t, hl, i)              -- i = 2 밝기 · 3 크기
+	if t < hl then
+		local base = (i == 2) and 0.74 or 1
+		return lerp(1, base, smooth((t - (hl - 0.4)) / 0.4))
+	end
+	return kf(HUM, ((t - hl) % HUM_P) / HUM_P, i)
+end
+local function lhum(t, hl)
+	if t < hl then return lerp(0.82, 0.6, smooth((t - (hl - 0.4)) / 0.4)) end
+	return kf(LHUM, ((t - hl) % HUM_P) / HUM_P, 2)
+end
 local function twinkle(t, period)
 	if t <= 0 then return 0.78 end
 	return kf(TWINKLE, (t % period) / period, 2)
@@ -164,6 +179,36 @@ end
 local function Col(t, c, a) t:SetVertexColor(c[1], c[2], c[3], a or 1) end
 local function At(t, ov, x, y) t:ClearAllPoints() t:SetPoint("CENTER", ov, "TOPLEFT", x, -y) end
 
+-- 해상도별 텍스처: 게임은 애드온 그림을 밉맵 없이 줄여 그려서, 큰 그림을 작게 쓰면 작은 별 · 가는 선이 깨진다.
+--  크기마다 그 크기로 다시 렌더한 그림을 두고, 화면에 실제로 그려질 픽셀 크기에 가장 가까운 것을 고른다.
+--  (1080p · 1200p · 1440p · 1600p · 4K · 맥북 어디서든 같은 선명도)
+local SIZES = {
+	Dot = { 16, 32, 64, 128 }, DotHot = { 16, 32, 64, 128 }, Hero = { 64, 128, 256 }, HeroHot = { 64, 128, 256 },
+	Ring = { 64, 128, 256 }, Ember = { 8, 16, 32, 64 }, Line = { 16, 32 }, Sheen = { 16, 32 }, Meteor = { 4, 8 },
+	Field = { 256, 512 }, Grat = { 256, 512 }, Haze = { 256 },
+	EnMeteor = { 128, 256 }, EnMeteorHot = { 128, 256 }, EnStar = { 32, 64, 128 }, EnStarHot = { 32, 64, 128 },
+	EnOrbit = { 32, 64, 128 }, EnShock = { 64, 128 }, EnGlint = { 16, 32 },
+}
+local BIAS = { Field = -0.15, Grat = -0.15 }          -- 배경은 살짝 키워 쓰는 쪽(부드럽게)이 줄여 쓰는 쪽(깨짐)보다 낫다
+local LOG2 = math.log(2)
+local function Pick(name, disp)
+	local list = SIZES[name]
+	if not list then return TEX .. name end
+	local b, best, bd = BIAS[name] or 0.15, list[#list], 1e9
+	for _, sz in ipairs(list) do
+		local d = math.abs(math.log(sz / max(disp, 1)) / LOG2 - b)
+		if d < bd then best, bd = sz, d end
+	end
+	return TEX .. name .. "_" .. best
+end
+local function PhysH()
+	local ph = Ink.physH
+	if not ph and GetPhysicalScreenSize then ph = select(2, GetPhysicalScreenSize()) end
+	return (ph and ph > 0) and ph or 1080
+end
+local DEF_SCALE = 0.6
+
+
 local function Create()
 	if V.holder then return end
 	local h = CreateFrame("Frame", "FOAStars", UIParent)
@@ -186,8 +231,6 @@ local function Create()
 	V.flash = Tex(ov, "BACKGROUND", -7, TEX .. "Spill")
 	V.flash:SetSize(560, 360)
 	At(V.flash, ov, 800, 400)
-	V.wind = Tex(ov, "BACKGROUND", -7, TEX .. "Ring")
-	At(V.wind, ov, 800, 390)
 
 	V.sides = {}
 	for i, sd in ipairs(SIDES) do
@@ -195,9 +238,9 @@ local function Create()
 		f:SetSize(300, 480)
 		f:SetPoint("TOPLEFT", ov, "TOPLEFT", sd.x, -150)
 		local o = { f = f, sd = sd }
-		o.haze = Tex(f, "BACKGROUND", -4, TEX .. "Haze")
-		o.field = Tex(f, "BACKGROUND", -3, TEX .. "Field")
-		o.grat = Tex(f, "BACKGROUND", -2, TEX .. "Grat")
+		o.haze = Tex(f, "BACKGROUND", -4, TEX .. "Haze_256")
+		o.field = Tex(f, "BACKGROUND", -3, TEX .. "Field_256")
+		o.grat = Tex(f, "BACKGROUND", -2, TEX .. "Grat_256")
 		for _, t in ipairs({ o.haze, o.field, o.grat }) do
 			t:SetPoint("TOPLEFT", f, "TOPLEFT")
 			t:SetWidth(300)
@@ -211,14 +254,14 @@ local function Create()
 		local x = 800 + side * (200 + (i * 37) % 160)
 		local y = 230 + (i * 53) % 360
 		local s = 3 + (i * 3) % 4
-		local t = Tex(ov, "ARTWORK", 1, TEX .. "Ember")
+		local t = Tex(ov, "ARTWORK", 1, TEX .. "Ember_16")
 		t:SetSize(s, s)
-		V.motes[i + 1] = { t = t, x = x, y = y + s / 2, kf = MOTE_KF[(i % 3) + 1], dl = 1.0 + (i * 0.43) % 4, white = (i % 2 == 0) }
+		V.motes[i + 1] = { t = t, s = s, x = x, y = y + s / 2, kf = MOTE_KF[(i % 3) + 1], dl = 1.0 + (i * 0.43) % 4, white = (i % 2 == 0) }
 	end
 	-- 유성 둘 (머리 시작점 · 방향 · 이동 · 주기 · 시작)
 	V.meteors = {}
 	for _, m in ipairs({ { 680, 118.75, -162, -230, 75, 8, 3.4 }, { 920, 132.75, -18, 230, 75, 9.5, 6.4 } }) do
-		local t = Tex(ov, "ARTWORK", 2, TEX .. "Meteor")
+		local t = Tex(ov, "ARTWORK", 2, TEX .. "Meteor_8")
 		t:SetSize(150, 3)
 		t:SetRotation(rad(m[3]))
 		local a = rad(-m[3])                                  -- 화면(아래로 +) 기준 머리 방향
@@ -252,7 +295,7 @@ local function Create()
 	lab.bar.fill:SetPoint("BOTTOMLEFT")
 	lab.bar.head = Tex(lab.bar, "OVERLAY", 0, TEX .. "Spill")
 	lab.bar.head:SetSize(12, 12)
-	lab.bar.core = Tex(lab.bar, "OVERLAY", 1, TEX .. "DotHot")
+	lab.bar.core = Tex(lab.bar, "OVERLAY", 1, TEX .. "DotHot_16")
 	lab.bar.core:SetSize(9, 9)
 	for _, t in ipairs({ lab.bar.head, lab.bar.core }) do t:SetPoint("CENTER", lab.bar.fill, "RIGHT", 0, 0) end
 
@@ -271,7 +314,7 @@ local function Bind(cls)
 	for i, d in ipairs(D.h) do
 		local o = V.heroes[i]
 		if not o then
-			o = { ring = Tex(ov, "ARTWORK", 3, TEX .. "Ring"), star = Tex(ov, "ARTWORK", 5, TEX .. "Hero"), hot = Tex(ov, "OVERLAY", 3, TEX .. "HeroHot") }
+			o = { ring = Tex(ov, "ARTWORK", 3, TEX .. "Ring_128"), star = Tex(ov, "ARTWORK", 5, TEX .. "Hero_128"), hot = Tex(ov, "OVERLAY", 3, TEX .. "HeroHot_128") }
 			V.heroes[i] = o
 		end
 		o.d = d
@@ -287,7 +330,7 @@ local function Bind(cls)
 	for i, d in ipairs(D.m) do
 		local o = V.minors[i]
 		if not o then
-			o = { star = Tex(ov, "ARTWORK", 4, TEX .. "Dot"), hot = Tex(ov, "OVERLAY", 2, TEX .. "DotHot") }
+			o = { star = Tex(ov, "ARTWORK", 4, TEX .. "Dot_32"), hot = Tex(ov, "OVERLAY", 2, TEX .. "DotHot_32") }
 			V.minors[i] = o
 		end
 		o.d = d
@@ -304,10 +347,14 @@ local function Bind(cls)
 			n = n + 1
 			local o = V.lines[n]
 			if not o then
-				o = { ln = ov:CreateLine(nil, "BORDER", nil, 1) }
-				o.ln:SetTexture(TEX .. "Line")
-				o.ln:SetBlendMode("ADD")
-				o.ln:SetThickness(10)
+				o = { ln = ov:CreateLine(nil, "BORDER", nil, 1), sh = ov:CreateLine(nil, "BORDER", nil, 2) }
+				for _, l in ipairs({ o.ln, o.sh }) do
+					l:SetTexture(TEX .. "Line_16")
+					l:SetBlendMode("ADD")
+					l:SetThickness(10)
+				end
+				o.sh:SetTexture(TEX .. "Sheen_16")
+				o.sh:SetVertexColor(1, 1, 1, 1)
 				V.lines[n] = o
 			end
 			o.d = d
@@ -315,9 +362,12 @@ local function Bind(cls)
 			o.ln:SetEndPoint("TOPLEFT", ov, d[1], -d[2])
 			Col(o.ln, V.hi)
 			o.ln:Show()
+			o.sh:SetAlpha(0)
+			o.sh:Show()
+			o.L = math.sqrt((d[3] - d[1]) ^ 2 + (d[4] - d[2]) ^ 2)
 		end
 	end
-	for i = n + 1, #V.lines do V.lines[i].d = nil V.lines[i].ln:Hide() end
+	for i = n + 1, #V.lines do V.lines[i].d = nil V.lines[i].ln:Hide() V.lines[i].sh:Hide() end
 
 	local all = {}
 	for _, d in ipairs(D.g) do all[#all + 1] = { d = d } end
@@ -361,7 +411,6 @@ local function Bind(cls)
 
 	Col(V.spill, c)
 	Col(V.flash, c)
-	Col(V.wind, c)
 	for _, o in ipairs(V.sides) do
 		Col(o.haze, V.c2)
 		o.field:SetVertexColor(1, 1, 1)
@@ -380,6 +429,43 @@ local function Bind(cls)
 	end
 	Col(lab.bar.head, c, 0.9)
 	return true
+end
+
+-- 지금 화면에서 그려질 픽셀 크기에 맞는 그림으로 바꿔 끼운다 (V.pxk = 시안 1px 이 화면 몇 px)
+local function ApplyTex()
+	local k = V.pxk or 1.2
+	for _, o in ipairs(V.heroes) do
+		local d = o.d
+		if not d then break end
+		o.star:SetTexture(Pick("Hero", d[3] * k))
+		o.hot:SetTexture(Pick("HeroHot", d[3] * k))
+		o.ring:SetTexture(Pick("Ring", floor(d[3] * 1.35) * k))
+	end
+	for _, o in ipairs(V.minors) do
+		local d = o.d
+		if not d then break end
+		o.star:SetTexture(Pick("Dot", d[3] * k))
+		o.hot:SetTexture(Pick("DotHot", d[3] * k))
+	end
+	local lt, st = Pick("Line", 10 * k), Pick("Sheen", 10 * k)
+	for _, o in ipairs(V.lines) do
+		if not o.d then break end
+		o.ln:SetTexture(lt)
+		o.sh:SetTexture(st)
+	end
+	for _, o in ipairs(V.sides) do
+		o.haze:SetTexture(Pick("Haze", 300 * k))
+		o.field:SetTexture(Pick("Field", 300 * k))
+		o.grat:SetTexture(Pick("Grat", 300 * k))
+	end
+	for _, m in ipairs(V.motes) do m.t:SetTexture(Pick("Ember", m.s * k)) end
+	for _, m in ipairs(V.meteors) do m.t:SetTexture(Pick("Meteor", 3 * k)) end
+	V.lab.bar.core:SetTexture(Pick("DotHot", 9 * k))
+	-- 1px 선 · 2px 게이지는 화면 픽셀에 딱 맞춘다 (1080p 에서 흐려지지 않게)
+	local function snap(px) return max(1, floor(px * k + 0.5)) / k end
+	V.lab.l:SetHeight(snap(1))
+	V.lab.r:SetHeight(snap(1))
+	V.lab.bar:SetHeight(snap(2))
 end
 
 -------------------------------------------------------------------------------
@@ -449,13 +535,6 @@ function S.Frame()
 	V.spill:SetAlpha(0.12 * clamp(t / 0.35) * br * (1 + 1.6 * boost))
 	local fp = (t - 0.12) / 0.6
 	V.flash:SetAlpha(0.55 * ((fp <= 0 or fp >= 1) and 0 or (fp < 0.18 and fp / 0.18 * 0.4 or 0.4 * (1 - (fp - 0.18) / 0.82))) + 0.25 * boost)
-	if t > 1 then
-		local w = ((t - 1) % 4.8) / 4.8
-		V.wind:SetSize(420 * lerp(0.1, 1.5, w), 420 * lerp(0.1, 1.5, w))
-		V.wind:SetAlpha(w < 0.1 and 0.26 * w / 0.1 or (w < 0.8 and lerp(0.26, 0.1, (w - 0.1) / 0.7) or lerp(0.1, 0, (w - 0.8) / 0.2)))
-	else
-		V.wind:SetAlpha(0)
-	end
 
 	-- 양옆: 눈금 · 은하수 · 별밭이 위에서 아래로 펼쳐진다
 	for _, o in ipairs(V.sides) do
@@ -477,8 +556,26 @@ function S.Frame()
 		if p <= 0 then
 			o.ln:SetAlpha(0)
 		else
-			o.ln:SetAlpha(0.82)
+			o.ln:SetAlpha(p < 1 and 0.82 or lhum(t, HUM0 + d[5] * HUMW))
 			o.ln:SetEndPoint("TOPLEFT", ov, lerp(d[1], d[3], p), -lerp(d[2], d[4], p))
+		end
+		-- 광택: 흰 빛이 선을 따라 지나간다 (시안 linePulse: 4.8초마다 처음 35% 동안 -120% → 220%)
+		local pl = d[7] or 0.9
+		local q = (t >= pl) and ((t - pl) % 4.8) / 4.8 or 1
+		if q < 0.35 and o.L > 2 then
+			local c = lerp(-0.52, 1.52, smooth(q / 0.35))
+			local a0, b0 = c - 0.2, c + 0.2
+			local a, b = max(0, a0), min(1, b0)
+			if b - a > 0.01 then
+				o.sh:SetStartPoint("TOPLEFT", ov, lerp(d[1], d[3], a), -lerp(d[2], d[4], a))
+				o.sh:SetEndPoint("TOPLEFT", ov, lerp(d[1], d[3], b), -lerp(d[2], d[4], b))
+				o.sh:SetTexCoord((a - a0) / 0.4, (b - a0) / 0.4, 0, 1)
+				o.sh:SetAlpha(1)
+			else
+				o.sh:SetAlpha(0)
+			end
+		else
+			o.sh:SetAlpha(0)
 		end
 	end
 
@@ -505,11 +602,13 @@ function S.Frame()
 			else local k = (e - 0.45) / 0.55 sc, rot, a = lerp(1.35, 1, k), lerp(2, 0, k), 1 end
 		end
 		local z = max(1, s * sc)
-		o.star:SetSize(z, z)
+		local hl = HUM0 + d[4] * HUMW
+		local hz = z * hum(t, hl, 3)
+		o.star:SetSize(hz, hz)
 		o.hot:SetSize(z, z)
 		o.star:SetRotation(rad(-rot))
 		o.hot:SetRotation(rad(-rot))
-		o.star:SetAlpha(a * (t >= d[4] + 0.35 and twinkle(t - d[4] - 0.35, d[5]) or 1))
+		o.star:SetAlpha(a * hum(t, hl, 2))
 		o.hot:SetAlpha(a)
 	end
 
@@ -526,9 +625,11 @@ function S.Frame()
 			if e < 0.55 then sc, a = lerp(0.2, 1.35, e / 0.55), e / 0.55 else sc, a = lerp(1.35, 1, (e - 0.55) / 0.45), 1 end
 		end
 		local z = max(1, d[3] * sc)
-		o.star:SetSize(z, z)
+		local hl = HUM0 + d[4] * HUMW
+		local hz = z * hum(t, hl, 3)
+		o.star:SetSize(hz, hz)
 		o.hot:SetSize(z, z)
-		o.star:SetAlpha(a * (t >= d[4] + 0.35 and twinkle(t - d[4] - 0.35, d[5]) or 1))
+		o.star:SetAlpha(a * hum(t, hl, 2))
 		o.hot:SetAlpha(a)
 	end
 
@@ -596,7 +697,8 @@ end
 local function Layout()
 	local db = Ink.db and Ink.db.stars or {}
 	local k = (UIParent:GetHeight() or 1080) / 900
-	V.base = k * (db.scale or 1)
+	V.base = k * (db.scale or DEF_SCALE)
+	V.pxk = PhysH() / 900 * (db.scale or DEF_SCALE)
 	V.holder:ClearAllPoints()
 	V.holder:SetPoint("CENTER", UIParent, "CENTER", 0, (50 + (db.y or 0)) * k)
 	V.ov:SetScale(V.base)
@@ -619,6 +721,7 @@ function S.Start(e)
 	local cls = e.cls or S.class
 	if V.cls ~= cls and not Bind(cls) then return end
 	Layout()
+	ApplyTex()
 	V.t0, V.ending, V.t = GetTime(), nil, 0
 	SetCur(e)
 	V.holder:Show()
@@ -943,7 +1046,7 @@ local function Say(s) print("|cffFFF468FOA|r " .. s) end
 
 function S.Diag()
 	Say(string.format("별자리 · 직업 %s · 효과 %s · 크기 %.2f · 높이 %d", tostring(S.class), FX_ON() and "켜짐" or "꺼짐",
-		Ink.db.stars.scale or 1, Ink.db.stars.y or 0))
+		Ink.db.stars.scale or DEF_SCALE, Ink.db.stars.y or 0))
 	for _, d in ipairs(defs) do
 		local st
 		if d.kind == "react" then st = "주문 " .. tostring(d.cast or "모름") .. (d.cast and (Usable(d.cast) and " · 누를 수 있음" or " · 대기") or "")
@@ -964,8 +1067,8 @@ function S.Slash(arg)
 	local cmd, rest = arg:match("^(%S*)%s*(.-)$")
 	if cmd == "크기" or cmd == "size" then
 		local v = tonumber(rest)
-		if v then db.scale = max(0.4, min(1.6, v)) end
-		Say(string.format("별자리 크기 %.2f (기본 1 · 0.4~1.6)", db.scale or 1))
+		if v then db.scale = max(0.3, min(1.6, v)) end
+		Say(string.format("별자리 크기 %.2f (기본 %.1f · 0.3~1.6)", db.scale or DEF_SCALE, DEF_SCALE))
 		S.Preview(V.cls ~= S.class and V.cls or nil, 1, 6)
 	elseif cmd == "높이" or cmd == "y" or cmd == "height" then
 		local v = tonumber(rest)
@@ -973,7 +1076,7 @@ function S.Slash(arg)
 		Say(string.format("별자리 높이 %d (기본 0 · 위로 +, 아래로 -)", db.y or 0))
 		S.Preview(V.cls ~= S.class and V.cls or nil, 1, 6)
 	elseif cmd == "초기화" or cmd == "reset" then
-		db.scale, db.y = 1, 0
+		db.scale, db.y = nil, 0
 		Say("별자리 크기 · 높이를 기본으로 되돌렸어요.")
 		S.Preview(nil, 1, 6)
 	elseif cmd == "사용" or cmd == "use" then
@@ -1009,6 +1112,391 @@ function S.Slash(arg)
 end
 
 -------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-- 마법부여 발동 표식
+--  별자리 = "지금 눌러", 마법부여 = "지금 세졌어" → 한 단계 작게: 유성 하나가 떨어져 발밑에 작은 별로 앉는다.
+--  자리: 캐릭터 발밑 · 거리 표시와 쿨다운 줄 사이 (시안 y 540). 별 둘레 궤도가 남은 시간만큼 시계 방향으로 줄고,
+--  시간이 없는 계시는 숨 쉬다가 다음 주문에 캐릭터 쪽으로 빨려 든다. 색은 직업색이 아니라 마법부여 고유색.
+--  순간 피해만 주는 마법부여(불타는 무기 · 생명력 흡수 · 빙결 · 부정의 무기)는 띄우지 않는다.
+--  /foa 마부 · /foa 마부 계시 · /foa 마부 시전 · /foa 마부 크기 0.8 · /foa 마부 높이 10
+-------------------------------------------------------------------------------
+local EKEY = "enchMarks"
+local function EN_ON() return not ns.FX or ns.FX.on(EKEY) end
+local ENCH = {
+	{ key = "crusader", name = "성전사", en = "Crusader", color = "FFC94D", ids = { 20007 }, dur = 15,
+		names = { "성전사", "Crusader", "신성한 힘", "성스러운 힘", "Holy Strength" } },
+	{ key = "revelation", name = "계시", en = "Revelation", color = "8FD8FF", ids = {}, dur = 0, names = { "계시", "Revelation" } },
+	{ key = "insight", name = "통찰", en = "Insight", color = "5BE3C4", ids = {}, dur = 10, names = { "통찰", "Insight" } },
+}
+S.ENCH = ENCH
+local E = { slots = {}, pool = {}, active = {} }
+S.E = E
+local E_DEF_SCALE = 0.8
+local ROW_Y, GAP, CHAR_X, CHAR_Y = 540, 50, 800, 460
+local MET_L, MET_H, MET_DX, MET_DY = 120, 11, 170, -119       -- 유성: 길이 · 두께 · 오른쪽 위에서 날아오는 거리
+local MET_UX, MET_UY = math.cos(rad(145)), math.sin(rad(145))  -- 꼬리 → 머리 (화면 아래로 +): 왼쪽 아래
+local HALO = { { 0, 0.16, 0.9 }, { 0.5, 0.5, 1.22 }, { 1, 0.16, 0.9 } }
+local eDirty = true
+
+local function ELayoutFrame()
+	local db = Ink.db.ench or {}
+	local k = (UIParent:GetHeight() or 1080) / 900
+	local sc = db.scale or E_DEF_SCALE
+	E.base, E.pxk = k * sc, PhysH() / 900 * sc
+	E.holder:ClearAllPoints()
+	E.holder:SetPoint("CENTER", UIParent, "CENTER", 0, (50 + (db.y or 0)) * k)
+	E.ov:SetScale(E.base)
+end
+
+local function ECreate()
+	if E.holder then return end
+	local h = CreateFrame("Frame", "FOAEnchant", UIParent)
+	h:SetSize(2, 2)
+	h:SetFrameStrata("BACKGROUND")
+	h:SetFrameLevel(4)
+	h:EnableMouse(false)
+	h:Hide()
+	E.holder = h
+	local ov = CreateFrame("Frame", nil, h)
+	ov:SetSize(1600, 900)
+	ov:SetPoint("TOPLEFT", h, "CENTER", -800, 400)
+	E.ov = ov
+	h:SetScript("OnUpdate", function() S.EFrame() end)
+	ELayoutFrame()
+end
+
+local function ESlot()
+	local o = table.remove(E.pool)
+	if o then return o end
+	local f = CreateFrame("Frame", nil, E.ov)
+	f:SetSize(80, 80)
+	o = { f = f }
+	o.flash = Tex(f, "BACKGROUND", 0, TEX .. "EnBurst")
+	o.soft = Tex(f, "BACKGROUND", 1, TEX .. "Spill")
+	o.shock = Tex(f, "BACKGROUND", 2, TEX .. "EnShock_64")
+	o.halo = Tex(f, "BACKGROUND", 3, TEX .. "EnOrbit_64")
+	o.track = Tex(f, "BACKGROUND", 4, TEX .. "EnOrbit_32")
+	o.met = Tex(f, "ARTWORK", 0, TEX .. "EnMeteor_128")
+	o.metHot = Tex(f, "ARTWORK", 1, TEX .. "EnMeteorHot_128")
+	o.star = Tex(f, "ARTWORK", 2, TEX .. "EnStar_64")
+	o.hot = Tex(f, "OVERLAY", 0, TEX .. "EnStarHot_64")
+	for _, t in ipairs({ o.flash, o.soft, o.shock, o.halo, o.track, o.star, o.hot }) do t:SetPoint("CENTER", f, "CENTER", 0, 0) end
+	o.met:SetRotation(rad(-145))
+	o.metHot:SetRotation(rad(-145))
+	o.track:SetSize(30, 30)
+	o.soft:SetSize(52, 52)
+	-- 남은 시간 궤도: 게임 쿨다운 원(빛 고리 그림) + 앞머리에 작은 반짝임
+	o.cd = CreateFrame("Cooldown", nil, f)
+	o.cd:SetSize(30, 30)
+	o.cd:SetPoint("CENTER", f, "CENTER", 0, 0)
+	for _, fn in ipairs({ { "SetDrawBling", false }, { "SetHideCountdownNumbers", true }, { "SetDrawEdge", true },
+		{ "SetUseCircularEdge", true }, { "SetReverse", false }, { "SetDrawSwipe", true } }) do
+		if o.cd[fn[1]] then pcall(o.cd[fn[1]], o.cd, fn[2]) end
+	end
+	o.name = f:CreateFontString(nil, "OVERLAY")
+	o.name:SetShadowColor(0, 0, 0, 0.75)
+	o.name:SetShadowOffset(1, -1)
+	return o
+end
+
+local function ETex(o)
+	local k = E.pxk or 1.2
+	o.met:SetTexture(Pick("EnMeteor", MET_L * k))
+	o.metHot:SetTexture(Pick("EnMeteorHot", MET_L * k))
+	o.shock:SetTexture(Pick("EnShock", 56 * k))
+	o.halo:SetTexture(Pick("EnOrbit", 44 * k))
+	o.track:SetTexture(Pick("EnOrbit", 30 * k))
+	o.star:SetTexture(Pick("EnStar", 32 * k))
+	o.hot:SetTexture(Pick("EnStarHot", 32 * k))
+	if o.cd.SetSwipeTexture then pcall(o.cd.SetSwipeTexture, o.cd, Pick("EnOrbit", 30 * k)) end
+	if o.cd.SetEdgeTexture then pcall(o.cd.SetEdgeTexture, o.cd, Pick("EnGlint", 10 * k)) end
+end
+
+local function EBind(o)
+	local e = o.e
+	local c, hi = e.c, e.hi
+	Col(o.met, c)
+	o.metHot:SetVertexColor(1, 1, 1)
+	Col(o.flash, c)
+	Col(o.soft, c)
+	Col(o.shock, hi)
+	Col(o.halo, c)
+	Col(o.track, hi)
+	Col(o.star, c)
+	o.hot:SetVertexColor(1, 1, 1)
+	if o.cd.SetSwipeColor then pcall(o.cd.SetSwipeColor, o.cd, c[1], c[2], c[3], 1) end
+	if not o.name:SetFont(F.semi, 10, "") then o.name:SetFont(F.sans, 10, "") end
+	o.name:SetText(e.label)
+	o.name:SetTextColor(hi[1], hi[2], hi[3])
+	if e.timed then
+		pcall(o.cd.SetCooldown, o.cd, e.exp - e.dur, e.dur)
+		o.cd:Show()
+		o.track:Show()
+		o.halo:Hide()
+	else
+		o.cd:Hide()
+		o.track:Hide()
+		o.halo:Show()
+	end
+end
+
+local function ELayout()
+	local live = {}
+	for _, o in ipairs(E.slots) do if not o.ending then live[#live + 1] = o end end
+	table.sort(live, function(a, b) return a.t0 < b.t0 end)
+	for i, o in ipairs(live) do o.tx = CHAR_X + (i - (#live + 1) / 2) * GAP end
+end
+
+local function EStart(def, exp, dur, preview, delay)
+	ECreate()
+	local now = GetTime()
+	local timed = (exp and dur and dur > 0) and true or false
+	if not timed and def.dur > 0 then exp, dur, timed = now + (delay or 0) + 0.3 + def.dur, def.dur, true end
+	local o = E.active[def.key]
+	if o and not o.ending then                       -- 이미 떠 있으면 시간만 새로
+		if timed and o.e.exp ~= exp then
+			o.e.exp, o.e.dur = exp, dur
+			pcall(o.cd.SetCooldown, o.cd, exp - dur, dur)
+		end
+		return
+	end
+	if not E.holder:IsShown() then ELayoutFrame() end
+	o = ESlot()
+	local c = rgbOf(def.color)
+	o.e = { key = def.key, label = def.label or def.name, c = c, hi = lighten(c, 0.45), timed = timed, exp = exp, dur = dur }
+	o.t0, o.ending, o.tEnd, o.last, o.preview = now + (delay or 0), nil, nil, now, preview
+	EBind(o)
+	ETex(o)
+	E.slots[#E.slots + 1] = o
+	ELayout()
+	o.x = o.tx
+	E.active[def.key] = o
+	o.f:SetAlpha(0)
+	o.f:Show()
+	E.holder:Show()
+end
+
+local function EEnd(key, consumed)
+	local o = E.active[key]
+	if not o then return end
+	E.active[key] = nil
+	o.ending, o.tEnd = consumed and "suck" or "fade", GetTime()
+	ELayout()
+end
+S.EEnd = EEnd
+
+-- 한 자리: 시안 Enchant 보드의 CSS 애니메이션 그대로
+local function ESlotFrame(o, now)
+	local t = now - o.t0
+	local land = 0.3
+	local dt = now - (o.last or now)
+	o.last = now
+	o.x = o.x + (o.tx - o.x) * min(1, dt * 9)        -- 자리 바뀌면 미끄러지듯
+	local fx, fy, fs, fa, boost = o.x, ROW_Y, 1, 1, 0
+	if o.ending == "suck" then
+		local p = (now - o.tEnd) / 0.36
+		if p >= 1 then return false end
+		if p < 0.3 then
+			local q = p / 0.3
+			fs, fy, boost = lerp(1, 1.25, q), fy - 4 * q, q
+		else
+			local q = (p - 0.3) / 0.7
+			local e = q * q
+			fx, fy = lerp(fx, CHAR_X, e), lerp(fy - 4, CHAR_Y, e)
+			fs, fa, boost = lerp(1.25, 0.15, e), 1 - q, 1 - q
+		end
+	elseif o.ending == "fade" then
+		local p = (now - o.tEnd) / 0.5
+		if p >= 1 then return false end
+		fa, fs = 1 - smooth(p), lerp(1, 0.85, smooth(p))
+	elseif o.e.timed and o.preview and now > o.e.exp then
+		EEnd(o.e.key, false)
+	elseif o.e.timed and now > o.e.exp + 1.5 then      -- 꺼짐 신호를 놓쳤을 때 정리
+		EEnd(o.e.key, false)
+	end
+	if t < 0 then o.f:SetAlpha(0) return true end
+	o.f:SetScale(fs)
+	o.f:ClearAllPoints()
+	o.f:SetPoint("CENTER", E.ov, "TOPLEFT", fx / fs, -fy / fs)
+	o.f:SetAlpha(fa)
+
+	-- 유성: 오른쪽 위에서 떨어져(0.3초) 꼬리가 머리로 말려 들어감
+	if t < 0.55 then
+		local hx, hy, L, a
+		if t < land then
+			local e = (t / land) ^ 1.7
+			hx, hy, L, a = MET_DX * (1 - e), MET_DY * (1 - e), MET_L, clamp(t / 0.066)
+		else
+			local q = (t - land) / 0.25
+			hx, hy, L, a = 0, 0, MET_L * (1 - q), 1 - q
+		end
+		local cx, cy = hx - L / 2 * MET_UX, hy - L / 2 * MET_UY
+		for _, m in ipairs({ o.met, o.metHot }) do
+			m:ClearAllPoints()
+			m:SetPoint("CENTER", o.f, "CENTER", cx, -cy)
+			m:SetSize(max(0.5, L), MET_H)
+			m:SetAlpha(a)
+			m:Show()
+		end
+	else
+		o.met:Hide()
+		o.metHot:Hide()
+	end
+	-- 닿는 순간: 번쩍 + 가는 충격파
+	local p = (t - land) / 0.5
+	if p > 0 and p < 1 then
+		local z = 90 * lerp(0.4, 1.35, p)
+		o.flash:SetSize(z, z)
+		o.flash:SetAlpha((p < 0.2 and 0.9 * p / 0.2 or 0.9 * (1 - (p - 0.2) / 0.8)) + 0.4 * boost)
+		local rz = 56 * lerp(0.1, 1, outQ(p))
+		o.shock:SetSize(rz, rz)
+		o.shock:SetAlpha(p < 0.12 and p / 0.12 or 1 - (p - 0.12) / 0.88)
+		o.shock:Show()
+	else
+		o.flash:SetAlpha(0.4 * boost)
+		o.flash:SetSize(90, 90)
+		o.shock:Hide()
+	end
+	-- 별: 톡 켜졌다가 은은히 반짝
+	local sp = (t - land + 0.02) / 0.28
+	local sc, sa
+	if sp <= 0 then sc, sa = 0.2, 0
+	elseif sp >= 1 then sc, sa = 1, 1
+	else
+		local e = outQ(sp)
+		if e < 0.5 then sc, sa = lerp(0.2, 1.5, e / 0.5), e / 0.5 else sc, sa = lerp(1.5, 1, (e - 0.5) / 0.5), 1 end
+	end
+	local z = max(1, 32 * sc)
+	o.star:SetSize(z, z)
+	o.hot:SetSize(z, z)
+	o.star:SetAlpha(sa * (t > land + 0.3 and twinkle(t - land - 0.3, 2.8) or 1))
+	o.hot:SetAlpha(sa)
+	o.soft:SetAlpha(0.22 * sa + 0.3 * boost)
+	-- 남은 시간 궤도 / 숨 쉬는 고리
+	if o.e.timed then
+		local q = clamp((t - land - 0.1) / 0.3)
+		o.track:SetAlpha(0.14 * q)
+		o.cd:SetAlpha(q)
+	else
+		local ht = t - land - 0.3
+		if ht > 0 then
+			local ph = (ht % 2.4) / 2.4
+			local hz = 44 * kf(HALO, ph, 3)
+			o.halo:SetSize(hz, hz)
+			o.halo:SetAlpha(kf(HALO, ph, 2))
+		else
+			o.halo:SetAlpha(0)
+		end
+	end
+	-- 이름: 살짝 내려오며
+	local lq = clamp((t - land - 0.12) / 0.3)
+	o.name:ClearAllPoints()
+	o.name:SetPoint("TOP", o.f, "CENTER", 0, -21 + 3 * (1 - lq))
+	o.name:SetAlpha(0.85 * lq)
+	return true
+end
+
+function S.EFrame()
+	local now = GetTime()
+	local changed = false
+	for i = #E.slots, 1, -1 do
+		local o = E.slots[i]
+		if not ESlotFrame(o, now) then
+			o.f:Hide()
+			table.remove(E.slots, i)
+			E.pool[#E.pool + 1] = o
+			changed = true
+		end
+	end
+	if changed then ELayout() end
+	if #E.slots == 0 then E.holder:Hide() end
+end
+
+local function EPrepare()
+	local ko = (GetLocale and GetLocale() or "koKR") == "koKR"
+	for _, d in ipairs(ENCH) do
+		d.nameSet = {}
+		for _, n in ipairs(d.names) do d.nameSet[n] = true end
+		for _, id in ipairs(d.ids) do local n = SpellName(id) if n then d.nameSet[n] = true end end
+		d.label = ko and d.name or d.en
+		d.find = { ids = d.ids, names = d.nameSet }
+	end
+end
+
+local function EScan()
+	eDirty = false
+	for _, d in ipairs(ENCH) do
+		local a = FindAura(d.find)
+		local o = E.active[d.key]
+		if a then
+			local exp, dur = plain(a.expirationTime), plain(a.duration)
+			if not (exp and exp > 0 and dur and dur > 0) then exp, dur = nil, nil end
+			if not o then Log("ench+", d.key, plain(a.name)) end
+			EStart(d, exp, dur)
+		elseif o and not o.preview then
+			local left = o.e.timed and (o.e.exp - GetTime()) or 99
+			EEnd(d.key, left > 0.4)                          -- 시간 전에 사라짐 = 소모 (계시: 다음 주문)
+		end
+	end
+end
+
+function S.EPreview(which)
+	EPrepare()
+	for _, d in ipairs(ENCH) do if E.active[d.key] then EEnd(d.key, false) end end
+	local list = {}
+	for _, d in ipairs(ENCH) do if not which or d.key == which then list[#list + 1] = d end end
+	for i, d in ipairs(list) do
+		local dl = (i - 1) * 0.5
+		EStart(d, nil, nil, true, dl)
+		if d.dur == 0 then                               -- 계시: 미리 보기에선 7초 뒤 다음 주문을 쓴 것처럼 빨려 든다
+			local o = E.active[d.key]
+			C_Timer.After(7 + dl, function() if E.active[d.key] == o then EEnd(d.key, true) end end)
+		end
+	end
+end
+
+function S.EStop()
+	for k in pairs(E.active) do EEnd(k, false) end
+end
+
+local ENCH_KO = { ["성전사"] = "crusader", ["계시"] = "revelation", ["통찰"] = "insight" }
+function S.ESlash(arg)
+	arg = (arg or ""):gsub("^%s+", ""):gsub("%s+$", "")
+	Ink.db.ench = Ink.db.ench or {}
+	local db = Ink.db.ench
+	local cmd, rest = arg:match("^(%S*)%s*(.-)$")
+	if cmd == "크기" or cmd == "size" then
+		local v = tonumber(rest)
+		if v then db.scale = max(0.4, min(1.6, v)) end
+		Say(string.format("마법부여 표식 크기 %.2f (기본 %.1f · 0.4~1.6)", db.scale or E_DEF_SCALE, E_DEF_SCALE))
+		if E.holder then ELayoutFrame() end
+		S.EPreview()
+	elseif cmd == "높이" or cmd == "y" then
+		local v = tonumber(rest)
+		if v then db.y = max(-300, min(300, floor(v + 0.5))) end
+		Say(string.format("마법부여 표식 높이 %d (기본 0 · 위로 +, 아래로 -)", db.y or 0))
+		if E.holder then ELayoutFrame() end
+		S.EPreview()
+	elseif cmd == "초기화" or cmd == "reset" then
+		db.scale, db.y = nil, 0
+		if E.holder then ELayoutFrame() end
+		Say("마법부여 표식 크기 · 높이를 기본으로 되돌렸어요.")
+		S.EPreview()
+	elseif cmd == "시전" or cmd == "cast" or cmd == "사용" then
+		if E.active.revelation then EEnd("revelation", true) else Say("지금 떠 있는 계시가 없어요. /foa 마부 계시 로 먼저 띄워 주세요.") end
+	elseif cmd == "끄기" or cmd == "off" or cmd == "켜기" or cmd == "on" then
+		local on = (cmd == "켜기" or cmd == "on")
+		if ns.FX then ns.FX.set(EKEY, on) end
+		Say("마법부여 발동 표식 " .. (on and "켜짐" or "꺼짐"))
+	elseif cmd == "" or cmd == "전체" or cmd == "all" then
+		S.EPreview()
+	elseif ENCH_KO[cmd] or (cmd == "crusader" or cmd == "revelation" or cmd == "insight") then
+		S.EPreview(ENCH_KO[cmd] or cmd)
+	else
+		Say("/foa 마부 [성전사|계시|통찰|시전|크기 0.8|높이 10|초기화|끄기|켜기]")
+	end
+end
+
 local function HideBlizzardOverlay(on)
 	local f = _G.SpellActivationOverlayFrame
 	if f and f.SetAlpha then pcall(f.SetAlpha, f, on and 0 or 1) end
@@ -1016,7 +1504,9 @@ end
 
 function M:Init()
 	Ink.db.stars = Ink.db.stars or {}
+	Ink.db.ench = Ink.db.ench or {}
 	Prepare()
+	EPrepare()
 	local ev = CreateFrame("Frame")
 	for _, e in ipairs({ "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW", "SPELL_ACTIVATION_OVERLAY_GLOW_HIDE", "SPELL_ACTIVATION_OVERLAY_SHOW",
 		"SPELL_ACTIVATION_OVERLAY_HIDE", "SPELLS_CHANGED", "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "LEARNED_SPELL_IN_TAB",
@@ -1027,7 +1517,7 @@ function M:Init()
 	pcall(ev.RegisterUnitEvent, ev, "UNIT_SPELLCAST_SUCCEEDED", "player")
 	ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
 		if event == "UNIT_AURA" then
-			auraDirty = true
+			auraDirty, eDirty = true, true
 		elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
 			if FX_ON() then pcall(S.Cast, a3) end
 		elseif event == "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW" or event == "SPELL_ACTIVATION_OVERLAY_GLOW_HIDE" then
@@ -1035,17 +1525,21 @@ function M:Init()
 		elseif event == "SPELL_ACTIVATION_OVERLAY_SHOW" or event == "SPELL_ACTIVATION_OVERLAY_HIDE" then
 			if FX_ON() then pcall(S.Overlay, a1, event == "SPELL_ACTIVATION_OVERLAY_SHOW") end
 		elseif event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_DEAD" then
-			if event == "PLAYER_ENTERING_WORLD" then pcall(Prepare) end
+			if event == "PLAYER_ENTERING_WORLD" then pcall(Prepare) pcall(EPrepare) eDirty = true end
 			S.ClearReal()
 			auraDirty = true
 			HideBlizzardOverlay(FX_ON())
 		elseif event == "DISPLAY_SIZE_CHANGED" or event == "UI_SCALE_CHANGED" then
-			if V.shown then Layout() end
+			if V.shown then Layout() ApplyTex() end
 		else
 			pcall(S.Resolve)
 		end
 	end)
 	C_Timer.NewTicker(0.1, function()
+		if eDirty and EN_ON() then
+			local ok, err = pcall(EScan)
+			if not ok then Ink:LogError("Stars.Ench: " .. tostring(err)) end
+		end
 		if not FX_ON() then return end
 		local ok, err = pcall(Poll)
 		if not ok then Ink:LogError("Stars.Poll: " .. tostring(err)) end
@@ -1060,6 +1554,7 @@ function M:Init()
 		end
 	end)
 	if ns.FX then
+		ns.FX.onToggle[EKEY] = function(on) if not on then S.EStop() else eDirty = true end end
 		ns.FX.onToggle[KEY] = function(on)
 			HideBlizzardOverlay(on)
 			if not on then S.ClearReal() end

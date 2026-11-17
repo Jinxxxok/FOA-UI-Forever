@@ -28,6 +28,7 @@ FX.LIST = {
 	{ "cdReady", "쿨 끝 빛 고리", "쿨이 끝나는 순간 아이콘에서 고리가 퍼짐" },
 	{ "procBracket", "주문 강화 모서리", "발동 효과를 노란 모서리 괄호로" },
 	{ "procStars", "별자리 발동 효과", "반응 기술 · 주문 강화가 켜지면 캐릭터 양옆에 직업 별자리 (/foa 별자리)" },
+	{ "enchMarks", "마법부여 발동 표식", "성전사 · 계시 · 통찰이 발동하면 발밑에 유성이 떨어져 작은 별 + 남은 시간 (/foa 마부)" },
 	{ "press", "눌림 반응", "키를 누르면 칸이 짧게 반짝" },
 	{ "rangeDesat", "사거리 밖 흑백", "사거리 밖 · 자원 부족 주문은 흑백" },
 	{ "castFinish", "시전 성공 · 차단", "성공하면 섬광, 차단되면 흔들림" },
@@ -1360,6 +1361,10 @@ Every("procStars", 8, function(n)
 	if ns.Stars then ns.Stars.Demo(n) end
 end)
 
+Every("enchMarks", 17, function()
+	if ns.Stars then ns.Stars.EPreview() end
+end)
+
 Every("press", 2.8, function(n)
 	for i, b in ipairs(SomeButtons(5, 0)) do
 		C_Timer.After((i - 1) * 0.42, function()
@@ -1421,6 +1426,7 @@ function FX.Demo(key, on)
 		end
 		if key == "procBracket" then for _, b in ipairs(actionButtons) do FX.ProcHide(b) end end
 		if key == "procStars" and ns.Stars then ns.Stars.Stop() end
+		if key == "enchMarks" and ns.Stars then ns.Stars.EStop() end
 		if key == "trail" then
 			local U = Ink.modules.Units
 			if U and U.RestoreBars then pcall(U.RestoreBars, U) end
