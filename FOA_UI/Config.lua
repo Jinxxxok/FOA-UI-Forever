@@ -1764,7 +1764,8 @@ function M:BuildPresets()
 		Ink.db.layoutShared = not Ink.db.layoutShared or nil
 		if Ink.db.layoutShared then
 			Ink:PushShared()
-			print("|cffFFF468FOA|r 이 캐릭터 배치를 공용으로 저장했어요. 다른 캐릭터도 접속하면 같은 배치가 돼요.")
+			print("|cffFFF468FOA|r 이 캐릭터 배치를 공용으로 저장했어요")
+			print("      |cff8A9099다른 캐릭터도 접속하면 같은 배치가 돼요|r")
 		end
 		M:PaintPresets()
 		M:SyncButtons()
@@ -1775,7 +1776,7 @@ function M:BuildPresets()
 	p.sharedDesc:SetPoint("TOPLEFT", p.shared, "BOTTOMLEFT", 2, -5)
 	p.sharedDesc:SetWidth(332)
 	p.sharedDesc:SetWordWrap(true)
-	p.sharedDesc:SetText("켜 두면 편집 모드에서 완료를 누를 때마다 공용으로 저장되고, 다른 캐릭터는 접속하면 이 배치로 바뀌어요. (위치 · 크기 · 행동단축바)")
+	p.sharedDesc:SetText("켜 두면 편집 모드에서 완료할 때마다 공용으로 저장돼요\n다른 캐릭터도 접속하면 이 배치로 바뀌어요 (위치 · 크기 · 단축바)")
 
 	p.save = Button(p, "지금 배치를 프리셋으로 저장", 332, function()
 		local list = Ink.db.layoutPresets or {}
@@ -1947,7 +1948,7 @@ function M:SyncFontButton()
 			p.qSound.text:SetText("퀘스트 완료 소리: " .. (Q.SOUND_NAME[qk] or qk))
 			p.qSound:SetActive(qk ~= "off")
 		end
-		p.chatDesc:SetText("채팅 · 바로 바뀌어요. 무빅은 글꼴 파일을 넣어 둔 경우에만 · 테두리를 켜면 밝은 배경에서도 또렷해요 · 채팅창 오른쪽 위 톱니바퀴로 글꼴을 미리 보며 고를 수 있어요 · 완료 소리는 누르면 미리 들려줘요")
+		p.chatDesc:SetText("채팅은 바로 바뀌어요 · 무빅은 글꼴 파일을 넣어 둔 경우에만 · 테두리를 켜면 밝은 배경에서도 또렷해요\n채팅창 오른쪽 위 톱니바퀴로 글꼴을 미리 보며 고를 수 있어요 · 완료 소리는 누르면 미리 들려줘요")
 	end
 	local mode = Ink.db.renderMode or "auto"
 	local auto = Ink.autoTier or "1x"
@@ -2544,9 +2545,11 @@ SlashCmdList.INKUI = function(msg)
 		local now = GetCVar and GetCVar("taintLog")
 		if on then
 			if now == "1" or now == "2" then
-				print("|cffFFF468FOA|r 오염 추적을 켰어요 · 게임 폴더 Logs\\taint.log 에 기록돼요 · 다 보면 /foa taint off")
+				print("|cffFFF468FOA|r 오염 추적을 켰어요 · 게임 폴더 Logs\\taint.log 에 기록돼요")
+				print("      |cff8A9099다 보면 /foa taint off|r")
 			else
-				print("|cffFFF468FOA|r 애드온이 직접 켤 수 없는 설정이에요 · 채팅창에 /console taintLog 1 을 입력해 주세요")
+				print("|cffFFF468FOA|r 애드온이 직접 켤 수 없는 설정이에요")
+				print("      |cff8A9099채팅창에 /console taintLog 1 을 입력해 주세요|r")
 			end
 		else
 			print("|cffFFF468FOA|r 오염 추적을 껐어요.")

@@ -614,10 +614,10 @@ function M:Tip(b)
 		GameTooltip:AddDoubleLine(KIND_LABEL[e.kind] or "숙련", e.rank .. " / " .. e.max, col[1], col[2], col[3], 1, 1, 1)
 		if (e.mod or 0) ~= 0 then GameTooltip:AddDoubleLine("장비 · 효과", (e.mod > 0 and "+" or "") .. e.mod, g[1], g[2], g[3], 0.55, 0.9, 0.55) end
 		if e.rank >= e.max then
-			GameTooltip:AddLine(e.kind == "weapon" and "지금 레벨에선 최대예요 · 레벨이 오르면 다시 올라요"
-				or "최대예요 · 상급자에게 다음 단계를 배우면 더 올라요", GOLD[1], GOLD[2], GOLD[3], true)
+			Ink.TipLines(GameTooltip, e.kind == "weapon" and "지금 레벨에선 최대예요\n레벨이 오르면 다시 올라요"
+				or "최대예요\n상급자에게 다음 단계를 배우면 더 올라요", GOLD[1], GOLD[2], GOLD[3])
 		elseif e.kind == "weapon" then
-			GameTooltip:AddLine("이 무기로 싸우면 올라요 (레벨 × 5 까지) · 남은 " .. (e.max - e.rank), g[1], g[2], g[3], true)
+			Ink.TipLines(GameTooltip, "이 무기로 싸우면 올라요 (레벨 × 5 까지)\n최대까지 " .. (e.max - e.rank), g[1], g[2], g[3])
 		else
 			GameTooltip:AddLine("최대까지 " .. (e.max - e.rank), g[1], g[2], g[3])
 		end

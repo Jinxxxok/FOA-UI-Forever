@@ -691,7 +691,7 @@ function M:Report(f, chan, detail)
 		end
 	end)
 	if not ok or #lines < 2 then
-		print("|cffFFF468FOA|r " .. (InCombatLockdown() and "전투 중엔 값이 비공개라 보낼 수 없어요 · 전투가 끝나면 다시 눌러 주세요" or "보낼 기록이 없어요"))
+		print("|cffFFF468FOA|r " .. (InCombatLockdown() and "전투 중엔 값이 비공개라 보낼 수 없어요\n      |cff8A9099전투가 끝나면 다시 눌러 주세요|r" or "보낼 기록이 없어요"))
 		return
 	end
 	for _, l in ipairs(lines) do pcall(SendChatMessage, l, chan) end

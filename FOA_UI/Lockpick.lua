@@ -117,8 +117,10 @@ local function Tip(self)
 	Ink.TipLine(GameTooltip, e[1], col[1], col[2], col[3])
 	GameTooltip:AddLine("자물쇠 따기 숙련도 대략 " .. e[2] .. "부터" .. (r and (" · 내 숙련도 " .. r) or ""), 0.75, 0.77, 0.8)
 	GameTooltip:AddLine(txt, col[1], col[2], col[3])
-	GameTooltip:AddLine("사물함이 생길 수 있는 자리예요 · 한 번에 몇 개만 생기고 열면 다른 자리에 다시 생겨요", 0.6, 0.62, 0.66, true)
-	GameTooltip:AddLine("누르면 지도에 찍고 화면에 길 안내", 0.6, 0.62, 0.66)
+	GameTooltip:AddLine(" ")
+	Ink.TipLines(GameTooltip, "사물함이 생길 수 있는 자리예요\n한 번에 몇 개만 생기고 열면 다른 자리에 다시 생겨요", 0.6, 0.62, 0.66)
+	GameTooltip:AddLine(" ")
+	GameTooltip:AddLine("누르면 지도에 찍고 화면에 길 안내", 0.5, 0.52, 0.56)
 	GameTooltip:Show()
 end
 

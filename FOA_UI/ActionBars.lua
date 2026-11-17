@@ -493,7 +493,7 @@ function Ink.UseCharBindings(on)
 	end
 	local fm = Ink.modules.Fishing
 	if fm and fm.ApplyKey then pcall(fm.ApplyKey, fm) end
-	print("|cffFFF468FOA|r 단축키 저장: " .. (on and "|cff6FD39A이 캐릭터만|r (다른 캐릭터에는 영향 없음)" or "계정 공용 (모든 캐릭터가 같이 씀)"))
+	print("|cffFFF468FOA|r 단축키 저장: " .. (on and "|cff6FD39A이 캐릭터만|r  |cff8A9099다른 캐릭터에는 영향 없음|r" or "계정 공용  |cff8A9099모든 캐릭터가 같이 씀|r"))
 	return true
 end
 
@@ -867,7 +867,8 @@ function M:FirstImport()
 	end
 	self:UpdateBindings()
 	self:SyncBlizzToggles()
-	print("|cffFFF468FOA|r 행동단축바를 FOA 바로 바꿨어요. 지금 블리자드 배치를 그대로 가져왔고, /foa → 편집 모드에서 바마다 조절할 수 있어요.")
+	print("|cffFFF468FOA|r 행동단축바를 FOA 바로 바꿨어요 · 지금 블리자드 배치를 그대로 가져왔어요")
+	print("      |cff8A9099바마다 조절: /foa → 편집 모드|r")
 end
 
 function M:PostLayout()

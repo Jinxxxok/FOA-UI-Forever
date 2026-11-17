@@ -806,7 +806,7 @@ local function NewPickChip(r, parent)
 		else
 			line = "누르면 고정해요"
 		end
-		GameTooltip:AddLine(line, g[1], g[2], g[3], true)
+		Ink.TipLines(GameTooltip, line, g[1], g[2], g[3])
 		GameTooltip:Show()
 	end)
 	c:SetScript("OnLeave", function(self)
@@ -1104,6 +1104,19 @@ function Row:Layout(gw)
 		self.desc:ClearAllPoints()
 		self.desc:SetPoint("TOPLEFT", self, "TOPLEFT", 12, -(top + 24))
 		self.desc:SetWidth(textW)
+		-- 설명이 한 줄에 안 들어가면 두 줄(최대 세 줄)로 · 끝이 "…" 로 잘리지 않게 낱말 단위 줄바꿈
+		local full = (self.desc:GetText() or ""):gsub("\n", " ")
+		self.desc:SetWordWrap(false)
+		self.desc:SetText(full)
+		local sw = (self.desc.GetUnboundedStringWidth and self.desc:GetUnboundedStringWidth()) or self.desc:GetStringWidth() or 0
+		local lines = 1
+		if sw > textW then lines = math.min(3, math.ceil(sw / math.max(40, textW - 12))) end
+		if lines > 1 then
+			self.desc:SetWordWrap(true)
+			self.desc:SetText(full)
+			lineH = lineH + (lines - 1) * 17
+			h = lineH
+		end
 	end
 	local cy = -lineH / 2
 	if e.kind == "switch" or e.kind == "cycle" or e.kind == "action" or e.kind == "key" or (e.kind == "seg" and not self.stack) then

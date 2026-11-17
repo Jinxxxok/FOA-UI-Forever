@@ -5463,7 +5463,7 @@ function M:BuildBisPanel()
 	p.hint:SetPoint("BOTTOMLEFT", 186, 16)
 	p.hint:SetWidth(BP_W - 204)
 	p.hint:SetWordWrap(true)
-	p.hint:SetText("마우스를 올리면 툴팁 + 획득처. 대체템은 BIS 장비의 능력치 비중으로 이번 시즌 레이드 · 던전 전리품에서 FOA가 고른 거예요.")
+	p.hint:SetText("마우스를 올리면 툴팁 + 획득처\n대체템은 BIS 장비의 능력치 비중으로 FOA가 고른 거예요")
 	-- 보기 전환 (위 오른쪽): 장비 — 육성 · PvE · PvP │ 준비물
 	p.modes = {}
 	-- 본섭은 보기 전환이 없다 (장비 · 준비물만)
@@ -5927,7 +5927,7 @@ function M:PaintBis()
 		elseif self.levelMode then
 			row.name:SetText(self.levelPending and "아이템 정보를 받아 오는 중…" or "지금 갈 수 있는 던전에 이 부위 템이 없어요")
 			row.name:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
-			row.src:SetText("내 레벨 + 4 까지의 던전 전리품 · 제작템 · 퀘스트 · 던전 퀘스트 보상에서 골라요")
+			row.src:SetText("던전 전리품 · 제작템 · 퀘스트 보상 (내 레벨 + 4 까지)")
 		else
 			row.name:SetText("이 부위는 레이드 · 던전 전리품에 없어요")
 			row.name:SetTextColor(C.muted[1], C.muted[2], C.muted[3])

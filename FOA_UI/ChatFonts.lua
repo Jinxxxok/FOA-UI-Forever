@@ -268,7 +268,7 @@ function M:Build()
 	p.foot:SetPoint("BOTTOMLEFT", 16, 12)
 	p.foot:SetPoint("BOTTOMRIGHT", -16, 12)
 	p.foot:SetWordWrap(true)
-	p.foot:SetText("직접 넣은 글꼴: AddOns\\FOA_Fonts 폴더에 넣고 게임을 다시 켜면 여기에 나와요 (많이 쓰는 한글 글꼴 이름만 찾아요)")
+	p.foot:SetText("직접 넣은 글꼴: AddOns\\FOA_Fonts 폴더에 넣고 게임을 다시 켜면 여기에 나와요\n많이 쓰는 한글 글꼴 이름만 찾아요")
 	-- 끌어서 옮기기
 	p:SetMovable(true)
 	p:RegisterForDrag("LeftButton")

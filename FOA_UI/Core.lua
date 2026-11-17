@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.65.92"
+Ink.version = "0.65.93"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -412,20 +412,81 @@ local function DispLen(s)
 	for ch in s:gmatch("[%z\1-\127\194-\244][\128-\191]*") do n = n + ((#ch > 1) and 1 or 0.55) end
 	return n
 end
+-- 줄 나누기: 1) 원래 줄바꿈 그대로 2) 길면 " · " 마디에서 먼저 끊고 3) 그래도 길면 낱말 단위
+--  좌표(38, 65) · 괄호 안 짧은 말은 한 줄에 붙여 둔다 (예전엔 "38,\n65" 처럼 끊겼다)
+local GLUE = "\1"
+local function WrapWords(seg, n, out)
+	local lines, line = {}, nil
+	for word in seg:gmatch("%S+") do
+		if not line then line = word
+		elseif DispLen((line .. " " .. word):gsub(GLUE, " ")) <= n then line = line .. " " .. word
+		else lines[#lines + 1] = line; line = word end
+	end
+	if line then lines[#lines + 1] = line end
+	-- 마지막 줄에 짧은 낱말 하나만 남으면(외톨이) 윗줄 끝 낱말을 같이 내린다
+	local k = #lines
+	if k >= 2 and DispLen(lines[k]:gsub(GLUE, " ")) <= 3 then
+		local head, last = lines[k - 1]:match("^(.*%S)%s+(%S+)$")
+		if head then lines[k - 1], lines[k] = head, last .. " " .. lines[k] end
+	end
+	for _, l in ipairs(lines) do out[#out + 1] = l end
+end
 function Ink.TipWrap(text, n)
 	if type(text) ~= "string" then return text end
 	n = n or 30
 	local out = {}
 	for para in (text .. "\n"):gmatch("(.-)\n") do
-		local line
-		for word in para:gmatch("%S+") do
-			if not line then line = word
-			elseif DispLen(line .. " " .. word) <= n then line = line .. " " .. word
-			else out[#out + 1] = line; line = word end
+		if DispLen(para) <= n then
+			out[#out + 1] = para
+		else
+			local indent = para:match("^(%s*)") or ""
+			local body = para:sub(#indent + 1)
+			body = body:gsub("(%d), (%d)", "%1," .. GLUE .. "%2")
+			body = body:gsub("%(([^%)]+)%)", function(s) if DispLen(s) <= 10 then return "(" .. s:gsub(" ", GLUE) .. ")" end end)
+			-- 마디: " · " 로 나뉜 것, 그 안에서 문장 끝(…요. / …다.)으로 한 번 더 · 붙일 때는 원래 이음(" · " 또는 " ")으로
+			local segs = {}
+			for part in (body .. " · "):gmatch("(.-)%s+·%s+") do
+				if part ~= "" then
+					local first = true
+					for sent in (part .. " "):gmatch("(.-[^%s]%.?)%s+") do
+						segs[#segs + 1] = { sent, first and " · " or " " }
+						first = false
+					end
+				end
+			end
+			-- 문장 단위로 나눈 건 낱말이 아니라 "…요." 로 끝날 때만 따로 (그 밖엔 다시 붙인다)
+			local merged = {}
+			for _, sg in ipairs(segs) do
+				local prev = merged[#merged]
+				if prev and sg[2] == " " and not prev[1]:find("[요다]%.$") then prev[1] = prev[1] .. " " .. sg[1]
+				else merged[#merged + 1] = { sg[1], sg[2] } end
+			end
+			local lines, line = {}, nil
+			for _, sg in ipairs(merged) do
+				local s2 = sg[1]
+				if DispLen(s2:gsub(GLUE, " ")) > n then
+					if line then lines[#lines + 1] = line; line = nil end
+					WrapWords(s2, n, lines)
+				elseif not line then line = s2
+				elseif DispLen((line .. sg[2] .. s2):gsub(GLUE, " ")) <= n then line = line .. sg[2] .. s2
+				else lines[#lines + 1] = line; line = s2 end
+			end
+			if line then lines[#lines + 1] = line end
+			for _, l in ipairs(lines) do out[#out + 1] = indent .. (l:gsub(GLUE, " ")) end
 		end
-		out[#out + 1] = line or ""
 	end
 	return table.concat(out, "\n")
+end
+Ink.DispLen = DispLen
+-- 여러 줄 툴팁 글 (줄마다 같은 색)
+function Ink.TipLines(tt, text, r, g, b, n)
+	for l in (Ink.TipWrap(text, n) .. "\n"):gmatch("(.-)\n") do tt:AddLine(l ~= "" and l or " ", r, g, b) end
+end
+-- 직업 이름 글자색 (블리자드 공식 직업색 · 다른 애드온 직업색도 따름)
+function Ink.ClassHex(class)
+	local r, g, b = 1, 1, 1
+	if ns.ClassColorOf then r, g, b = ns.ClassColorOf(class) end
+	return string.format("%02X%02X%02X", math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
 end
 function Ink.TipLine(tt, text, r, g, b)
 	tt:AddLine(Ink.TipWrap(text), r, g, b)
@@ -1243,7 +1304,8 @@ local function ErrRecord(m, st, loc, forceKind)
 	-- FOA 쪽 오류는 접속마다 한 번만 채팅에 알린다 (도배 방지)
 	if kind ~= "블리자드" and not errSaidThisSession then
 		errSaidThisSession = true
-		print("|cffFF6B5EFOA|r 오류가 생겨서 기록해 뒀어요 · /foa log 로 볼 수 있어요 (/reload 하면 저장 파일에도 남아요)")
+		print("|cffFF6B5EFOA|r 오류가 생겨서 기록해 뒀어요 · |cffF3F2EE/foa log|r 로 볼 수 있어요")
+		print("      |cff8A9099/reload 하면 저장 파일에도 남아요|r")
 	end
 	return e
 end
@@ -1348,7 +1410,8 @@ do
 		if noted then return end
 		noted = true
 		local function say()
-			print("|cffFFF468FOA|r 숨겨 둔 블리자드 기본 단축바에 오류가 생겨서 오류 창은 막아 뒀어요 · FOA 단축바는 정상이에요 · 깨끗하게 하려면 전투 밖에서 /reload")
+			print("|cffFFF468FOA|r 숨겨 둔 블리자드 기본 단축바 오류라 오류 창은 막아 뒀어요 · FOA 단축바는 정상이에요")
+			print("      |cff8A9099깨끗하게 하려면 전투 밖에서 /reload|r")
 		end
 		if InCombatLockdown() then
 			local f = CreateFrame("Frame")

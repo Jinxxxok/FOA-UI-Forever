@@ -466,6 +466,29 @@ function M.Roadmap(prof, max)
 	return out
 end
 
+-- 툴팁 줄 모양 (가독성: 한 줄엔 한 가지 · 길면 마디마다 줄바꿈)
+--  "글" 회색 (첫 줄은 제목 · 흰색) · TipH("소제목") 빈 줄 + 금색 소제목 · TipKV(왼쪽, 오른쪽) 두 칸
+--  TipT(글, 색) 색 있는 글 · TipHint("누르면 …") 맨 아래 흐린 안내 · TipGap() 빈 줄
+local TIP_SOFT, TIP_DIM, TIP_HEAD, TIP_WHITE = { 0.78, 0.80, 0.83 }, { 0.50, 0.52, 0.56 }, { 0.89, 0.75, 0.48 }, { 0.96, 0.95, 0.92 }
+local TIP_GOLD, TIP_GREEN, TIP_RED, TIP_MUTED = { 1, 0.82, 0.37 }, { 0.44, 0.83, 0.6 }, { 1, 0.42, 0.37 }, { 0.6, 0.62, 0.66 }
+local function TipH(t) return { h = t } end
+local function TipKV(l, r, lc, rc) return { l = l, r = r, lc = lc, rc = rc } end
+local function TipT(t, c) return { t = t, c = c } end
+local function TipHint(t) return { hint = t } end
+local function TipGap() return { gap = true } end
+local function Short(max, ...)   -- 앞 마디부터 이어 붙이다 넘치면 거기서 멈춘다 (목록 줄이 … 으로 잘리지 않게)
+	local out
+	for i = 1, select("#", ...) do
+		local p = select(i, ...)
+		if p and p ~= "" then
+			local cand = out and (out .. " · " .. p) or p
+			if out and Ink.DispLen(cand) > max then break end
+			out = cand
+		end
+	end
+	return out or ""
+end
+
 -------------------------------------------------------------------------------
 -- 심화 과정 (ProfessionSpecs.lua): 가죽세공 · 대장기술 · 기계공학
 -------------------------------------------------------------------------------
@@ -509,11 +532,14 @@ local function SpecName(s)
 	local n = SpellName(s.spell)
 	return (n and n ~= "") and n or s.name
 end
+-- 직업 추천: 점수(2 추천 · 1 쓸 만함), 짧은 이유(목록 줄), 긴 설명(툴팁)
 local function Fit(s, cls)
 	local f = s.fit and (s.fit[cls] or s.fit.ALL)
-	if f then return f[1], f[2] end
+	if f then return f[1], f[2], f[3] or f[2] end
 	return 0
 end
+-- 직업 이름을 그 직업 색으로
+local function ClassText(c) return "|cff" .. Ink.ClassHex(c) .. ClassName(c) .. "|r" end
 local function ItemNameOf(it)
 	local n
 	if C_Item and C_Item.GetItemNameByID then local ok, v = pcall(C_Item.GetItemNameByID, it[1]); if ok and v and v ~= "" then n = v end end
@@ -567,43 +593,67 @@ function M.SpecState(prof, skill)
 	end
 	return st
 end
+-- 자리 두 줄: 이름(오른쪽 흰색) + 지역 · 좌표(오른쪽 흐리게)
+local function WhoLines(t, label, w)
+	if not w then t[#t + 1] = TipKV(label, "자리 정보 없음"); return end
+	t[#t + 1] = TipKV(label, TrainerName(w.npc, w.en), TIP_SOFT, TIP_WHITE)
+	if w.map then t[#t + 1] = TipKV(" ", string.format("%s  %.0f, %.0f", ZoneName(w.map), w.x, w.y), TIP_SOFT, TIP_MUTED) end
+end
 -- 툴팁 줄 · 누르면 찍을 곳 (퀘스트 시작 NPC 가 따로 있고 자리를 알면 그쪽 먼저)
-local function SpecTip(prof, s, def, isMaster)
+local function SpecTip(prof, s, def, isMaster, withSwitch)
 	local cls = MyClass()
-	local t = { SpecName(s), s.desc }
-	t[#t + 1] = string.format("필요: %s%d레벨 · 숙련도 %d · %s", isMaster and "무기제작 · " or "", def.lvl or 0, def.skill or 0, def.one or "")
+	local t = { SpecName(s) }
+	t[#t + 1] = TipT(s.desc, TIP_WHITE)
+	if s.sig then t[#t + 1] = s.sig end
+	t[#t + 1] = TipH("조건")
+	t[#t + 1] = TipKV(isMaster and "무기제작 · " .. (def.lvl or 0) .. "레벨" or ((def.lvl or 0) .. "레벨"), "숙련도 " .. (def.skill or 0), TIP_SOFT, TIP_WHITE)
+	if def.one then t[#t + 1] = TipT(def.one, TIP_MUTED) end
+	local st = s.start and PickWho(s.start)
+	local w = PickWho(s.who)
+	t[#t + 1] = TipH("배우는 법")
+	if st then WhoLines(t, "① 퀘스트 시작", st) end
+	WhoLines(t, st and "② 배우는 곳" or "배우는 곳", w)
+	if s.how then t[#t + 1] = TipT(s.how, TIP_MUTED) end
 	if s.items then
-		local parts = {}
+		t[#t + 1] = TipH("가져갈 것")
 		for _, it in ipairs(s.items) do
 			local nm = ItemNameOf(it)
 			local have = Count(nm, it[1])
-			parts[#parts + 1] = string.format("%s %d%s", nm, it[2], have > 0 and ((have >= it[2] and " |cff6FD39A(가방 " or " (가방 ") .. have .. ")|r") or "")
+			t[#t + 1] = TipKV(nm, (have > 0 and (have .. " / ") or "") .. it[2] .. "개", TIP_SOFT, have >= it[2] and TIP_GREEN or TIP_WHITE)
 		end
-		t[#t + 1] = "가져갈 것: " .. table.concat(parts, ", ")
 	end
-	if s.target then t[#t + 1] = "대가 퀘스트: " .. s.target end
-	if s.how then t[#t + 1] = s.how end
-	local st = s.start and PickWho(s.start)
-	local w = PickWho(s.who)
-	if st then t[#t + 1] = "① 퀘스트 시작: " .. WhoText(st) end
-	t[#t + 1] = (st and "② " or "") .. "배우는 곳: " .. WhoText(w)
+	if s.target then
+		t[#t + 1] = TipH("대가 퀘스트")
+		t[#t + 1] = s.target
+	end
 	local rec, n = SpecRecipes(prof, s.spell, 6)
-	if #rec > 0 then t[#t + 1] = "훈련사에게 열리는 제조법: " .. table.concat(rec, ", ") .. (n > #rec and (" 외 " .. (n - #rec) .. "개") or "") end
-	local sc, why = Fit(s, cls)
+	if #rec > 0 then
+		t[#t + 1] = TipH("훈련사에게 열리는 제조법")
+		for i = 1, #rec, 2 do t[#t + 1] = TipKV(rec[i], rec[i + 1] or " ", TIP_SOFT, TIP_SOFT) end
+		if n > #rec then t[#t + 1] = TipT("외 " .. (n - #rec) .. "개", TIP_MUTED) end
+	end
+	local sc, _, long = Fit(s, cls)
 	if s.fit and s.fit.ALL and not s.fit[cls] then
-		if why then t[#t + 1] = "쓰임새: " .. why end
-	elseif why then
-		t[#t + 1] = (sc >= 2 and "|cffFFD15F추천|r · " or "") .. ClassName(cls) .. ": " .. why
+		if long then t[#t + 1] = TipH("쓰임새"); t[#t + 1] = long end
+	elseif long then
+		t[#t + 1] = TipH(ClassText(cls) .. (sc >= 2 and "  |cffFFD15F추천|r" or ""))
+		t[#t + 1] = long
+	end
+	if withSwitch and def.switch then
+		t[#t + 1] = TipH("나중에 바꾸려면")
+		t[#t + 1] = TipT(def.switch, TIP_MUTED)
 	end
 	local pin = WhoPin(st, "퀘스트 시작") or WhoPin(w, "심화 과정 훈련사")
-	if pin then t[#t + 1] = "누르면 지도에 " .. (WhoPin(st) and "퀘스트 시작 NPC" or "배우는 곳") .. " 표시" end
+	if pin then t[#t + 1] = TipHint("누르면 지도에 " .. (WhoPin(st) and "퀘스트 시작 NPC" or "배우는 곳") .. " 표시") end
 	return t, pin
 end
--- 직업별 추천 전체 (툴팁 아래쪽)
+-- 직업별 추천 전체 (툴팁 아래쪽): 직업 이름은 직업색 · 내 직업은 금색으로
 local CLASS_ORDER = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
-local function FitTable(def)
-	local out = {}
-	if def.advice then out[#out + 1] = def.advice end
+local function FitTable(def, t)
+	t = t or {}
+	if def.advice then t[#t + 1] = TipH("고르는 법"); t[#t + 1] = def.adviceLong or def.advice; return t end
+	t[#t + 1] = TipH("직업별 추천")
+	local me = MyClass()
 	for _, c in ipairs(CLASS_ORDER) do
 		local sc = 0
 		for _, s in ipairs(def.list) do
@@ -615,10 +665,61 @@ local function FitTable(def)
 			for _, s in ipairs(def.list) do
 				if s.fit and s.fit[c] and s.fit[c][1] == sc then names[#names + 1] = s.short or s.name end
 			end
-			out[#out + 1] = string.format("%s → %s%s", ClassName(c), table.concat(names, " · "), sc >= 2 and "" or " (판매용)")
+			local right = table.concat(names, " · ") .. (sc >= 2 and "" or "  (판매용)")
+			t[#t + 1] = TipKV((c == me and "▸ " or "") .. ClassText(c), right, TIP_SOFT, c == me and TIP_GOLD or (sc >= 2 and TIP_WHITE or TIP_MUTED))
 		end
 	end
-	return out
+	t[#t + 1] = TipT("클래식 기준 일반론 · 포에버 패치로 바뀔 수 있어요", TIP_DIM)
+	return t
+end
+-- 단계 하나의 툴팁: 조건 · 비용 · 배우는 곳(가까운 순 3곳) · 그 뒤 단계
+local function RankTip(nx, title, later)
+	local lv = UnitLevel("player") or 1
+	local t = { title or (nx.name .. " 단계 · " .. nx.cap .. "까지") }
+	t[#t + 1] = TipH("조건")
+	t[#t + 1] = TipKV(lv < nx.lvl and ("|cffFF6B5E" .. nx.lvl .. "레벨|r") or (nx.lvl .. "레벨"), "숙련도 " .. nx.skill, TIP_SOFT, TIP_WHITE)
+	local costT = M.RankCostText(nx)
+	if nx.book then
+		t[#t + 1] = TipT("훈련사가 아니라 책으로 배워요 (그 NPC 가 팔아요)", TIP_MUTED)
+	elseif nx.quest then
+		t[#t + 1] = TipT("훈련사가 아니라 퀘스트로 배워요", TIP_MUTED)
+	elseif costT ~= "" then
+		t[#t + 1] = TipKV("비용", (costT:gsub("%s+$", "")), TIP_SOFT, TIP_GOLD)
+		if nx.cost and not nx.costSeen then t[#t + 1] = TipT("기본 값 · 평판이 높으면 싸져요", TIP_DIM) end
+	end
+	t[#t + 1] = TipH(nx.book and "책 파는 곳" or (nx.quest and "퀘스트 주는 곳" or "배우는 곳"))
+	for k = 1, math.min(3, #nx.spots) do WhoLines(t, k == 1 and "가까운 곳" or "그 밖에", nx.spots[k]) end
+	if #nx.spots == 0 then t[#t + 1] = TipT("자리 정보 없음", TIP_MUTED) end
+	local sp = nx.spots[1]
+	if sp and TRAINER_NOTE[sp.npc] then t[#t + 1] = TipT(TRAINER_NOTE[sp.npc], TIP_GOLD) end
+	if nx.svc then t[#t + 1] = TipT("훈련사 창에서 '" .. nx.svc .. "' 배우기", TIP_MUTED) end
+	if later and #later > 0 then
+		t[#t + 1] = TipH("그 뒤 단계")
+		for _, ri in ipairs(later) do
+			local s2 = ri.spots[1]
+			t[#t + 1] = TipKV(ri.name .. " · " .. ri.cap .. "까지", ri.lvl .. "레벨 · 숙련도 " .. ri.skill, TIP_WHITE, TIP_SOFT)
+			t[#t + 1] = TipKV(" ", s2 and (TrainerName(s2.npc, s2.en) .. " · " .. ZoneName(s2.map)) or (ri.book and "책" or (ri.quest and "퀘스트" or "정보 없음")), TIP_SOFT, TIP_MUTED)
+		end
+	end
+	if sp then t[#t + 1] = TipHint("누르면 지도에 표시") end
+	return t
+end
+M.RankTip = RankTip
+-- 심화 과정 한 묶음의 툴팁 (첫 화면 · 추천 줄): 과정마다 배우는 곳 + 직업별 추천
+local function GroupTip(def, isMaster, pinName)
+	local cls = MyClass()
+	local t = { isMaster and "무기제작 대가 과정" or def.group }
+	t[#t + 1] = TipT(string.format("%s%d레벨 · 숙련도 %d · %s", isMaster and "무기제작 · " or "", def.lvl or 0, def.skill or 0, def.one or ""), TIP_WHITE)
+	t[#t + 1] = TipH("과정과 배우는 곳")
+	for _, v in ipairs(def.list) do
+		local w = PickWho(v.who)
+		local rec = not def.advice and Fit(v, cls) >= 2
+		t[#t + 1] = TipKV(SpecName(v) .. (rec and "  |cffFFD15F추천|r" or ""), w and TrainerName(w.npc, w.en) or "", TIP_WHITE, TIP_SOFT)
+		t[#t + 1] = TipKV("   " .. (v.desc or ""), w and w.map and string.format("%s  %.0f, %.0f", ZoneName(w.map), w.x, w.y) or "", TIP_MUTED, TIP_MUTED)
+	end
+	FitTable(def, t)
+	if pinName then t[#t + 1] = TipHint("누르면 지도에 " .. pinName .. " 위치\n전문기술 창을 열면 더 자세히 나와요") end
+	return t
 end
 -- 상태 글 (오른쪽): 배움 · 지금 가능 · 모자란 조건
 local function SpecReady(def, skill, lv)
@@ -775,11 +876,30 @@ local function ShowTip(self)
 	end
 	if self.tip then
 		if rich then GameTooltip:AddLine(" ") end
+		local hinted
 		for i, l in ipairs(self.tip) do
-			if i == 1 then
-				if not rich then Ink.TipLine(GameTooltip, l, 1, 1, 1) end
-			elseif l ~= "" then
-				GameTooltip:AddLine(l, 0.75, 0.77, 0.8, true)
+			if type(l) == "string" then
+				if i == 1 then
+					if not rich then Ink.TipLines(GameTooltip, l, 1, 1, 1, 32) end
+				elseif l ~= "" then
+					Ink.TipLines(GameTooltip, l, TIP_SOFT[1], TIP_SOFT[2], TIP_SOFT[3])
+				end
+			elseif type(l) == "table" then
+				if l.gap then
+					GameTooltip:AddLine(" ")
+				elseif l.h then
+					GameTooltip:AddLine(" ")
+					GameTooltip:AddLine(l.h, TIP_HEAD[1], TIP_HEAD[2], TIP_HEAD[3])
+				elseif l.hint then
+					if not hinted then GameTooltip:AddLine(" "); hinted = true end
+					Ink.TipLines(GameTooltip, l.hint, TIP_DIM[1], TIP_DIM[2], TIP_DIM[3])
+				elseif l.l then
+					local lc, rc = l.lc or TIP_SOFT, l.rc or TIP_WHITE
+					GameTooltip:AddDoubleLine(l.l, l.r or " ", lc[1], lc[2], lc[3], rc[1], rc[2], rc[3])
+				elseif l.t then
+					local c = l.c or TIP_SOFT
+					Ink.TipLines(GameTooltip, l.t, c[1], c[2], c[3])
+				end
 			end
 		end
 	end
@@ -1001,40 +1121,35 @@ function M:PaintOverview(p, host)
 			if not nx then
 				-- 단계는 다 배움: 심화 과정이 남았으면 그쪽으로 (아래 '심화 과정' 칸)
 				if sp and sp.learned and not spOpen then
-					r.sub:SetText(SpecName(sp.learned) .. (sp.master and sp.master.learned and (" · " .. SpecName(sp.master.learned)) or "") .. " · 심화 과정까지 배움")
+					r.sub:SetText(Short(19, SpecName(sp.learned), sp.master and sp.master.learned and SpecName(sp.master.learned) or nil, "배움"))
 					r.right:SetText("|cff6FD39A완료|r")
 				elseif spOpen then
 					local grp = (sp.learned and sp.master) or sp
-					r.sub:SetText("모든 단계 완료 · 다음은 " .. (grp == sp.master and "대가 과정" or "심화 과정") .. " (아래)")
+					r.sub:SetText("모든 단계 완료 · " .. (grp == sp.master and "대가 과정" or "심화 과정") .. " (아래)")
 					r.right:SetText("|cffFFD15F심화 과정|r")
 				else
-					r.sub:SetText("모든 단계 완료 · 이 기술은 심화 과정이 없어요")
+					r.sub:SetText("모든 단계 완료 · 심화 과정 없음")
 					r.right:SetText("|cff6FD39A완료|r")
 				end
-				r.tip = { e.name .. " " .. e.rank .. " / " .. e.max, "초급 · 수습 · 숙련 · 전문 단계를 모두 배웠어요",
-					sp and (spOpen and "심화 과정은 아래 '심화 과정' 칸에서 어디서 배우는지 볼 수 있어요" or "") or "이 기술은 클래식처럼 심화 과정이 없어요 · 남은 건 상인 · 드랍 제조법" }
+				r.tip = { e.name .. "  " .. e.rank .. " / " .. e.max, TipT("초급 · 수습 · 숙련 · 전문 단계를 모두 배웠어요", TIP_WHITE) }
+				if spOpen then
+					r.tip[#r.tip + 1] = "심화 과정은 아래 '심화 과정' 칸에서\n어디서 배우는지 볼 수 있어요"
+				elseif not sp then
+					r.tip[#r.tip + 1] = "이 기술은 클래식처럼 심화 과정이 없어요\n남은 건 상인 · 드랍 제조법"
+				end
 			else
 				local sp = nx.spots[1]
 				local how = nx.book and "책" or (nx.quest and "퀘스트" or (sp and TrainerName(sp.npc, sp.en) or "훈련사"))
-				r.sub:SetText(nx.name .. " 단계 · " .. how .. (sp and (" · " .. ZoneName(sp.map)) or ""))
+				r.sub:SetText(Short(19, nx.name .. " 단계", how, sp and ZoneName(sp.map) or nil))
 				local ready = lv >= nx.lvl and e.rank >= nx.skill
 				local costT = M.RankCostText(nx)
 				r.right:SetText(ready and ("|cff6FD39A지금 배움|r") or (lv < nx.lvl and ("|cffFF6B5E" .. nx.lvl .. "레벨|r") or ("숙련도 " .. nx.skill)))
 				if ready then r.dot:SetVertexColor(GREEN[1], GREEN[2], GREEN[3]); r.dot:Show() else r.dot:Hide() end
-				local _, where = M.NextRankText(nx)
-				r.tip = { e.name .. " · " .. nx.name .. " 단계 (" .. nx.cap .. "까지)", where, nx.lvl .. "레벨 · 숙련도 " .. nx.skill .. " 필요",
-					costT ~= "" and ("비용: " .. costT .. (nx.cost and not nx.costSeen and " (기본 값 · 평판이 높으면 싸져요)" or "")) or "",
-					nx.svc and ("훈련사 창에서 '" .. nx.svc .. "' 배우기") or "",
-					sp and TRAINER_NOTE[sp.npc] or "" }
 				-- 그 뒤 단계도 미리 (숙련도가 모자라도 어디로 가야 하는지)
 				local road = M.Roadmap(e.prof, e.max)
-				for i = 2, #road do
-					local ri = road[i]
-					local s2 = ri.spots[1]
-					r.tip[#r.tip + 1] = string.format("그 뒤 %s (%d까지): %d레벨 · 숙련도 %d · %s", ri.name, ri.cap, ri.lvl, ri.skill,
-						s2 and (TrainerName(s2.npc, s2.en) .. " · " .. ZoneName(s2.map)) or (ri.book and "책" or (ri.quest and "퀘스트" or "정보 없음")))
-				end
-				if sp then r.tip[#r.tip + 1] = "누르면 지도에 표시" end
+				local later = {}
+				for i = 2, #road do later[#later + 1] = road[i] end
+				r.tip = RankTip(nx, e.name .. " · " .. nx.name .. " 단계 · " .. nx.cap .. "까지", later)
 				if sp then r.vendor = { sp.npc, sp.map, sp.x, sp.y, label = "훈련사" } end
 				if nx.book then r.item = nx.book end
 			end
@@ -1058,21 +1173,12 @@ function M:PaintOverview(p, host)
 			local r = newRow()
 			r.icon:SetTexture(SpellIcon(s.spell) or ProfIcon(e.prof))
 			r.name:SetText((isMaster and (SpecName(sp.learned) .. " 대가") or e.name) .. "  |cff8A9099" .. table.concat(shorts, " · ") .. "|r")
-			r.sub:SetText(grp.best and ("추천 " .. (s.short or s.name) .. (#grp.alt > 0 and ("/" .. (grp.alt[1].short or "")) or "") .. (why and (" · " .. why) or "")) or (def.advice or def.one or ""))
+			r.sub:SetText(grp.best and Short(19, "|cffFFD15F추천|r " .. (s.short or s.name) .. (#grp.alt > 0 and ("/" .. (grp.alt[1].short or "")) or ""), why) or (def.advice or def.one or ""))
 			local ok, stateT = SpecReady(def, e.rank, lv)
 			r.right:SetText(stateT)
 			if ok then r.dot:SetVertexColor(GOLD[1], GOLD[2], GOLD[3]); r.dot:Show() end
-			local tip = { isMaster and "무기제작 대가 과정" or def.group, string.format("필요: %s%d레벨 · 숙련도 %d · %s", isMaster and "무기제작 · " or "", def.lvl, def.skill, def.one) }
-			for _, v in ipairs(def.list) do
-				local w = PickWho(v.who)
-				local sc = Fit(v, cls)
-				tip[#tip + 1] = string.format("%s%s — %s", SpecName(v), (sc >= 2 and not def.advice) and " |cffFFD15F(추천)|r" or "", WhoText(w))
-			end
-			for _, l in ipairs(FitTable(def)) do tip[#tip + 1] = l end
-			tip[#tip + 1] = "직업 추천은 클래식 기준 일반론 · 포에버 패치로 바뀔 수 있어요"
 			local _, pin = SpecTip(e.prof, s, def, isMaster)
-			if pin then tip[#tip + 1] = "누르면 지도에 " .. (s.short or s.name) .. " 위치 · 전문기술 창을 열면 자세히" end
-			r.tip, r.vendor = tip, pin
+			r.tip, r.vendor = GroupTip(def, isMaster, pin and (s.short or s.name)), pin
 			r:ClearAllPoints(); r:SetPoint("TOPLEFT", 0, -y); r:Show()
 			y = y + ROW + 2
 		end
@@ -1139,7 +1245,7 @@ function M:Paint()
 		c.icon:SetTexture((kr and kr.icon) or (csid and CraftIcon(csid)) or (citem and ItemIcon(citem)) or 134400)
 		c.icon:SetDesaturated(false)
 		TipTarget(c.iconHit, citem, kr and kr.link, (not citem and csid) or nil)
-		c.iconHit.tip = { cur[3], string.format("숙련도 %d → %d 구간", cur[1], cur[2]) }
+		c.iconHit.tip = { cur[3], TipKV("이 구간", string.format("숙련도 %d → %d", cur[1], cur[2]), TIP_SOFT, TIP_WHITE) }
 		c.name:SetText(cur[3])
 		c.sub:SetText(string.format("약 %d번 더 만들기", left) .. (kr and kr.avail > 0 and ("  ·  |cff6FD39A지금 %d개 가능|r"):format(kr.avail) or "") .. (kr and "" or "  ·  |cffFFB75A아직 안 배움|r"))
 		-- 재료: 아는 제조법이면 게임 자료(한 번에 드는 수 × 남은 횟수), 아니면 경로 자료(구간 합계를 남은 비율로)
@@ -1159,7 +1265,8 @@ function M:Paint()
 				m.n:SetText(d[1] .. (d[5] and d[5] ~= "" and ("  |cff5E636B" .. d[5] .. "|r") or ""))
 				m.v:SetText((enough and "|cff6FD39A" or "") .. d[3] .. "|r / " .. d[2])
 				m.item = d[4]
-				m.tip = { d[1], string.format("가방 %d · 필요 %d", d[3], d[2]), d[5] and d[5] ~= "" and ("구하는 곳: " .. d[5]) or "" }
+				m.tip = { d[1], TipKV("가방 · 은행", d[3] .. "개", TIP_SOFT, enough and TIP_GREEN or TIP_WHITE), TipKV("필요", d[2] .. "개", TIP_SOFT, TIP_WHITE),
+					d[5] and d[5] ~= "" and TipKV("구하는 곳", d[5], TIP_SOFT, TIP_SOFT) or "" }
 				m:Show()
 				local pr = Price(d[1], d[4])
 				if pr and d[2] > d[3] then cost = cost + pr * (d[2] - d[3]); priced = priced + 1 end
@@ -1185,7 +1292,7 @@ function M:Paint()
 			local who, where, price = VendorText(vx)
 			c.vend.x = vx
 			c.vend.item = VendorIndex(name)[cur[3]].item
-			c.vend.tip = { cur[3], "상인: " .. who, where, price ~= "" and ("값: " .. price) or "", "누르면 지도에 상인 위치" }
+			c.vend.tip = { cur[3], TipH("파는 상인"), TipKV(who, price ~= "" and price or " ", TIP_WHITE, TIP_GOLD), TipKV(" ", where, TIP_SOFT, TIP_MUTED), TipHint("누르면 지도에 상인 위치") }
 			c.vend.t:SetText(who .. (price ~= "" and ("  ·  |cffFFD15F" .. price .. "|r") or ""))
 			c.vend.s:SetText(where .. "  ·  누르면 지도에 표시")
 			c.vend:Show()
@@ -1196,7 +1303,8 @@ function M:Paint()
 			local where = string.format("%s %.0f, %.0f%s", ZoneName(rt.map), rt.x, rt.y, rt.inside and " (던전 안)" or "")
 			c.vend.icon:SetTexture(Ink.icon("NpcTrainer"))
 			c.vend.x = { rt.npc, rt.map, rt.x, rt.y, label = "훈련사" }
-			c.vend.tip = { cur[3], "가르치는 훈련사: " .. who, where, rcost and ("비용: " .. rcost) or "", TRAINER_NOTE[rt.npc] or "", "누르면 지도에 훈련사 위치" }
+			c.vend.tip = { cur[3], TipH("가르치는 훈련사"), TipKV(who, rcost or " ", TIP_WHITE, TIP_GOLD), TipKV(" ", where, TIP_SOFT, TIP_MUTED),
+				TRAINER_NOTE[rt.npc] and TipT(TRAINER_NOTE[rt.npc], TIP_GOLD) or "", TipHint("누르면 지도에 훈련사 위치") }
 			c.vend.t:SetText(who .. (rcost and ("  ·  |cffFFD15F" .. rcost .. "|r") or ""))
 			c.vend.s:SetText(where .. "  ·  누르면 지도에 표시")
 			c.vend:Show()
@@ -1222,9 +1330,10 @@ function M:Paint()
 			c.sub:SetText((lv < nx.lvl and ("|cffFF6B5E" .. nx.lvl .. "레벨부터|r") or (nx.lvl .. "레벨 · 숙련도 " .. nx.skill))
 				.. (costT ~= "" and ("  ·  |cffFFD15F" .. costT .. "|r") or ""))
 			TipTarget(c.iconHit, nx.book, nil, nil)
-			c.iconHit.tip = { nx.name .. " 단계 (" .. nx.cap .. "까지)", nx.lvl .. "레벨 · 숙련도 " .. nx.skill .. " 필요",
-				costT ~= "" and ("비용: " .. costT .. (nx.cost and not nx.costSeen and " (기본 값 · 평판이 높으면 싸져요)" or "")) or "",
-				nx.svc and ("훈련사 창에서 '" .. nx.svc .. "' 배우기") or "" }
+			local road = M.Roadmap(prof, max)
+			local later = {}
+			for i = 2, #road do later[#later + 1] = road[i] end
+			c.iconHit.tip = RankTip(nx, nil, later)
 			local sp = nx.spots[1]
 			if sp then
 				c.vend.icon:SetTexture(Ink.icon(nx.book and "NpcVendor" or "NpcTrainer"))
@@ -1250,8 +1359,8 @@ function M:Paint()
 			c.k:SetText("숙련도 최대 · 다음은 " .. (isMaster and "대가 과정" or "심화 과정"))
 			c.icon:SetTexture(SpellIcon(s.spell) or ProfIcon(prof))
 			c.name:SetText((isMaster and "대가 과정: " or "심화 과정: ") .. table.concat(shorts, " · "))
-			c.sub:SetText((grp.best and ("추천 " .. (s.short or s.name) .. (why and (" · " .. why) or "")) or (def.advice or def.one or "")) .. (ok and "" or ("  ·  " .. stateT)))
-			local tip, pin = SpecTip(prof, s, def, isMaster)
+			c.sub:SetText((grp.best and Short(24, "|cffFFD15F추천|r " .. (s.short or s.name), why) or (def.advice or def.one or "")) .. (ok and "" or ("  ·  " .. stateT)))
+			local tip, pin = SpecTip(prof, s, def, isMaster, true)
 			TipTarget(c.iconHit, nil, nil, nil)
 			c.iconHit.tip = tip
 			local st = s.start and PickWho(s.start)
@@ -1270,7 +1379,7 @@ function M:Paint()
 		else
 			if max >= 300 then
 				c.name:SetText(spec and spec.learned and (SpecName(spec.learned) .. (spec.master and spec.master.learned and (" · " .. SpecName(spec.master.learned)) or "")) or "모든 단계를 다 배웠어요")
-				c.sub:SetText(spec and "심화 과정까지 모두 배웠어요 · 남은 건 상인 · 드랍 제조법" or "이 기술은 심화 과정이 없어요 · 남은 건 상인 · 드랍 제조법")
+				c.sub:SetText(spec and "심화 과정까지 모두 배움 · 남은 건 상인 · 드랍 제조법" or "심화 과정 없는 기술 · 남은 건 상인 · 드랍 제조법")
 			else
 				c.name:SetText("다음 단계 훈련사에게 배우면 계속 올릴 수 있어요")
 				c.sub:SetText("")
@@ -1326,22 +1435,12 @@ function M:Paint()
 				local sp = nx.spots[1]
 				local costT = M.RankCostText(nx)
 				local costN = (not nx.book and not nx.quest) and costT:gsub("%s+$", "") or ""
-				local _, where = M.NextRankText(nx)
 				local ready = lv >= nx.lvl and skill >= nx.skill
 				local near = i == 1 and skill >= max - 25
 				local state = ready and "|cff6FD39A지금 배움|r" or (lv < nx.lvl and ("|cffFF6B5E" .. nx.lvl .. "레벨|r") or ("숙련도 " .. nx.skill))
 				local how = nx.book and "책" or (nx.quest and "퀘스트" or nil)
-				local tip = { nx.name .. " 단계 (" .. nx.cap .. "까지)", where, nx.lvl .. "레벨 · 숙련도 " .. nx.skill .. " 필요",
-					costT ~= "" and ("비용: " .. costT .. (nx.cost and not nx.costSeen and " (기본 값 · 평판이 높으면 싸져요)" or "")) or "",
-					nx.svc and ("훈련사 창에서 '" .. nx.svc .. "' 배우기") or "",
-					nx.book and "훈련사가 아니라 책으로 배워요 (그 NPC 가 팔아요)" or (nx.quest and "훈련사가 아니라 퀘스트로 배워요" or ""),
-					sp and TRAINER_NOTE[sp.npc] or "" }
-				for k = 2, math.min(3, #nx.spots) do
-					local s2 = nx.spots[k]
-					tip[#tip + 1] = string.format("그 밖에: %s · %s %.0f, %.0f", TrainerName(s2.npc, s2.en), ZoneName(s2.map), s2.x, s2.y)
-				end
-				if sp then tip[#tip + 1] = "누르면 지도에 표시" end
-				local sub = sp and string.format("%s · %s %.0f, %.0f", TrainerName(sp.npc, sp.en), ZoneName(sp.map), sp.x, sp.y) or "배우는 곳 정보 없음"
+				local tip = RankTip(nx)
+				local sub = sp and Short(20, TrainerName(sp.npc, sp.en), ZoneName(sp.map)) or "배우는 곳 정보 없음"
 				row(M.RankIcon(nx), nx.name .. " 단계  |cff8A9099" .. nx.cap .. "까지" .. (how and (" · " .. how) or "") .. (costN ~= "" and (" · " .. costN) or "") .. "|r",
 					sub, state, (ready or near) and (ready and GREEN or GOLD) or nil, tip, not ready and i > 1)
 				if sp then p.rows[nr].vendor = { sp.npc, sp.map, sp.x, sp.y, label = "훈련사" } end
@@ -1358,42 +1457,41 @@ function M:Paint()
 			local def = grp.def
 			local ok, stateT = SpecReady(def, skill, lv)
 			head(isMaster and "대가 과정 · 무기제작 다음" or def.group,
-				grp.learned and ("배움: " .. (grp.learned.short or grp.learned.name)) or string.format("%d레벨 · 숙련도 %d · %s", def.lvl, def.skill, def.one))
+				grp.learned and ("배움: " .. (grp.learned.short or grp.learned.name)) or string.format("%d레벨 · 숙련도 %d", def.lvl, def.skill))
 			-- 내 직업 추천 한 줄 (안 배웠을 때)
 			if not grp.learned then
 				local s = grp.best or def.list[1]
-				local _, why = Fit(s, cls)
-				local tip = { ClassName(cls) .. "에게 맞는 " .. (isMaster and "대가 과정" or "심화 과정") }
-				for _, l in ipairs(FitTable(def)) do tip[#tip + 1] = l end
-				tip[#tip + 1] = "클래식 기준 일반론 · 포에버 패치로 바뀔 수 있어요"
+				local _, why, long = Fit(s, cls)
+				local _, pin = SpecTip(prof, s, def, isMaster)
+				local tip = { ClassText(cls) .. "에게 맞는 " .. (isMaster and "대가 과정" or "심화 과정") }
 				if grp.best then
-					row(SpellIcon(s.spell) or ProfIcon(prof), ClassName(cls) .. " 추천  " .. SpecName(s) .. (#grp.alt > 0 and (" · " .. SpecName(grp.alt[1])) or ""),
+					tip[#tip + 1] = TipKV("추천", SpecName(s) .. (#grp.alt > 0 and (" · " .. (grp.alt[1].short or "")) or ""), TIP_SOFT, TIP_GOLD)
+					if long then tip[#tip + 1] = long end
+				end
+				FitTable(def, tip)
+				if pin then tip[#tip + 1] = TipHint("누르면 지도에 " .. (s.short or s.name) .. " 위치") end
+				if grp.best then
+					row(SpellIcon(s.spell) or ProfIcon(prof), ClassText(cls) .. " 추천  " .. SpecName(s) .. (#grp.alt > 0 and (" · " .. (grp.alt[1].short or "")) or ""),
 						why or "", "|cffFFD15F추천|r", GOLD, tip)
 				else
 					row(ProfIcon(prof), "고르는 법", def.advice or def.one or "", "", nil, tip)
 				end
-				local _, pin = SpecTip(prof, s, def, isMaster)
 				p.rows[nr].vendor = pin
 			end
 			for _, s in ipairs(def.list) do
-				local tip, pin = SpecTip(prof, s, def, isMaster)
+				local tip, pin = SpecTip(prof, s, def, isMaster, not isMaster and not grp.learned)
 				local learned = grp.learned == s
 				local other = grp.learned and not learned
 				local sc = Fit(s, cls)
 				local w = PickWho(s.who)
 				local st = (not grp.learned) and s.start and PickWho(s.start) or nil
-				local sub = w and (TrainerName(w.npc, w.en) .. (w.map and (" · " .. ZoneName(w.map)) or "")) or ""
-				if st then sub = "시작 " .. TrainerName(st.npc, st.en) .. (st.map and (" · " .. ZoneName(st.map)) or "") .. "  →  " .. sub end
+				local who = (st and st.map) and st or w
+				local sub = who and Short(20, (who == st and "시작 " or "") .. TrainerName(who.npc, who.en), who.map and ZoneName(who.map) or nil) or ""
 				local right = learned and "|cff6FD39A배움|r" or (other and "다른 과정" or stateT)
 				local rec = not def.advice and sc >= 2 and not grp.learned
 				local dot = learned and GREEN or ((rec and ok) and GOLD or nil)
 				row(SpellIcon(s.spell) or ProfIcon(prof), SpecName(s) .. (rec and "  |cffFFD15F추천|r" or ""), sub, right, dot, tip, other or (not grp.learned and not ok))
 				p.rows[nr].vendor = pin
-			end
-			if not isMaster and not grp.learned and def.switch then
-				-- 마지막 줄 툴팁에 바꾸는 법
-				local t = p.rows[nr].tip
-				if t then t[#t + 1] = def.switch end
 			end
 			y = y + 6
 		end
@@ -1416,7 +1514,8 @@ function M:Paint()
 			local r = up[i]
 			local mats = {}
 			for _, rg in ipairs(r.reagents) do mats[#mats + 1] = (rg.name or "?") .. " " .. rg.need end
-			local tip = { r.name, (r.diff == 0 and "주황: 만들 때마다 숙련도 +1" or "노랑: 대부분 숙련도 +1"), table.concat(mats, ", ") }
+			local tip = { r.name, TipT(r.diff == 0 and "주황 · 만들 때마다 숙련도 +1" or "노랑 · 대부분 숙련도 +1", DIFF_C[r.diff]), TipH("재료 (한 번에)") }
+			for _, rg in ipairs(r.reagents) do tip[#tip + 1] = TipKV(rg.name or "?", rg.need .. "개", TIP_SOFT, TIP_WHITE) end
 			row(r.icon, r.name, table.concat(mats, " · "), r.avail > 0 and ("|cff6FD39A" .. r.avail .. "개 가능|r") or "재료 부족", DIFF_C[r.diff], tip, r.avail == 0)
 			p.rows[nr].link = r.link
 		end
@@ -1436,23 +1535,30 @@ function M:Paint()
 				local vx = (not kr) and PickVendor(VendorIndex(name)[s[3]])
 				local rt, rcost
 				if not kr and not vx then rt, rcost = M.RouteTrainer(prof, s[3], s[6]) end
-				local tip = { s[3], string.format("숙련도 %d → %d · %d번 만들기", s[1], s[2], s[4]), "재료: " .. table.concat(mats, ", ") }
-				if vx then
+				local tip = { s[3], TipKV("숙련도", s[1] .. " → " .. s[2], TIP_SOFT, TIP_WHITE), TipKV("만들기", s[4] .. "번", TIP_SOFT, TIP_WHITE), TipH("재료 (구간 전체)") }
+				for _, m in ipairs(s[5]) do tip[#tip + 1] = TipKV(m[1], m[2] .. "개" .. (m[3] and m[3] ~= "" and ("  |cff8A9099" .. m[3] .. "|r") or ""), TIP_SOFT, TIP_WHITE) end
+				if kr then
+					tip[#tip + 1] = TipH("이미 배운 제조법")
+				elseif vx then
 					local who, where, price = VendorText(vx)
-					tip[#tip + 1] = "배우는 곳: " .. (s[6] or "?")
-					tip[#tip + 1] = "상인: " .. who .. " · " .. where .. (price ~= "" and (" · " .. price) or "")
-					tip[#tip + 1] = "누르면 지도에 상인 위치"
+					tip[#tip + 1] = TipH("파는 상인")
+					tip[#tip + 1] = TipKV(who, price ~= "" and price or " ", TIP_WHITE, TIP_GOLD)
+					tip[#tip + 1] = TipKV(" ", where, TIP_SOFT, TIP_MUTED)
+					tip[#tip + 1] = TipHint("누르면 지도에 상인 위치")
 				elseif rt then
-					tip[#tip + 1] = string.format("가르치는 훈련사: %s · %s %.0f, %.0f%s", TrainerName(rt.npc, rt.en), ZoneName(rt.map), rt.x, rt.y, rcost and (" · " .. rcost) or "")
-					if TRAINER_NOTE[rt.npc] then tip[#tip + 1] = TRAINER_NOTE[rt.npc] end
-					tip[#tip + 1] = "누르면 지도에 훈련사 위치"
+					tip[#tip + 1] = TipH("가르치는 훈련사")
+					tip[#tip + 1] = TipKV(TrainerName(rt.npc, rt.en), rcost or " ", TIP_WHITE, TIP_GOLD)
+					tip[#tip + 1] = TipKV(" ", string.format("%s  %.0f, %.0f", ZoneName(rt.map), rt.x, rt.y), TIP_SOFT, TIP_MUTED)
+					if TRAINER_NOTE[rt.npc] then tip[#tip + 1] = TipT(TRAINER_NOTE[rt.npc], TIP_GOLD) end
+					tip[#tip + 1] = TipHint("누르면 지도에 훈련사 위치")
 				else
-					tip[#tip + 1] = "배우는 곳: " .. (s[6] or "?")
+					tip[#tip + 1] = TipH("배우는 곳")
+					tip[#tip + 1] = TipT(s[6] or "?", TIP_WHITE)
 				end
 				local ssid = (not kr or not kr.link) and CraftSpellByName(s[3]) or nil
 				local sitem = CraftItem(ssid) or (not kr and ItemByName(s[3])) or nil
 				local sub = string.format("%d → %d  ·  %d번", s[1], s[2], s[4])
-				if rt then sub = sub .. "  ·  " .. TrainerName(rt.npc, rt.en) .. " · " .. ZoneName(rt.map) end
+				if rt then sub = Short(21, sub, TrainerName(rt.npc, rt.en)) end
 				row((kr and kr.icon) or (ssid and CraftIcon(ssid)) or (sitem and ItemIcon(sitem)) or 134400, s[3],
 					sub, kr and "|cff6FD39A배움|r" or (rt and (rcost or "훈련사") or (s[6] or "")), nil, tip, false)
 				p.rows[nr].vendor = vx or (rt and { rt.npc, rt.map, rt.x, rt.y, label = "훈련사" }) or nil
@@ -1481,8 +1587,9 @@ function M:Paint()
 				local who, where, price = VendorText(e.x)
 				local icon = CraftIcon(e.v.spell) or ItemIcon(e.v.item) or 134939
 				local req = e.v.req or 0
-				row(icon, e.craft, who .. " · " .. where, price ~= "" and price or ("숙련도 " .. req), req <= skill and GREEN or nil,
-					{ e.craft, "필요 숙련도 " .. req, "상인: " .. who, where, price ~= "" and ("값: " .. price) or "", "누르면 지도에 상인 위치" }, req > skill)
+				row(icon, e.craft, Short(20, who, where), price ~= "" and price or ("숙련도 " .. req), req <= skill and GREEN or nil,
+					{ e.craft, TipKV("필요 숙련도", req, TIP_SOFT, req <= skill and TIP_GREEN or TIP_WHITE), TipH("파는 상인"),
+						TipKV(who, price ~= "" and price or " ", TIP_WHITE, TIP_GOLD), TipKV(" ", where, TIP_SOFT, TIP_MUTED), TipHint("누르면 지도에 상인 위치") }, req > skill)
 				p.rows[nr].vendor = e.x
 				p.rows[nr].item = e.v.item   -- 제조법 툴팁: 만들어지는 아이템까지 같이 나온다
 			end
@@ -1523,14 +1630,12 @@ function M:Paint()
 				local t = e.who[1]
 				local who = TrainerName(t.npc, t.en)
 				local icon = CraftIcon(e.sid) or 134939
-				local tip = { e.name, "필요 숙련도 " .. e.la }
-				for k = 1, math.min(3, #e.who) do
-					local w = e.who[k]
-					tip[#tip + 1] = string.format("배우는 곳: %s · %s %.0f, %.0f", TrainerName(w.npc, w.en), ZoneName(w.map), w.x, w.y)
-				end
-				if costByName[e.name] then tip[#tip + 1] = "비용 " .. Money(costByName[e.name]) end
-				tip[#tip + 1] = "누르면 지도에 훈련사 위치"
-				row(icon, e.name, "숙련도 " .. e.la .. "  ·  " .. who .. " · " .. ZoneName(t.map),
+				local tip = { e.name, TipKV("필요 숙련도", e.la, TIP_SOFT, e.la <= skill and TIP_GREEN or TIP_WHITE) }
+				if costByName[e.name] then tip[#tip + 1] = TipKV("비용", Money(costByName[e.name]), TIP_SOFT, TIP_GOLD) end
+				tip[#tip + 1] = TipH("배우는 곳")
+				for k = 1, math.min(3, #e.who) do WhoLines(tip, k == 1 and "가까운 곳" or "그 밖에", e.who[k]) end
+				tip[#tip + 1] = TipHint("누르면 지도에 훈련사 위치")
+				row(icon, e.name, Short(21, "숙련도 " .. e.la, who, ZoneName(t.map)),
 					costByName[e.name] and Money(costByName[e.name]) or (e.la <= skill and "|cff6FD39A지금 배움|r" or ""), e.la <= skill and GREEN or nil, tip, e.la > skill)
 				p.rows[nr].vendor = { t.npc, t.map, t.x, t.y, label = "훈련사" }
 				p.rows[nr].item = CraftItem(e.sid)
@@ -1589,9 +1694,9 @@ function M:CapCheck()
 					for _, v in ipairs(def.list) do shorts[#shorts + 1] = v.short or v.name end
 					local st = s.start and PickWho(s.start)
 					local w = (st and st.map) and st or PickWho(s.who)
-					print(string.format("|cffFFF468FOA|r %s %d · %s을 배울 수 있어요 (%s · %s) · %s %s → %s", name, rank,
-						grp == sp.master and "무기제작 대가 과정" or "심화 과정", table.concat(shorts, " · "), def.one or "",
-						grp.best and "추천" or "예:", SpecName(s), WhoText(w)))
+					print(string.format("|cffFFF468FOA|r %s %d · %s을 배울 수 있어요 |cff8A9099(%s · %s)|r", name, rank,
+						grp == sp.master and "무기제작 대가 과정" or "심화 과정", table.concat(shorts, " · "), def.one or ""))
+					print(string.format("      %s|cffFFD15F%s|r → %s  |cff8A9099· 전문기술 창에서 자세히|r", grp.best and "추천 " or "", SpecName(s), WhoText(w)))
 				end
 			end
 		end
@@ -1607,9 +1712,10 @@ function M:CapCheck()
 					local sp = info.spots[1]
 					if sp and TRAINER_NOTE[sp.npc] then need[#need + 1] = TRAINER_NOTE[sp.npc] end
 					local costT = M.RankCostText(info)
-					print(string.format("|cffFFF468FOA|r %s %d/%d · 다음 %s → %s%s%s", name, rank, max, head, where,
-						costT ~= "" and (" · |cffFFD15F" .. costT .. "|r") or "",
-						#need > 0 and (" · |cffFF8A80" .. table.concat(need, ", ") .. "|r") or ""))
+					print(string.format("|cffFFF468FOA|r %s %d/%d · 곧 막혀요 → 다음은 %s", name, rank, max, head))
+					print(string.format("      %s%s%s", where,
+						costT ~= "" and ("  |cffFFD15F" .. costT .. "|r") or "",
+						#need > 0 and ("  |cffFF8A80" .. table.concat(need, ", ") .. "|r") or ""))
 				end
 			end
 		end
