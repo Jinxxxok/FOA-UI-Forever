@@ -3784,6 +3784,10 @@ local function BuildChain(comp, inSet, byId)
 	end
 	A(final, 0)
 	-- 던전 밖 선행 (처음부터 순서대로)
+	--  이 묶음에 없는 선행은 모두 넣는다. 같은 날개 목록에 따로 있는 선행(예: 연기 나는 타우릿산의 폐허 →
+	--  카란 마이트해머 → … → 브론즈비어드 공주)이 줄에서 빠지면 그 다음 단계가 '받기'로 잘못 떴다
+	local compSet = {}
+	for _, id in ipairs(comp) do compSet[id] = true end
 	local steps, seen = {}, {}
 	local roots = {}
 	for _, id in ipairs(comp) do roots[#roots + 1] = id end
@@ -3792,9 +3796,9 @@ local function BuildChain(comp, inSet, byId)
 		local ch = {}
 		Chain(id, ch, {}, 0)
 		for _, p in ipairs(ch) do
-			if not inSet[p] and not seen[p] then
+			if not compSet[p] and not seen[p] then
 				seen[p] = true
-				steps[#steps + 1] = { id = p, ext = true, opt = IsCrumb(p) and true or false, side = not anc[id] }
+				steps[#steps + 1] = { id = p, ext = true, inList = inSet[p] and true or false, opt = IsCrumb(p) and true or false, side = not anc[id] }
 			end
 		end
 	end
@@ -3812,10 +3816,13 @@ local function BuildChain(comp, inSet, byId)
 	return steps
 end
 
--- 단계 하나의 상태: done · log · ok · soon
+-- 단계 하나의 상태: done · log · pre(선행이 남음) · ok · soon
 local function StepState(st, lvl)
 	if QDone(st.id) then return "done" end
 	if QInLog(st.id) then return "log" end
+	for _, p in ipairs((PreOf(st.id))) do
+		if not QDone(p) and not IsCrumb(p) then return "pre" end
+	end
 	local need
 	if st.e then need = st.e.q[2] else
 		local _, dq, qr = PreOf(st.id)
@@ -3850,10 +3857,22 @@ function M:DungeonQuestView(key)
 	end
 	local lvl = UnitLevel("player") or 1
 	local singles, view = {}, {}
+	local built, inChain = {}, {}
+	for _, r in ipairs(order) do
+		local steps = BuildChain(comps[r], inSet, byId)
+		built[r] = steps
+		if #steps >= 2 then
+			for _, st in ipairs(steps) do if st.ext and st.inList then inChain[st.id] = true end end
+		end
+	end
 	for _, r in ipairs(order) do
 		local comp = comps[r]
-		local steps = BuildChain(comp, inSet, byId)
-		if #steps < 2 then
+		local steps = built[r]
+		local covered = true
+		for _, id in ipairs(comp) do if not inChain[id] then covered = false break end end
+		if covered then
+			-- 모두 다른 줄의 선행 단계로 보이고 있다
+		elseif #steps < 2 then
 			for _, id in ipairs(comp) do singles[#singles + 1] = byId[id] end
 		else
 			-- 던전 단계를 못 찾으면(바깥 NPC 가 주고 목표만 던전 안) 본줄기의 마지막 던전 목록 퀘스트를 던전 단계로
@@ -3899,7 +3918,9 @@ function M:DungeonQuestView(key)
 			elseif cur == curDung then
 				local st = steps[cur]
 				g.now = st
-				if st.state == "soon" then g.state, g.order = "soon", 3 else g.state, g.order = "ok", 2 end
+				if st.state == "soon" then g.state, g.order = "soon", 3
+				elseif st.state == "pre" then g.state, g.order, g.miss = "pre", 4, 1
+				else g.state, g.order = "ok", 2 end
 			else
 				local n = 0
 				for i = cur, curDung - 1 do
@@ -4507,6 +4528,7 @@ function M:PaintStep(r, st, first, last, prevDone)
 	local now = st.current or st.state == "log"
 	local nowC = (st.state == "log" and not ready) and C.accent or C.green
 	if st.state == "soon" and st.current then nowC = C.orange end
+	if st.state == "pre" and st.current then nowC = C.muted end
 	-- 점
 	local function size(t, u, kind)
 		local v = PxEven(r, u)
@@ -4587,6 +4609,7 @@ function M:PaintStep(r, st, first, last, prevDone)
 		end
 	elseif st.current then
 		if st.state == "soon" then r.pill:Set((st.need or "") .. "레벨부터", C.orange, 0, 0.55)
+		elseif st.state == "pre" then r.pill:Set("선행 필요", C.muted, 0, 0.3)
 		else r.pill:Set("받기", C.green, 0.16, 0.5) end
 	elseif st.side then r.pill:Set("갈래", C.muted, 0, 0.3)
 	elseif st.opt then r.pill:Set("선택", C.muted, 0, 0.3)
