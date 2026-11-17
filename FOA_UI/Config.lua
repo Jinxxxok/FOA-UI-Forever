@@ -2482,6 +2482,9 @@ SlashCmdList.INKUI = function(msg)
 	elseif msg == "reset" then
 		M:ResetAll()
 		print("|cffFFF468FOA|r 모든 위치를 기본값으로 되돌렸어요.")
+	elseif msg == "cast" or msg == "시전" then
+		local U = Ink.modules.Units
+		if U and U.CastDiag then U:CastDiag() end
 	elseif msg == "debug" then
 		print("|cffFFF468FOA|r 마지막 오라 오류: " .. tostring(Ink.auraErr or "없음"))
 	elseif msg == "obj" or msg == "물체" then

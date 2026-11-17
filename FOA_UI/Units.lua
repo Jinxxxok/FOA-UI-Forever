@@ -613,30 +613,86 @@ local function CastBar(parent, w, barH, fillColor, nameColor)
 			local now = GetTime() * 1000
 			self.bar:SetValue(now)
 			self.time:SetFormattedText("%.1f", math.max(0, (self.endTime - now) / 1000))
+			-- 이벤트로 그린 시전(다른 플레이어)은 끝 신호를 못 받아도 시간이 지나면 접는다
+			if self.synth and now > self.endTime + 400 and not self.fxState then
+				self.synth, self.ev, self.endTime = nil, nil, nil
+				self:Hide()
+			end
+		elseif self.synth and GetTime() - (self.synthT or 0) > 60 and not self.fxState then
+			self.synth, self.ev = nil, nil
+			self:Hide()
 		end
 	end)
 	return cb
 end
 
+-- 대상이 파티 · 공격대원이면 그 사람의 그룹 토큰 (party2 · raid7 …)
+local function GroupTokenOf(unit)
+	if not UnitExists(unit) or not IsInGroup() or not plain(UnitIsPlayer(unit)) then return nil end
+	local raid = IsInRaid()
+	for i = 1, raid and 40 or 4 do
+		local u = (raid and "raid" or "party") .. i
+		if UnitExists(u) and plain(UnitIsUnit(u, unit)) then return u end
+	end
+end
+
+-- 주문 이름 · 시전 시간(ms). 다른 플레이어 시전을 이벤트로 그릴 때 쓴다 (내 기준 시간이라 근사치)
+local function SpellCastTime(spellID)
+	if not spellID then return end
+	if C_Spell and C_Spell.GetSpellInfo then
+		local ok, i = pcall(C_Spell.GetSpellInfo, spellID)
+		if ok and i then return plain(i.name), plain(i.castTime) end
+	end
+	if GetSpellInfo then
+		local ok, n, _, _, ct = pcall(GetSpellInfo, spellID)
+		if ok then return plain(n), plain(ct) end
+	end
+end
+
+-- 시전 정보 한 번 읽기: name, text, start, end, notInterruptible, spellID, isChannel
+local function ReadCast(unit)
+	local name, text, _, startTime, endTime, _, _, notInterruptible, spellID = UnitCastingInfo(unit)
+	if name then return name, text, startTime, endTime, notInterruptible, spellID, false end
+	name, text, _, startTime, endTime, _, notInterruptible, spellID = UnitChannelInfo(unit)
+	if name then return name, text, startTime, endTime, notInterruptible, spellID, true end
+end
+
 local function CastUpdate(cb, unit)
 	if not cb or cb.preview then return end
-	local channelTicks, isChannel
-	local name, text, _, startTime, endTime, _, _, notInterruptible = UnitCastingInfo(unit)
-	local dur, dir
-	local E = Enum.StatusBarTimerDirection
-	if name then
-		dur = UnitCastingDuration and UnitCastingDuration(unit)
-		dir = E and E.ElapsedTime
-	else
-		local spellID
-		name, text, _, startTime, endTime, _, notInterruptible, spellID = UnitChannelInfo(unit)
-		if name then
-			isChannel = true
-			dur = UnitChannelDuration and UnitChannelDuration(unit)
-			dir = E and E.RemainingTime
-			channelTicks = plain(spellID) and CHANNEL_TICKS[plain(spellID)] or nil
+	-- 1) 그 토큰 그대로  2) 파티 · 공격대원이면 그룹 토큰으로  3) 둘 다 비면 시전 이벤트로 기억해 둔 것
+	--    (포에버는 다른 플레이어 시전을 대상 토큰으로 안 줄 때가 있다)
+	local src = unit
+	local name, text, startTime, endTime, notInterruptible, spellID, isChannel = ReadCast(unit)
+	if not name and unit ~= "player" then
+		local g = GroupTokenOf(unit)
+		if g then
+			name, text, startTime, endTime, notInterruptible, spellID, isChannel = ReadCast(g)
+			if name then src = g end
 		end
 	end
+	local synth
+	if not name then
+		local ev = cb.ev
+		if ev and ev.guid and ev.guid == plain(UnitGUID(unit)) and (not ev.e or GetTime() * 1000 < ev.e + 150) then
+			name, isChannel, startTime, endTime, spellID = ev.name, ev.channel, ev.s, ev.e, ev.spell
+			synth = true
+		end
+	end
+	local channelTicks, dur, dir
+	local E = Enum.StatusBarTimerDirection
+	if name and not synth then
+		if isChannel then
+			dur = UnitChannelDuration and UnitChannelDuration(src)
+			dir = E and E.RemainingTime
+		else
+			dur = UnitCastingDuration and UnitCastingDuration(src)
+			dir = E and E.ElapsedTime
+		end
+	end
+	if name and isChannel then
+		channelTicks = plain(spellID) and CHANNEL_TICKS[plain(spellID)] or nil
+	end
+	cb.synth = synth
 	if not name then
 		-- 시전 결과(성공 섬광 · 차단 흔들림)를 보여 주는 중이면 그대로 둔다
 		if cb.hold and GetTime() < cb.hold then return end
@@ -655,7 +711,13 @@ local function CastUpdate(cb, unit)
 	end
 	cb.name:SetText(text or name)
 	cb.dur, cb.endTime = nil, nil
-	if dur and cb.bar.SetTimerDuration then
+	if synth and not endTime then
+		-- 길이를 모르는 정신 집중(다른 플레이어): 꽉 찬 막대로 멈출 때까지
+		cb.synthT = GetTime()
+		cb.bar:SetMinMaxValues(0, 1)
+		cb.bar:SetValue(1)
+		cb.time:SetText("")
+	elseif dur and cb.bar.SetTimerDuration then
 		local interp = Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.Immediate or 0
 		if not pcall(cb.bar.SetTimerDuration, cb.bar, dur, interp, dir) then
 			pcall(cb.bar.SetTimerDuration, cb.bar, dur)
@@ -1490,10 +1552,14 @@ function M:Init()
 	}) do
 		pcall(e.RegisterEvent, e, ev) -- 클라이언트마다 없는 이벤트가 있다 (기분은 포에버만)
 	end
-	e:SetScript("OnEvent", function(_, event, unit)
+	e:SetScript("OnEvent", function(_, event, unit, castGUID, spellID)
 		if M.testing then
 			if unit == "player" then M:UpdateAll() end
 			if event:find("^UNIT_") then return end
+		end
+		if event:find("^UNIT_SPELLCAST") then
+			M:CastEvent(event, unit, castGUID, spellID)
+			return
 		end
 		if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_UPDATE_RESTING" then
 			M:UpdateStatus()
@@ -1501,6 +1567,7 @@ function M:Init()
 		elseif event == "PLAYER_TARGET_CHANGED" then
 			if ns.FX then ns.FX.TrailSnap(M.target.hp, "target") end
 			if M.target.cast.fxState and ns.FX then ns.FX.CastReset(M.target.cast) end
+			M.target.cast.ev = nil
 			M:UpdateUnit(M.target)
 			M:UpdateUnit(M.tot)
 			return
@@ -1542,16 +1609,96 @@ function M:Init()
 				-- 해제 색이 붙거나 떨어질 때: 체력바 색을 다시 (해제 색이 없어지면 직업 색으로)
 				if f.fxDispel or not f.dispelWatch then M:UpdateHealth(f) end
 			end
-		elseif event:find("^UNIT_SPELLCAST") then
-			if f.cast then
-				local refresh = function() CastUpdate(f.cast, f.unit) end
-				if not (ns.FX and ns.FX.CastEvent(f.cast, event, refresh)) then refresh() end
-			end
 		else
 			M:UpdateInfo(f)
 		end
 	end)
 	Ink.ProfFrame(e, "유닛 프레임")
+end
+
+-------------------------------------------------------------------------------
+-- 대상 시전바 이벤트
+--  파티 · 공격대원을 대상으로 잡으면 클라이언트에 따라(포에버) 시전 이벤트가 "target" 이 아니라
+--  party2 · raid7 같은 그룹 토큰으로만 오고, UnitCastingInfo("target") 도 비어 있을 때가 있다.
+--  → 그룹 토큰 이벤트도 대상과 같은 사람이면 대상 시전바로 보내고,
+--    시작 이벤트의 주문 번호로 이름 · 시전 시간을 기억해 두었다가 API 가 비면 그걸로 그린다.
+-------------------------------------------------------------------------------
+local START = { UNIT_SPELLCAST_START = true, UNIT_SPELLCAST_CHANNEL_START = true }
+local FINISH = {
+	UNIT_SPELLCAST_STOP = true, UNIT_SPELLCAST_FAILED = true, UNIT_SPELLCAST_INTERRUPTED = true,
+	UNIT_SPELLCAST_CHANNEL_STOP = true, UNIT_SPELLCAST_SUCCEEDED = true,
+}
+local SHORT = {
+	UNIT_SPELLCAST_START = "시작", UNIT_SPELLCAST_CHANNEL_START = "집중 시작", UNIT_SPELLCAST_STOP = "멈춤",
+	UNIT_SPELLCAST_CHANNEL_STOP = "집중 멈춤", UNIT_SPELLCAST_SUCCEEDED = "성공", UNIT_SPELLCAST_FAILED = "실패",
+	UNIT_SPELLCAST_INTERRUPTED = "차단", UNIT_SPELLCAST_DELAYED = "지연", UNIT_SPELLCAST_CHANNEL_UPDATE = "집중 갱신",
+}
+
+function M:CastEvent(event, unit, castGUID, spellID)
+	local cb = self.target and self.target.cast
+	if not cb or type(unit) ~= "string" then return end
+	if unit ~= "target" then
+		if not (unit:find("^party") or unit:find("^raid")) then return end
+		if not UnitExists("target") or not plain(UnitIsUnit(unit, "target")) then return end
+	end
+	-- 같은 시전이 "target" 과 그룹 토큰으로 두 번 오는 클라이언트(본섭)에서는 한 번만
+	local gid, sid = plain(castGUID), plain(spellID)
+	local key = event .. "|" .. tostring(gid or sid)
+	local now = GetTime()
+	if cb.evKey == key and cb.evAt == now then return end
+	cb.evKey, cb.evAt = key, now
+
+	if START[event] then
+		local nm, ms = SpellCastTime(sid)
+		local channel = event == "UNIT_SPELLCAST_CHANNEL_START"
+		if nm and (channel or (ms and ms > 0)) then
+			cb.ev = { guid = plain(UnitGUID("target")), name = nm, spell = sid, cast = gid, channel = channel,
+				s = now * 1000, e = (not channel) and (now * 1000 + ms) or nil }
+		else
+			cb.ev = nil
+		end
+	elseif FINISH[event] and cb.ev then
+		local same = not gid or not cb.ev.cast or cb.ev.cast == gid
+		-- 정신 집중은 시작할 때도 '성공' 이 온다 → 집중 중엔 성공으로 지우지 않는다
+		if same and not (event == "UNIT_SPELLCAST_SUCCEEDED" and cb.ev.channel) then cb.ev = nil end
+	end
+
+	-- 진단용 최근 기록 (/foa 시전)
+	local log = self.castLog or {}
+	self.castLog = log
+	local api = ReadCast(unit) and "있음" or "없음"
+	log[#log + 1] = string.format("%.1f  %s  %s  주문 %s  · 정보 %s", now % 1000, unit, SHORT[event] or event, tostring(sid), api)
+	if #log > 12 then table.remove(log, 1) end
+
+	local refresh = function() CastUpdate(cb, "target") end
+	if not (ns.FX and ns.FX.CastEvent(cb, event, refresh)) then refresh() end
+end
+
+-- /foa 시전: 대상 시전바가 안 뜰 때 원인 확인용
+function M:CastDiag()
+	local P = "|cffFFF468FOA|r "
+	if not UnitExists("target") then
+		print(P .. "대상이 없어요. 시전하는 사람을 대상으로 잡고 다시 입력해 주세요.")
+	else
+		local g = GroupTokenOf("target")
+		local function show(u)
+			local name, _, _, _, _, sid, ch = ReadCast(u)
+			if not name then return "없음" end
+			return (plain(name) or "?") .. (ch and " (집중)" or "") .. " · 주문 " .. tostring(plain(sid))
+		end
+		print(P .. "대상 " .. tostring(plain(UnitName("target"))) .. "  ·  그룹 토큰 " .. tostring(g))
+		print("  target 시전 정보: " .. show("target"))
+		if g then print("  " .. g .. " 시전 정보: " .. show(g)) end
+		local cb = self.target.cast
+		print("  시전바 " .. (cb:IsShown() and "보임" or "숨김") .. (cb.synth and " (이벤트로 그림)" or ""))
+	end
+	local log = self.castLog or {}
+	if #log == 0 then
+		print("  대상 관련 시전 이벤트를 아직 못 받았어요.")
+	else
+		print("  최근 대상 시전 이벤트:")
+		for i = math.max(1, #log - 7), #log do print("|cff8E939B    " .. log[i] .. "|r") end
+	end
 end
 
 function M:Refresh()
