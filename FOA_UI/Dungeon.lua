@@ -875,13 +875,15 @@ function M:SourceLabel()
 	return "예시 순위 (BIS 자료 없음)"
 end
 
+-- 순위 글: 최고(BIS)가 1위, 그다음부터 2위 · 3위 · 4위 (예전 "다음 1 · 2순위" 처럼 두 숫자가 섞이지 않게)
 local function RankText(r)
 	if not r then return nil end
-	if r.lvlMode and r.pvp then return r.rank == 0 and "PvP BIS" or ("PvP 대체 " .. r.rank) end
-	if r.lvlMode then return r.rank == 0 and "레벨 최고" or ("다음 " .. r.rank) end
+	if r.lvlMode and r.pvp then return r.rank == 0 and "PvP BIS" or ("PvP " .. (r.rank + 1) .. "위") end
+	if r.lvlMode then return r.rank == 0 and "최고" or ((r.rank + 1) .. "위") end
 	if r.rank == 0 then return "BIS" end
-	return "대체 " .. r.rank
+	return (r.rank + 1) .. "위"
 end
+M.RankText = RankText
 
 -------------------------------------------------------------------------------
 -- 공용 꾸밈
@@ -926,8 +928,8 @@ local function Badge(parent)
 			self.line:SetVertexColor(a[1], a[2], a[3], 0.6)
 			self.text:SetFont(F.semi, Ink:BoostSize(10), "")
 			self.text:SetTextColor(a[1], a[2], a[3])
-			self.text:SetText((lv and "다음 " or "대체 ") .. r.rank)
-			self:SetWidth(44)
+			self.text:SetText((r.rank + 1) .. "위")
+			self:SetWidth(34)
 		end
 		self:Show()
 	end
@@ -2405,7 +2407,8 @@ function M:BossTooltip(owner, bi)
 		if ForMyClass(it) then nCls = nCls + 1 end
 	end
 	GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
-	GameTooltip:AddLine((b.rare and ((b.kind or 1) >= 2 and "선택 · " or "희귀 · ") or (b.order and (b.order .. ". ") or "")) .. BossName(b), 1, 1, 1)
+	GameTooltip:AddLine((b.rare and (b.kind == 3 and "" or ((b.kind or 1) >= 2 and "선택 · " or "희귀 · ")) or (b.order and (b.order .. ". ") or "")) .. BossName(b), 1, 1, 1)
+	if b.kind == 3 then GameTooltip:AddLine("보스가 아닌 던전 몹 아무에게서나 나와요", 0.7, 0.72, 0.75) end
 	if b.killed then GameTooltip:AddLine("처치함", DOWN_C[1], DOWN_C[2], DOWN_C[3]) end
 	GameTooltip:AddDoubleLine("전리품", nAll .. "개", 0.7, 0.72, 0.75, 1, 1, 1)
 	GameTooltip:AddDoubleLine("내 직업", nCls .. "개", 0.7, 0.72, 0.75, 1, 1, 1)
@@ -2861,7 +2864,7 @@ function M:PaintList(f, data, mode)
 			h.name:SetText(FOREVER and BossName(b) or b.name)
 			local sum = (nb > 0 and ("BIS " .. nb) or "") .. ((nb > 0 and na > 0) and " · " or "") .. (na > 0 and ("대체 " .. na) or "")
 			if sum == "" and FOREVER then sum = (#list > 0) and (#list .. "개") or (mode == "class" and "내 직업 없음" or "") end
-			if b.rare and FOREVER then sum = ((b.kind or 1) >= 2 and "선택" or "희귀") .. (sum ~= "" and (" · " .. sum) or "") end
+			if b.rare and FOREVER then sum = (b.kind == 3 and "아무 몹" or ((b.kind or 1) >= 2 and "선택" or "희귀")) .. (sum ~= "" and (" · " .. sum) or "") end
 			h.sum:SetText(done and "처치함" or sum)
 			h:SetAlpha((done or (FOREVER and #list == 0)) and 0.55 or 1)
 			h:Show()
@@ -3511,7 +3514,7 @@ function M:PaintBoard(data)
 	b.name:SetText(d and d.ko or data.name or "")
 	local nMain, nDown, nRare, nextB = 0, 0, 0, nil
 	for _, x in ipairs(data.bosses) do
-		if x.rare then nRare = nRare + 1 else
+		if x.rare then if x.kind ~= 3 then nRare = nRare + 1 end else
 			nMain = nMain + 1
 			if x.killed then nDown = nDown + 1 elseif not nextB then nextB = x end
 		end
@@ -5323,8 +5326,9 @@ function M:HookTooltip()
 		local _, _, _, specName = SpecKey()
 		tt:AddLine(" ")
 		tt:AddLine("|cffFFF468—|r  |cff8E939BFOA · " .. (UnitClass("player") or "") .. " " .. (specName or "") .. (M.isExample and " · 예시 순위" or "") .. "|r")
-		local label = "|cffFFF468" .. RankText(r) .. "|r"
-		tt:AddDoubleLine(label .. "  " .. (SLOT_NAME[r.slot] or "") .. " " .. (r.rank + 1) .. "순위", " ", 1, 1, 1)
+		-- "최고  허리 1위" · "허리 2위" (예전: "다음 1  허리 2순위")
+		local slotRank = (SLOT_NAME[r.slot] or "") .. " " .. (r.rank + 1) .. "위"
+		tt:AddDoubleLine(r.rank == 0 and ("|cffFFF468" .. RankText(r) .. "|r  " .. slotRank) or ("|cffFFF468" .. slotRank .. "|r"), " ", 1, 1, 1)
 		Ink.TipLine(tt, "|cff9EA3AB획득|r  " .. (M:SourceText(r.it) or ""), 1, 1, 1)
 	end)
 end
@@ -5894,7 +5898,7 @@ function M:PaintBis()
 			row.badge:SetShown(isBis)
 			if isBis then row.badge:Set(r) end
 			row.rank:SetShown(not isBis)
-			row.rank:SetText(r.rank)
+			row.rank:SetText(r.rank + 1)   -- 최고(배지)가 1위 · 그다음 2 · 3 · 4
 			row.bg:SetVertexColor(isBis and a[1] or 1, isBis and a[2] or 1, isBis and a[3] or 1, isBis and 0.06 or 0.025)
 			-- 내 장비: 이 칸에 착용 중 · 다른 칸(반지 · 장신구 · 주장비)에 착용 중 · 가방 · 은행
 			local o = own[it.id]

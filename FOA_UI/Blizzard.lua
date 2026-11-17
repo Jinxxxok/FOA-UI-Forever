@@ -919,6 +919,22 @@ end
 -------------------------------------------------------------------------------
 -- 채팅 스킨: 배경/탭/버튼 정리, 입력창은 아래에 딱 붙인다
 -------------------------------------------------------------------------------
+-- 떼어 낸 대화창 탭: FOA 글꼴로 바꾸면 블리자드가 예전 글꼴로 잰 폭에 안 들어가 "..." 로 잘렸다 → 글자 폭에 맞춰 넓힌다
+--  (붙어 있는 탭은 블리자드 독이 다시 줄 세우니 건드리지 않는다)
+local function FitTabText(tab, cf)
+	if not tab or not cf or plain(cf.isDocked) then return end
+	local text = tab.Text or (tab.GetFontString and tab:GetFontString())
+	if not text then return end
+	local w = (text.GetUnboundedStringWidth and text:GetUnboundedStringWidth()) or text:GetStringWidth() or 0
+	if not w or w <= 0 then return end
+	local need = math.ceil(w) + 24
+	safe(function()
+		if tab:GetWidth() < need then tab:SetWidth(need) end
+		if text.SetWidth then text:SetWidth(math.ceil(w) + 4) end
+	end)
+end
+M.FitTabText = FitTabText
+
 local function SkinTab(tab)
 	if not tab or tab.inkSkinned then return end
 	tab.inkSkinned = true
@@ -977,12 +993,19 @@ local function SkinEditBox(eb, cf)
 	eb:SetFont(F.sans, 13, "")
 	if eb.header then eb.header:SetFont(F.semi, 13, "") end
 	if eb.headerSuffix then eb.headerSuffix:SetFont(F.semi, 13, "") end
-	safe(function()
-		eb:ClearAllPoints()
-		eb:SetPoint("TOPLEFT", cf, "BOTTOMLEFT", -4, -6)
-		eb:SetPoint("TOPRIGHT", cf, "BOTTOMRIGHT", 4, -6)
-		eb:SetHeight(28)
-	end)
+	-- 입력칸 자리: 어느 대화창의 입력칸이 열리든 기본 채팅창(1번) 밑 같은 자리에
+	--  (떼어 낸 대화창은 내역만 · 예전엔 그 창 밑에 입력칸이 하나 더 생겨 두 개로 보였다)
+	local function Anchor()
+		local host = ChatFrame1 or cf
+		safe(function()
+			eb:ClearAllPoints()
+			eb:SetPoint("TOPLEFT", host, "BOTTOMLEFT", -4, -6)
+			eb:SetPoint("TOPRIGHT", host, "BOTTOMRIGHT", 4, -6)
+			eb:SetHeight(28)
+		end)
+	end
+	Anchor()
+	if cf ~= ChatFrame1 then eb:HookScript("OnShow", Anchor) end
 	-- 입력창이 닫혀 있을 때도 자리를 보여주는 안내 칸
 	if cf == ChatFrame1 then
 		local ph = CreateFrame("Frame", nil, cf)
@@ -995,10 +1018,22 @@ local function SkinEditBox(eb, cf)
 		ph.text = Ink:Text(ph, F.sans, 12, C.dim, "LEFT")
 		ph.text:SetPoint("LEFT", 10, 0)
 		ph.text:SetText("Enter로 채팅 입력")
+		M.chatPlaceholder = ph
 		ph:SetShown(not eb:IsShown())
-		eb:HookScript("OnShow", function() ph:Hide() end)
-		eb:HookScript("OnHide", function() ph:Show() end)
 	end
+	-- 안내 칸은 어느 입력칸이든 열려 있으면 숨긴다 (입력칸은 모두 같은 자리)
+	local function SyncPH()
+		local ph = M.chatPlaceholder
+		if not ph then return end
+		local any = false
+		for i = 1, (NUM_CHAT_WINDOWS or 10) do
+			local b = _G["ChatFrame" .. i .. "EditBox"]
+			if b and b:IsShown() then any = true break end
+		end
+		ph:SetShown(not any)
+	end
+	eb:HookScript("OnShow", SyncPH)
+	eb:HookScript("OnHide", function() C_Timer.After(0, SyncPH) end)
 end
 
 -- 채팅 글꼴: 설정(db.chatFont) = set(FOA 글꼴 묶음) / game(게임 기본) / pretendard / mubig, 테두리(db.chatOutline)
@@ -1097,6 +1132,12 @@ end
 M.UpdateChatGrips = function()
 	for cf in pairs(chatGrip) do UpdateGrip(cf) end
 end
+M.FitChatTabs = function()
+	for i = 1, (NUM_CHAT_WINDOWS or 10) do
+		local cf = _G["ChatFrame" .. i]
+		if cf then FitTabText(_G["ChatFrame" .. i .. "Tab"], cf) end
+	end
+end
 
 local function SkinChatFrame(cf)
 	if not cf or chatSkinned[cf] then return end
@@ -1128,6 +1169,7 @@ local function SkinChatFrame(cf)
 	cf:SetShadowOffset(1, -1)
 	cf:SetShadowColor(0, 0, 0, 0.8)
 	SkinTab(_G[name .. "Tab"])
+	FitTabText(_G[name .. "Tab"], cf)
 	SkinEditBox(cf.editBox or _G[name .. "EditBox"], cf)
 	AddGrip(cf)
 end
@@ -1295,11 +1337,12 @@ function M:SkinChat()
 			hooksecurefunc("FCFTab_UpdateColors", TabColors)
 		end
 		-- 창을 떼거나 붙이거나 잠글 때 손잡이 보이기 · 숨기기
-		for _, fn in ipairs({ "FCF_DockFrame", "FCF_UnDockFrame", "FCF_SetLocked", "FCF_OpenNewWindow", "FCF_Close" }) do
+		for _, fn in ipairs({ "FCF_DockFrame", "FCF_UnDockFrame", "FCF_SetLocked", "FCF_OpenNewWindow", "FCF_Close", "FCF_SetWindowName" }) do
 			if type(_G[fn]) == "function" then
 				hooksecurefunc(fn, function()
 					for _, n in ipairs(CHAT_FRAMES or {}) do SkinChatFrame(_G[n]) end
 					C_Timer.After(0, M.UpdateChatGrips)
+					C_Timer.After(0, M.FitChatTabs)
 				end)
 			end
 		end
@@ -1317,6 +1360,9 @@ function M:SkinChat()
 		local tab = _G["ChatFrame" .. i .. "Tab"]
 		if tab then TabColors(tab, SELECTED_CHAT_FRAME == _G["ChatFrame" .. i] or (i == 1 and not SELECTED_CHAT_FRAME)) end
 	end
+	-- 접속 직후 블리자드가 창 이름을 다시 넣으며 탭 폭을 예전 글꼴로 다시 재는 경우가 있어 한 번 더
+	C_Timer.After(1, M.FitChatTabs)
+	C_Timer.After(4, M.FitChatTabs)
 end
 
 -------------------------------------------------------------------------------
