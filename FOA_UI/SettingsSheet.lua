@@ -471,6 +471,7 @@ function M:BuildRegistry()
 				SW("questMap", "받을 수 있는 퀘스트", "지도에 느낌표 · 누르면 길 안내", { reload = true }),
 				SW("questMapLow", "낮은 퀘스트도", "회색 퀘스트까지 보여 줘요", { def = false, dep = "questMap", apply = questMap }),
 				SW("questTurnIn", "보고할 곳 물음표", "다 끝낸 퀘스트 보고 위치", { apply = questMap }),
+				SW("questRoutes", "돌아다니는 NPC 동선", "퀘스트 주는 NPC 가 돌아다니면 지도에 점선 · 다른 출현 자리는 작은 원", { dep = "questMap", apply = questMap }),
 				SW("questMinimap", "미니맵에 퀘스트", "범위 밖은 가까운 3개만 테두리에", { reload = true, hud = "minimap" }),
 			} },
 			{ t = "퀘스트 목록", rows = {

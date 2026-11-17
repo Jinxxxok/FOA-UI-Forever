@@ -438,8 +438,8 @@ local function NewPin(parent)
 	sc:SetDuration(0.12); sc:SetScaleFrom(1, 1); sc:SetScaleTo(1.18, 1.18); sc:SetSmoothing("OUT")
 	ag:SetScript("OnFinished", function() A:SetScale(1.18) end)
 	p.hover = ag
-	p:SetScript("OnEnter", function(self) self.hover:Play(); M:Tip(self) end)
-	p:SetScript("OnLeave", function(self) GameTooltip:Hide(); self.hover:Stop(); self.art:SetScale(1) end)
+	p:SetScript("OnEnter", function(self) self.hover:Play(); M:Tip(self); M:HighlightRoute(self, true) end)
+	p:SetScript("OnLeave", function(self) GameTooltip:Hide(); self.hover:Stop(); self.art:SetScale(1); M:HighlightRoute(self, false) end)
 	p:SetScript("OnClick", function(self) M:Waypoint(self) end)
 	return p
 end
@@ -490,11 +490,38 @@ local GIVER_ENTRANCE = {
 }
 M.GIVER_ENTRANCE = GIVER_ENTRANCE
 
+-------------------------------------------------------------------------------
+-- 호위 퀘스트 · 돌아다니는 NPC (QuestNotes.lua · QuestieDB)
+-------------------------------------------------------------------------------
+local function Notes() return ns.QUEST_NOTES end
+local function EscortOf(id) local n = Notes() return n and n.ESCORT and n.ESCORT[id] end
+local function RoamOf(npc) local n = Notes() return npc and npc ~= 0 and n and n.ROAM and n.ROAM[npc] or nil end
+local function SpawnsOf(npc) local n = Notes() return npc and npc ~= 0 and n and n.SPAWNS and n.SPAWNS[npc] or nil end
+M.EscortOf, M.RoamOf, M.SpawnsOf = EscortOf, RoamOf, SpawnsOf
+local NOTE_COL = { 0.94, 0.70, 0.44 }
+local function ZoneName(m)
+	local ok, info = pcall(C_Map.GetMapInfo, m)
+	return ok and info and info.name or nil
+end
+
 function M:Tip(p)
 	GameTooltip:SetOwner(p, "ANCHOR_RIGHT", 4, 0)
 	local giver = NpcName(p.giver)
 	GameTooltip:AddLine(giver or (p.state == 2 and "곧 받을 수 있는 퀘스트" or "받을 수 있는 퀘스트"), 1, 0.82, 0.32)
 	if p.giver and GIVER_NOTE[p.giver] then Ink.TipLine(GameTooltip, GIVER_NOTE[p.giver], 1, 0.72, 0.35) end
+	-- 그 자리에 늘 있지는 않은 NPC
+	local roams, moves, escorts, guards, party = false, false, false, false, false
+	for _, q in ipairs(p.list) do
+		local g = q.r[14]
+		if RoamOf(g) then roams = true elseif SpawnsOf(g) then moves = true end
+		local es = EscortOf(q.r[1])
+		if es then
+			if es[1] == 2 then guards = true else escorts = true end
+			if es[5] == 1 then party = true end
+		end
+	end
+	if roams then Ink.TipLine(GameTooltip, "돌아다니는 NPC · 이 자리에 없으면 지도에 점선으로 그린 길을 따라가 보세요", NOTE_COL[1], NOTE_COL[2], NOTE_COL[3]) end
+	if moves then Ink.TipLine(GameTooltip, "다른 자리에 있을 수도 있어요 · 지도에 작은 원으로 표시한 곳도 확인해 보세요", NOTE_COL[1], NOTE_COL[2], NOTE_COL[3]) end
 	for _, q in ipairs(p.list) do
 		local r = q.r
 		local name = QuestName(r[1]) or ("퀘스트 #" .. r[1] .. " (불러오는 중)")
@@ -503,12 +530,29 @@ function M:Tip(p)
 		if bit.band(r[12], 1) ~= 0 then tag[#tag + 1] = "|cff66BFFF반복|r" end
 		if bit.band(r[12], 2) ~= 0 then tag[#tag + 1] = "|cffB4B8BF다른 지역으로 안내|r" end
 		if r[13] ~= 0 then tag[#tag + 1] = "|cffE3C07A아이템으로 시작|r" end
+		local es = EscortOf(r[1])
+		if es then tag[#tag + 1] = es[1] == 2 and "|cffF0B370NPC 지키기|r" or "|cffF0B370호위|r" end
 		local tm = Ink.TimerTag and Ink.TimerTag(r[1])
 		if tm then tag[#tag + 1] = tm end
 		local c = q.state == 2 and SOON or (bit.band(r[12], 1) ~= 0 and BLUE or { 0.96, 0.95, 0.90 })
 		GameTooltip:AddDoubleLine(name, table.concat(tag, "  "), c[1], c[2], c[3], 1, 1, 1)
 		-- 시간 제한 퀘스트: 바로 아래 강조 한 줄
 		if Ink.TimerTipLine then Ink.TimerTipLine(GameTooltip, r[1], "   ") end
+		-- 호위 목적지
+		if es and es[2] and es[2] ~= 0 then
+			local zn = ZoneName(es[2])
+			GameTooltip:AddLine(string.format("   목적지  %s%.1f, %.1f", zn and (zn .. "  ") or "", es[3], es[4]), 0.62, 0.64, 0.68)
+		end
+	end
+	if escorts or guards then
+		GameTooltip:AddLine(" ")
+		if escorts then
+			Ink.TipLine(GameTooltip, "호위 · 다른 사람이 호위하는 동안엔 NPC가 잠깐 사라져요. 끝나면 몇 분 안에 다시 나타나요"
+				.. (party and " · 시작할 때 파티원도 함께 받을 수 있어요" or ""), 0.75, 0.77, 0.8)
+		end
+		if guards then
+			Ink.TipLine(GameTooltip, "NPC 지키기 · 그 자리에서 몰려오는 적을 막아 NPC를 살려야 해요. 다른 사람이 하는 중이면 끝날 때까지 기다려요", 0.75, 0.77, 0.8)
+		end
 	end
 	GameTooltip:AddLine(" ")
 	GameTooltip:AddLine((p.giver and GIVER_ENTRANCE[p.giver]) and "클릭: 동굴 입구로 길 안내" or "클릭: 길 안내 표시", 0.56, 0.58, 0.61)
@@ -561,6 +605,9 @@ function M:BuildLegend()
 		GameTooltip:AddLine("받을 수 있는 퀘스트", 1, 0.82, 0.32)
 		Ink.TipLine(GameTooltip, "금색 = 지금 받을 수 있음 · 파랑 = 반복 · 회색 = 1~2레벨 뒤", 0.75, 0.77, 0.8)
 		Ink.TipLine(GameTooltip, "조건(선행 · 전문기술 숙련도 · 평판 · 연결 퀘스트)이 안 맞는 퀘스트는 숨기고, 열리면 보여요", 0.75, 0.77, 0.8)
+		if ns.QUEST_NOTES then
+			Ink.TipLine(GameTooltip, "점선 = 돌아다니는 NPC 의 동선 · 작은 원 = 그 NPC 가 나타나는 다른 자리 · 호위 퀘스트는 목록에 표시", 0.75, 0.77, 0.8)
+		end
 		local unk = M.turnUnknown
 		if unk and #unk > 0 then
 			GameTooltip:AddLine(" ")
@@ -997,6 +1044,123 @@ function M:SaveTurnIn(qid)
 end
 
 -------------------------------------------------------------------------------
+-- 돌아다니는 NPC 동선 (점선) · 다른 출현 자리 (작은 원)
+--  지도에 그 NPC 의 퀘스트 핀이 있을 때만 · 핀 아래에 은은하게, 핀에 마우스를 올리면 진하게
+-------------------------------------------------------------------------------
+local ROUTE_COL = { 1.00, 0.83, 0.46 }
+local ROUTE_MAX = 600   -- NPC 하나에 찍는 점 수 상한 (도시 전령 · 상단처럼 아주 긴 길)
+
+function M:RouteDot(i, ring)
+	local f = self.routeFrame
+	if not f then
+		f = CreateFrame("Frame", nil, self.layer)
+		f:SetAllPoints()
+		f:SetFrameLevel(self.layer:GetFrameLevel())
+		self.routeFrame = f
+		self.dots = {}
+	end
+	local t = self.dots[i]
+	if not t then
+		t = f:CreateTexture(nil, "ARTWORK")
+		self.dots[i] = t
+	end
+	t:SetTexture(ring and Ink.tex.ring or Ink.tex.disc)
+	return t
+end
+
+function M:HideRoutes(from)
+	for i = from or 1, #(self.dots or {}) do self.dots[i]:Hide() end
+	if not from then self.routeDots = {} end
+end
+
+function M:DrawRoutes(order, mapID, cv, W, H, pinScale)
+	self.routeDots = {}
+	if not ns.QUEST_NOTES or Ink.db.questRoutes == false then self:HideRoutes() return end
+	local n = 0
+	local function Dot(giver, x, y, size, ring, alpha)
+		n = n + 1
+		local t = self:RouteDot(n, ring)
+		t:ClearAllPoints()
+		t:SetSize(size, size)
+		t:SetPoint("CENTER", cv, "TOPLEFT", x * W, -y * H)
+		t:SetVertexColor(ROUTE_COL[1], ROUTE_COL[2], ROUTE_COL[3], alpha)
+		t.baseA, t.baseS = alpha, size
+		t:Show()
+		local l = self.routeDots[giver]
+		if not l then l = {}; self.routeDots[giver] = l end
+		l[#l + 1] = t
+	end
+	local function Conv(m, x, y)
+		if m == mapID then return x / 100, y / 100 end
+		return ToMap({ m, x / 100, y / 100 }, mapID)
+	end
+	local step = 9 * pinScale       -- 점 사이 (지도 화면에서 늘 비슷한 간격)
+	local dotS = 3.2 * pinScale
+	local seen = {}
+	for _, g in ipairs(order) do
+		for _, q in ipairs(g.list) do
+			local giver = q.r[14]
+			if giver and giver ~= 0 and not seen[giver] then
+				seen[giver] = true
+				local soon = q.state == 2
+				local roam = RoamOf(giver)
+				if roam then
+					local a, budget = soon and 0.2 or 0.38, ROUTE_MAX
+					for m, paths in pairs(roam) do
+						for _, path in ipairs(paths) do
+							local px, py
+							for i = 1, #path - 1, 2 do
+								local x, y = Conv(m, path[i], path[i + 1])
+								if x and px then
+									local dx, dy = (x - px) * W, (y - py) * H
+									local k = math.max(1, math.floor(math.sqrt(dx * dx + dy * dy) / step + 0.5))
+									for j = 1, k do
+										if budget <= 0 then break end
+										budget = budget - 1
+										local f = j / k
+										Dot(giver, px + (x - px) * f, py + (y - py) * f, dotS, false, a)
+									end
+								elseif x then
+									Dot(giver, x, y, dotS, false, a)
+								end
+								px, py = x, y
+							end
+						end
+					end
+				end
+				local sp = SpawnsOf(giver)
+				if sp then
+					for m, pts in pairs(sp) do
+						for i = 1, #pts - 1, 2 do
+							local x, y = Conv(m, pts[i], pts[i + 1])
+							if x then Dot(giver, x, y, 11 * pinScale, true, soon and 0.32 or 0.55) end
+						end
+					end
+				end
+			end
+		end
+	end
+	self:HideRoutes(n + 1)
+end
+
+-- 핀에 마우스: 그 NPC 동선을 진하게
+function M:HighlightRoute(p, on)
+	if not (self.routeDots and p and p.list) then return end
+	local done = {}
+	for _, q in ipairs(p.list) do
+		local g = q.r and q.r[14]
+		if g and not done[g] then
+			done[g] = true
+			for _, t in ipairs(self.routeDots[g] or {}) do
+				t:SetVertexColor(ROUTE_COL[1], ROUTE_COL[2], ROUTE_COL[3], on and math.min(0.95, t.baseA * 2.3) or t.baseA)
+				local sz = on and t.baseS * 1.3 or t.baseS
+				t:SetSize(sz, sz)
+			end
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
 -- 그리기
 -------------------------------------------------------------------------------
 function M:Refresh()
@@ -1050,6 +1214,9 @@ function M:Refresh()
 			p:SetFrameLevel(self.layer:GetFrameLevel() + (g.state == 2 and 1 or 5))
 			p:Show()
 		end
+		pcall(self.DrawRoutes, self, order, mapID, cv, W, H, pinScale)
+	else
+		self:HideRoutes()
 	end
 	for i = n + 1, #(self.pins or {}) do self.pins[i]:Hide() end
 	-- 보고할 퀘스트 "?"

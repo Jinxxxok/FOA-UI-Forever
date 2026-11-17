@@ -3,7 +3,7 @@
 ## Notes: FOA (First of All) 통합 UI
 ## Author: hyeokjiny
 ## X-License: GPL-3.0-or-later
-## Version: 0.65.81
+## Version: 0.65.82
 ## SavedVariables: InkUIDB
 ## SavedVariablesPerCharacter: InkUICharDB
 ## IconTexture: Interface\AddOns\FOA_UI\Media\Textures\Logo
@@ -71,6 +71,7 @@ MapRevealData.lua
 MapReveal.lua
 QuestTimers.lua
 QuestDB.lua
+QuestNotes.lua
 QuestDrops.lua
 QuestMap.lua
 Lockboxes.lua
