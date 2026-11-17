@@ -2054,6 +2054,8 @@ local function SkinTip(tt)
 	end
 end
 
+T.SkinTip = SkinTip
+
 local function SkinStatusBar()
 	local sb = GameTooltipStatusBar
 	if not sb or tipSkin[sb] then return end

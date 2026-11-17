@@ -1228,8 +1228,36 @@ function M:PctOf(new, old)
 	return (new - old) / math.max(old, floor, 1) * 100
 end
 
+-- 두 칸에 끼는 장비 (반지 · 장신구 · 양손에 드는 한손 무기): 툴팁에서 Shift 를 누르면 두 번째 칸과 비교
+local DUAL = {
+	INVTYPE_FINGER = { 11, 12, "반지 1", "반지 2" },
+	INVTYPE_TRINKET = { 13, 14, "장신구 1", "장신구 2" },
+}
+-- "…와 / …과" (받침에 맞게)
+local WITH = { ["주장비"] = "주장비와", ["보조장비"] = "보조장비와", ["반지 1"] = "반지 1과", ["반지 2"] = "반지 2와",
+	["장신구 1"] = "장신구 1과", ["장신구 2"] = "장신구 2와" }
+local function With(l) return WITH[l] or (l .. "와") end
+function M:DualInfo(link)
+	if not link then return end
+	local loc = select(4, GetItemInfoInstant(link))
+	local d = DUAL[loc]
+	if d then
+		if not Equipped(d[2]) then return end
+		return { slot1 = d[1], slot2 = d[2], l1 = d[3], l2 = d[4] }
+	end
+	if loc == "INVTYPE_WEAPON" then
+		local mh, oh = Equipped(16), Equipped(17)
+		if mh and select(4, GetItemInfoInstant(mh)) == "INVTYPE_2HWEAPON" then return end
+		local ohLoc = oh and select(4, GetItemInfoInstant(oh))
+		if (ohLoc == "INVTYPE_WEAPON" or ohLoc == "INVTYPE_WEAPONOFFHAND") and CanDualWield and CanDualWield() then
+			return { slot1 = 16, slot2 = 17, l1 = "주장비", l2 = "보조장비", weapon = true }
+		end
+	end
+end
+
 -- 결과: { pct, new, old, level, empty } 또는 nil (비교할 수 없음)
-function M:Compare(link)
+--  which: 두 칸 장비를 몇 번째 칸과 비교할지 (툴팁 · Shift). 없으면 알아서 (반지 · 장신구는 약한 쪽)
+function M:Compare(link, which)
 	if not link or Ink.db.itemCompare == false or self:Mode() == "off" then return end
 	local loc = select(4, GetItemInfoInstant(link))
 	local slots = loc and SLOTS[loc]
@@ -1255,6 +1283,24 @@ function M:Compare(link)
 	local new
 	local old
 	local emptySlot = false -- 그 칸에 착용한 게 정말 없을 때만 "빈 칸"
+	local dual = which and self:DualInfo(link)
+	if dual then
+		local slot = which == 2 and dual.slot2 or dual.slot1
+		local asOH = dual.weapon and which == 2
+		local e = Equipped(slot)
+		new = score(link, asOH)
+		old = Of(e, asOH)
+		emptySlot = not e
+		if new == false or old == false or new == nil or old == nil then return end
+		local pct
+		if emptySlot then pct = 100
+		elseif old <= 0 then pct = (new > 0) and 100 or 0
+		else pct = self:PctOf(new, old) or 0 end
+		local lvl = tip.level
+		if lvl and lvl <= (UnitLevel("player") or 0) then lvl = nil end
+		return { pct = pct, new = new, old = old, level = lvl, empty = emptySlot,
+			vs = which == 2 and dual.l2 or dual.l1, other = which == 2 and dual.l1 or dual.l2, which = which }
+	end
 	if loc == "INVTYPE_2HWEAPON" then
 		new = score(link)
 		local mh, oh = Equipped(16), Equipped(17)
@@ -1369,13 +1415,14 @@ local function Line(tt, r)
 		tt:AddLine(txt)
 		return
 	end
+	local vs = r.vs or "착용"
 	if r.empty then
-		txt = "|cff6FD39A▲ 빈 칸에 착용 가능|r"
+		txt = r.vs and string.format("|cff6FD39A▲ %s 빈 칸에 착용 가능|r", r.vs) or "|cff6FD39A▲ 빈 칸에 착용 가능|r"
 	else
 		local p = math.floor(r.pct + (r.pct >= 0 and 0.5 or -0.5))
-		if p > 0 then txt = string.format("|cff6FD39A▲ 착용 대비 +%d%%|r", p)
-		elseif p < 0 then txt = string.format("|cffD9776B▼ 착용 대비 %d%%|r", p)
-		else txt = "|cff9EA3AB= 착용한 것과 비슷|r" end
+		if p > 0 then txt = string.format("|cff6FD39A▲ %s 대비 +%d%%|r", vs, p)
+		elseif p < 0 then txt = string.format("|cffD9776B▼ %s 대비 %d%%|r", vs, p)
+		else txt = r.vs and string.format("|cff9EA3AB= %s 비슷|r", With(r.vs)) or "|cff9EA3AB= 착용한 것과 비슷|r" end
 	end
 	if r.level then txt = txt .. string.format("  |cffFFF468%d레벨부터|r", r.level) end
 	local right = FOREVER and M:ProfileName() or M:RetailOrder()
@@ -1398,6 +1445,10 @@ local function Line(tt, r)
 	end
 	-- 한 줄로 붙여서 (오른쪽 정렬이면 툴팁이 넓을 때 가운데가 크게 빈다)
 	tt:AddLine(txt .. "   " .. sc .. rk .. string.format("|cff5E636B%s|r", right or ""))
+	-- 두 칸 장비: Shift 로 다른 칸과 비교
+	if r.which == 1 and r.other then
+		tt:AddLine(string.format("|cff8E939BShift|r |cff5E636B누르고 있으면 %s 비교|r", With(r.other)))
+	end
 end
 
 function M:HookTooltip()
@@ -1422,16 +1473,20 @@ function M:OnTooltip(tt)
 			if e == link then return end
 			sig[#sig + 1] = e or ""
 		end
-		sig = table.concat(sig, ",") .. M:Mode() .. weightSig
-		local r = M:Compare(link)
+		local dual = M:DualInfo(link)
+		local which = dual and (IsShiftKeyDown() and 2 or 1) or nil
+		sig = table.concat(sig, ",") .. M:Mode() .. weightSig .. "#" .. (which or 0)
+		local r = M:Compare(link, which)
+		if tt == GameTooltip then pcall(M.ShowCompare2, M, tt, link, which == 2 and dual or nil) end
 		-- 툴팁은 열려 있는 동안 0.2초마다 다시 그려진다. 그 사이 정보가 잠깐 비어도(서버 응답 대기)
 		--  같은 장비 · 같은 가중치면 마지막으로 낸 결과를 그대로 써서 줄이 깜빡이지 않게
-		local last = lastTip[link]
+		local lkey = link .. "#" .. (which or 0)
+		local last = lastTip[lkey]
 		if last and last.sig ~= sig then last = nil end
 		if r then
 			r.slotRank = FOREVER and ns.GearSlotRank and ns.GearSlotRank(link) or nil
 			if not r.slotRank and last then r.slotRank = last.r.slotRank end
-			lastTip[link] = { r = r, sig = sig }
+			lastTip[lkey] = { r = r, sig = sig }
 		elseif last then
 			r = last.r
 		end
@@ -1440,6 +1495,92 @@ function M:OnTooltip(tt)
 		if ReadTooltip(link).skill then
 			tt:AddLine("|cffE3C07A무기 전문가에게 배우면 쓸 수 있어요|r |cff8E939B· P(주문책) 옆 목록에서 위치|r")
 		end
+	end
+end
+
+-------------------------------------------------------------------------------
+-- 두 칸 장비 · Shift: 두 번째 칸(보조장비 · 반지 2 · 장신구 2) 비교창
+--  블리자드 비교창은 첫 번째 칸만 보여 준다 → 그 바깥쪽에 FOA 비교창을 하나 더
+--  (블리자드 비교창 자체는 건드리지 않는다)
+-------------------------------------------------------------------------------
+local cmp2
+local function Compare2Tip()
+	if cmp2 then return cmp2 end
+	local ok, f = pcall(CreateFrame, "GameTooltip", "FOACompareTooltip", UIParent, "ShoppingTooltipTemplate")
+	if not ok or not f then ok, f = pcall(CreateFrame, "GameTooltip", "FOACompareTooltip", UIParent, "GameTooltipTemplate") end
+	if not ok or not f then return end
+	f:SetFrameStrata("TOOLTIP")
+	f:SetClampedToScreen(true)
+	cmp2 = f
+	local T = Ink.modules.Tooltip
+	if T and T.SkinTip then pcall(T.SkinTip, f) end
+	return f
+end
+
+local function PlaceCompare2(tt)
+	local f = cmp2
+	if not (f and f:IsShown() and tt and tt:IsShown()) then return end
+	f:ClearAllPoints()
+	local s1 = ShoppingTooltip1
+	local base = (s1 and s1:IsShown()) and s1 or tt
+	local sw = UIParent:GetWidth()
+	local tl, tr = tt:GetLeft() or 0, tt:GetRight() or 0
+	local bl, br = base:GetLeft() or 0, base:GetRight() or 0
+	local w = f:GetWidth() or 300
+	local left
+	if base ~= tt then left = bl < tl else left = ((tt:GetCenter()) or 0) > sw / 2 end
+	-- 화면 밖으로 나가면 반대쪽(툴팁 옆)으로
+	if left and bl - w < 0 then base, left = tt, false; bl, br = tl, tr end
+	if not left and br + w > sw then base, left = tt, true; bl, br = tl, tr end
+	-- 블리자드 비교창과 같은 높이 (머리말 "장착" 탭이 위에 붙는다)
+	if left then f:SetPoint("TOPRIGHT", base, "TOPLEFT", -2, 0) else f:SetPoint("TOPLEFT", base, "TOPRIGHT", 2, 0) end
+end
+
+function M:ShowCompare2(tt, link, dual)
+	local f = Compare2Tip()
+	if not f then return end
+	if not (dual and Ink.db.itemCompare ~= false) then f:Hide() return end
+	if ShoppingTooltip2 and ShoppingTooltip2:IsShown() then f:Hide() return end -- 블리자드가 이미 두 칸 다 보여 줌
+	f:SetOwner(tt, "ANCHOR_NONE")
+	if not pcall(f.SetInventoryItem, f, "player", dual.slot2) or f:NumLines() == 0 then f:Hide() return end
+	if f.CompareHeader and f.CompareHeader.Label then
+		f.CompareHeader:Show()
+		f.CompareHeader.Label:SetText((EQUIPPED or "장착") .. " · " .. dual.l2)
+		f.CompareHeader:SetWidth(f.CompareHeader.Label:GetWidth() + 30)
+	end
+	-- 바뀌는 능력치 (블리자드 비교창과 같은 계산)
+	if C_TooltipComparison and C_TooltipComparison.GetItemComparisonDelta and C_Item and C_Item.GetItemGUID and ItemLocation then
+		local okg, guid = pcall(C_Item.GetItemGUID, ItemLocation:CreateFromEquipmentSlot(dual.slot2))
+		if okg and guid then
+			local okd, delta = pcall(C_TooltipComparison.GetItemComparisonDelta, { hyperlink = link }, { guid = guid }, nil, false)
+			if okd and type(delta) == "table" and #delta > 0 then
+				f:AddLine(" ")
+				f:AddLine(ITEM_DELTA_DESCRIPTION or "아이템 교체 시 나타나는 변화:", 1, 0.82, 0)
+				for _, line in ipairs(delta) do f:AddLine(plain(line) or "", 1, 1, 1) end
+			end
+		end
+	end
+	f:Show()
+	PlaceCompare2(tt)
+	C_Timer.After(0, function() PlaceCompare2(tt) end)
+end
+
+-- Shift 를 누르고 떼면 툴팁을 다시 그린다 (두 칸 장비일 때만)
+function M:OnShift()
+	local tt = GameTooltip
+	if not (tt and tt:IsShown() and tt.GetItem) then return end
+	local ok, _, link = pcall(tt.GetItem, tt)
+	link = ok and plain(link)
+	if not link or not self:DualInfo(link) then
+		if cmp2 then cmp2:Hide() end
+		return
+	end
+	local owner = tt:GetOwner()
+	if not owner then return end
+	if type(owner.UpdateTooltip) == "function" then
+		pcall(owner.UpdateTooltip, owner)
+	elseif owner.GetScript and owner:GetScript("OnEnter") then
+		pcall(owner:GetScript("OnEnter"), owner)
 	end
 end
 
@@ -1483,6 +1624,15 @@ end
 -------------------------------------------------------------------------------
 function M:Init()
 	self:HookTooltip()
+	if GameTooltip and GameTooltip.HookScript then
+		GameTooltip:HookScript("OnHide", function() if cmp2 then cmp2:Hide() end end)
+		GameTooltip:HookScript("OnTooltipCleared", function() if cmp2 then cmp2:Hide() end end)
+	end
+	local mod = CreateFrame("Frame")
+	mod:RegisterEvent("MODIFIER_STATE_CHANGED")
+	mod:SetScript("OnEvent", function(_, _, key)
+		if key == "LSHIFT" or key == "RSHIFT" then pcall(M.OnShift, M) end
+	end)
 	if QuestInfo_Display then
 		hooksecurefunc("QuestInfo_Display", function() C_Timer.After(0, function() pcall(M.UpdateQuestRewards, M) end) end)
 	end
