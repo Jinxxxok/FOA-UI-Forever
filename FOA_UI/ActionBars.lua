@@ -163,7 +163,7 @@ local function ButtonConfig(d, i, s)
 		cooldownCount = true, -- 쿨타임 남은 시간 숫자 (게임 설정과 상관없이 항상)
 		showGrid = s.grid ~= false,
 		colors = { range = { 0.85, 0.25, 0.22 }, mana = { 0.45, 0.55, 1 } },
-		hideElements = { macro = true, hotkey = false, equipped = false, border = true, borderIfEmpty = true },
+		hideElements = { macro = false, hotkey = false, equipped = false, border = true, borderIfEmpty = true },
 		keyBoundTarget = d.bind .. i,
 		flyoutDirection = "UP",
 		actionButtonUI = d.main and true or false,
@@ -172,8 +172,9 @@ local function ButtonConfig(d, i, s)
 				position = { anchor = "TOPRIGHT", relAnchor = "TOPRIGHT", offsetX = -4, offsetY = -4 }, justifyH = "RIGHT" },
 			count = { font = { font = F.latinB, size = 11, flags = "OUTLINE" }, color = { 1, 1, 1 },
 				position = { anchor = "BOTTOMRIGHT", relAnchor = "BOTTOMRIGHT", offsetX = -3, offsetY = 3 }, justifyH = "RIGHT" },
-			macro = { font = { font = F.sans, size = 9, flags = "OUTLINE" }, color = { 1, 1, 1 },
-				position = { anchor = "BOTTOM", relAnchor = "BOTTOM", offsetX = 0, offsetY = 2 }, justifyH = "CENTER" },
+			-- 매크로 이름 (모양 · 보이기는 Blizzard.lua StyleMacroName · 설정 "매크로 이름")
+			macro = { font = { font = F.semi, size = 10, flags = "" }, color = { 0.96, 0.95, 0.92 },
+				position = { anchor = "BOTTOM", relAnchor = "BOTTOM", offsetX = 0, offsetY = 3 }, justifyH = "CENTER" },
 		},
 	}
 end

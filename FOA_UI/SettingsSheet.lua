@@ -408,6 +408,8 @@ function M:BuildRegistry()
 				SW("actionBars", "FOA 행동단축바", "버튼 수 · 줄 · 크기 · 간격은 편집 모드에서", { reload = true, hud = { "bar1", "bar2" } }),
 				SW("barLock", "잠금", "Shift 를 누른 채 끌어야 기술이 빠져요", { hud = { "bar1", "bar2" },
 					apply = function() call("ActionBars", "ApplyLock") end }),
+				SW("barMacroName", "매크로 이름", "매크로가 든 칸 아래쪽에 매크로 이름 한 줄", { hud = { "bar1", "bar2" },
+					apply = function() call("Blizzard", "RefreshMacroNames") end }),
 				SW("autoPush", "새 주문 자동 배치", "새로 배운 주문을 빈 칸에", { hud = "bar1",
 					apply = function() call("Blizzard", "ApplyAutoPush") end }),
 				SW("specBars", "특성마다 단축바 따로", "주 특성 · 보조 특성을 바꾸면 그 특성 단축바로 · 게임이 직접 바꿔 주면 FOA 는 손대지 않아요", { hud = "bar1" }),

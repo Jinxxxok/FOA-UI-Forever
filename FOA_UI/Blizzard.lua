@@ -1325,13 +1325,53 @@ end
 local skinnedButtons = {}
 
 -- 단축키 표기를 짧은 영문으로 (한글이 남으면 한글 글꼴로)
+--  숫자키(1~0)는 N1 · N2 … (그냥 "1" 이면 중첩 · 쿨타임 숫자와 헷갈려서) · 숫자패드는 NP1 …
 local KEY_REPL = {
 	{ "마우스 휠 위로", "WU" }, { "마우스 휠 아래로", "WD" }, { "가운데 마우스 버튼", "M3" },
-	{ "마우스 버튼 (%d+)", "M%1" }, { "마우스 (%d+)", "M%1" }, { "숫자패드 ", "N" }, { "숫자 패드 ", "N" },
+	{ "마우스 버튼 (%d+)", "M%1" }, { "마우스 (%d+)", "M%1" }, { "숫자패드 ", "NP" }, { "숫자 패드 ", "NP" },
 	{ "SHIFT%-", "s" }, { "CTRL%-", "c" }, { "ALT%-", "a" }, { "s%-", "s" }, { "c%-", "c" }, { "a%-", "a" },
 	{ "Mouse Wheel Up", "WU" }, { "Mouse Wheel Down", "WD" }, { "Middle Mouse", "M3" }, { "Mouse Button (%d+)", "M%1" },
-	{ "Num Pad ", "N" }, { "Spacebar", "Spc" }, { "스페이스 바", "Spc" }, { "스페이스", "Spc" },
+	{ "Num Pad ", "NP" }, { "Spacebar", "Spc" }, { "스페이스 바", "Spc" }, { "스페이스", "Spc" },
 }
+
+-- FOA 단축바(LibActionButton)는 게임 키 이름을 그대로 준다 ("SHIFT-W" · "BUTTON4" · "NUMPAD1" · "1")
+local RAW_BASE = {
+	MOUSEWHEELUP = "WU", MOUSEWHEELDOWN = "WD", MIDDLEMOUSE = "M3", SPACE = "Spc", ESCAPE = "Esc",
+	BACKSPACE = "BS", CAPSLOCK = "Caps", INSERT = "Ins", DELETE = "Del", HOME = "Hm", END = "End",
+	PAGEUP = "PU", PAGEDOWN = "PD", TAB = "Tab", ENTER = "Ent", NUMLOCK = "NL",
+	NUMPADPLUS = "NP+", NUMPADMINUS = "NP-", NUMPADMULTIPLY = "NP*", NUMPADDIVIDE = "NP/", NUMPADDECIMAL = "NP.",
+	UP = "Up", DOWN = "Dn", LEFT = "Lt", RIGHT = "Rt",
+}
+local RAW_MOD = { SHIFT = "s", CTRL = "c", ALT = "a", META = "m" }
+local function RawKey(txt)
+	if txt:find("[\128-\255]") then return nil end
+	local mods, base = "", txt
+	while true do
+		local m, rest = base:match("^(%u+)%-(.+)$")
+		if not (m and RAW_MOD[m]) then break end
+		mods, base = mods .. RAW_MOD[m], rest
+	end
+	if base:match("^%d$") then return mods .. "N" .. base end
+	local np = base:match("^NUMPAD(%d)$")
+	if np then return mods .. "NP" .. np end
+	local mb = base:match("^BUTTON(%d+)$")
+	if mb then return mods .. "M" .. mb end
+	if RAW_BASE[base] then return mods .. RAW_BASE[base] end
+	if mods ~= "" then return mods .. base end
+	return nil
+end
+M.ShortKey = function(txt)
+	if type(txt) ~= "string" or txt == "" then return txt end
+	local out = RawKey(txt)
+	if not out then
+		out = txt
+		for _, r in ipairs(KEY_REPL) do out = out:gsub(r[1], r[2]) end
+		-- 블리자드 단축바가 준 숫자키 ("1" · "s1")
+		local mods, d = out:match("^([scam]*)(%d)$")
+		if d then out = mods .. "N" .. d end
+	end
+	return out
+end
 
 -- 단축키 글자 모양: 평소엔 오른쪽 위 작게(밝은 회색), 빠른 단축키 설정 중엔 가운데 크게(노랑)
 local function StyleHotkey(hk, txt)
@@ -1362,11 +1402,57 @@ local function FixHotkey(hk)
 		out = ""
 		hk:SetText("")
 	else
-		for _, r in ipairs(KEY_REPL) do out = out:gsub(r[1], r[2]) end
+		out = M.ShortKey(txt)
 		if out ~= txt then hk:SetText(out) end
 	end
 	StyleHotkey(hk, out)
 	hk.inkFixing = nil
+end
+
+-- 매크로 이름: 매크로가 든 칸만 아래쪽에 이름 한 줄 (넘치면 …) · 글자 뒤로 아이콘 아래를 살짝 어둡게
+--  게임이 주는 칸 글자(GetActionText)는 매크로 · 장비 구성일 때만 있다 → 그 밖의 칸은 저절로 비어 있다
+local function MacroNameOn() return Ink.db.barMacroName ~= false end
+local function PaintMacroName(b)
+	local name = b.inkName
+	if not name then return end
+	local txt = plain(name:GetText())
+	local on = MacroNameOn() and type(txt) == "string" and txt:find("%S") ~= nil
+	local w = b.GetWidth and b:GetWidth() or 36
+	name:SetWidth(math.max(12, w - 6))
+	name:SetAlpha(on and 1 or 0)
+	if b.inkNameBG then b.inkNameBG:SetShown(on) end
+end
+M.PaintMacroName = PaintMacroName
+
+local function StyleMacroName(b, name, skin, icon, small)
+	b.inkName = name
+	name:SetFont(F.semi, small and 9 or 10, "")
+	name:SetShadowOffset(1, -1)
+	name:SetShadowColor(0, 0, 0, 1)
+	name:SetTextColor(0.96, 0.95, 0.92)
+	name:SetJustifyH("CENTER")
+	if name.SetWordWrap then name:SetWordWrap(false) end
+	if name.SetMaxLines then name:SetMaxLines(1) end
+	name:ClearAllPoints()
+	name:SetPoint("BOTTOM", b, "BOTTOM", 0, 3)
+	local bg = b:CreateTexture(nil, "ARTWORK", nil, 7)
+	bg:SetTexture(Ink.tex.white)
+	bg:SetPoint("BOTTOMLEFT", icon or b, "BOTTOMLEFT", 0, 0)
+	bg:SetPoint("BOTTOMRIGHT", icon or b, "BOTTOMRIGHT", 0, 0)
+	bg:SetHeight(small and 12 or 15)
+	if bg.SetGradient and CreateColor then
+		bg:SetGradient("VERTICAL", CreateColor(0, 0, 0, 0.82), CreateColor(0, 0, 0, 0))
+	elseif bg.SetGradientAlpha then
+		bg:SetGradientAlpha("VERTICAL", 0, 0, 0, 0.82, 0, 0, 0, 0)
+	else
+		bg:SetVertexColor(0, 0, 0, 0.5)
+	end
+	if skin and skin.mask and bg.AddMaskTexture then bg:AddMaskTexture(skin.mask) end
+	bg:Hide()
+	b.inkNameBG = bg
+	hooksecurefunc(name, "SetText", function() PaintMacroName(b) end)
+	if b.HookScript then pcall(b.HookScript, b, "OnSizeChanged", function() PaintMacroName(b) end) end
+	PaintMacroName(b)
 end
 
 local function SkinActionButton(b, small)
@@ -1428,7 +1514,7 @@ local function SkinActionButton(b, small)
 		hooksecurefunc(hk, "SetText", FixHotkey)
 	end
 	local name = b.Name or (b.GetName and _G[b:GetName() .. "Name"])
-	if name then name:SetAlpha(0) end
+	if name then StyleMacroName(b, name, s, icon, small) end
 	local count = b.Count or (b.TextOverlayContainer and b.TextOverlayContainer.Count) or (b.GetName and _G[b:GetName() .. "Count"])
 	if count then count:SetFont(F.latinB, 11, "OUTLINE") end
 	-- 효과: 쿨 끝 빛 고리 · 눌림 반응 · 사거리 밖 흑백
@@ -1436,6 +1522,9 @@ local function SkinActionButton(b, small)
 end
 
 M.SkinActionButton = SkinActionButton
+function M:RefreshMacroNames()
+	for b in pairs(skinnedButtons) do pcall(PaintMacroName, b) end
+end
 
 -- 블리자드 "빠른 단축키 설정" 모드와 맞추기
 --  설정 중에는 모든 버튼의 단축키를 가운데 크게 노랗게, 테두리도 노랗게 → 어떤 키가 어디에 있는지 한눈에
