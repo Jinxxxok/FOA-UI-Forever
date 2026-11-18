@@ -678,6 +678,7 @@ function M:BuildRanksForever()
 	wipe(self.rankCount)
 	local spec = ns.BIS_FOREVER and ns.BIS_FOREVER.specs[skey]
 	self.spec = spec and { src = ns.BIS_FOREVER.src, g = spec.g, fo = spec } or nil
+	self.guideBis = (spec and next(spec.g) ~= nil) and true or false   -- 공략이 장비 표를 낸 전문화인지
 	self.isExample = false
 	local per = {}
 	-- 던전 전리품 모음 (아이템 → 어느 던전 몇 넴)
@@ -709,24 +710,56 @@ function M:BuildRanksForever()
 	end
 	self:AddQuestRewards(pool, plv)
 	self:AddWorldSources(pool, plv)
+	self:AddCrafts(pool, plv)
+	-- 공략 BIS 가 있는 칸 (없는 칸은 FOA 점수 1등이 BIS 자리를 맡는다)
+	local bisSlot = {}
+	local _, cls = UnitClass("player")
+	local dual = cls == "ROGUE" or cls == "WARRIOR" or cls == "HUNTER"
 	local function Fill()
-		-- 공략 대체가 3개 안 되는 칸은 던전 전리품 중 FOA 점수(직업 · 특성 가중치) 높은 순으로 채운다
+		-- 공략 대체가 3개 안 되는 칸은 던전 · 제작 · 퀘스트 · 월드 중 FOA 점수(직업 · 특성 가중치) 높은 순으로 채운다
+		--  공략 BIS 자체가 없는 칸(공략이 아직 장비 표를 안 낸 전문화)은 1등을 BIS 로 (반지 · 장신구는 두 칸이라 2개)
 		local sc = ns.Score
 		if not sc then return end
-		for slot, list in pairs(pool) do
-			local cand = {}
+		local fmc = M.ForMyClass
+		local slots = {}
+		for slot in pairs(pool) do slots[#slots + 1] = slot end
+		if dual and pool[10] and not pool[11] then slots[#slots + 1] = 11 end
+		table.sort(slots)                                 -- 주장비(10)를 보조장비(11)보다 먼저: 같은 무기가 두 칸에 겹치지 않게
+		for _, slot in ipairs(slots) do
+			local list = pool[slot] or {}
+			if slot == 11 and dual then                   -- 쌍수: 한손 무기도 보조장비 후보
+				local src = {}
+				for _, it in ipairs(list) do src[#src + 1] = it end
+				for _, it in ipairs(pool[10] or {}) do
+					if select(4, C_Item.GetItemInfoInstant(it.id)) == "INVTYPE_WEAPON" then src[#src + 1] = it end
+				end
+				list = src
+			end
+			local cand, seen = {}, {}
 			for _, it in ipairs(list) do
-				if not self.ranks[it.id] then
+				if not self.ranks[it.id] and not seen[it.id] then
+					seen[it.id] = true
 					local l = "item:" .. it.id
-					local v = sc:Score(l, nil, FOREVER and ScoreSpec() or nil)
-					if v and v > 0 and sc:Usable(l) then it.score = v; cand[#cand + 1] = it end
+					local v = sc:Score(l, slot == 11 and dual or nil, FOREVER and ScoreSpec() or nil)
+					if v and v > 0 and sc:Usable(l) and (not fmc or fmc(it)) then
+						it.score = v
+						cand[#cand + 1] = { it = it, score = v }
+					end
 				end
 			end
 			table.sort(cand, function(a, b) return a.score > b.score end)
-			for _, it in ipairs(cand) do
+			local first = 1
+			if not bisSlot[slot] then
+				local nTop = (slot == 12 or slot == 13) and 2 or 1
+				for i = 1, math.min(nTop, #cand) do
+					self.ranks[cand[i].it.id] = { rank = 0, slot = slot, it = cand[i].it, foa = true, foaTop = true, score = cand[i].score }
+				end
+				first = nTop + 1
+			end
+			for i = first, #cand do
 				if (per[slot] or 0) >= 3 then break end
 				per[slot] = (per[slot] or 0) + 1
-				self.ranks[it.id] = { rank = per[slot], slot = slot, it = it, foa = true }
+				self.ranks[cand[i].it.id] = { rank = per[slot], slot = slot, it = cand[i].it, foa = true, score = cand[i].score }
 			end
 		end
 		for _, r in pairs(self.ranks) do
@@ -745,6 +778,7 @@ function M:BuildRanksForever()
 			if not it.inst then it.srcText = KoSource(spec.src[id]) end
 			it.slot = it.slot or slot
 			self.ranks[id] = { rank = 0, slot = slot, it = it, inv = inv }
+			bisSlot[slot] = true
 		end
 	end
 	for _, a in ipairs(spec.alt) do
@@ -869,7 +903,8 @@ function M:SourceLabel()
 		return (UnitLevel("player") or 1) .. "레벨 착용 가능\n" .. table.concat(srcs, " · ") .. " 중 FOA 점수 순"
 	end
 	if FOREVER then
-		return self.spec and ("BIS · 대체: " .. self.spec.src .. " (레이드 전) + FOA 점수") or "대체: FOA 점수 (공략 BIS 준비 중)"
+		if self.guideBis then return "BIS · 대체: " .. self.spec.src .. " (레이드 전) + FOA 점수" end
+		return "BIS · 대체: FOA 점수 순 (공략 BIS 표가 아직 없는 전문화)"
 	end
 	if self.spec then return "BIS: " .. self.spec.src .. " · 대체: FOA 계산" end
 	return "예시 순위 (BIS 자료 없음)"
@@ -5328,7 +5363,8 @@ function M:HookTooltip()
 		tt:AddLine("|cffFFF468—|r  |cff8E939BFOA · " .. (UnitClass("player") or "") .. " " .. (specName or "") .. (M.isExample and " · 예시 순위" or "") .. "|r")
 		-- "최고  허리 1위" · "허리 2위" (예전: "다음 1  허리 2순위")
 		local slotRank = (SLOT_NAME[r.slot] or "") .. " " .. (r.rank + 1) .. "위"
-		tt:AddDoubleLine(r.rank == 0 and ("|cffFFF468" .. RankText(r) .. "|r  " .. slotRank) or ("|cffFFF468" .. slotRank .. "|r"), " ", 1, 1, 1)
+		tt:AddDoubleLine(r.rank == 0 and ("|cffFFF468" .. RankText(r) .. "|r  " .. slotRank .. (r.foaTop and "  |cff8E939B· FOA 계산|r" or ""))
+			or ("|cffFFF468" .. slotRank .. "|r"), " ", 1, 1, 1)
 		Ink.TipLine(tt, "|cff9EA3AB획득|r  " .. (M:SourceText(r.it) or ""), 1, 1, 1)
 	end)
 end
@@ -5820,7 +5856,8 @@ function M:PaintBis()
 	p.sumL:SetText(pvpView and "칸 PvP BIS 착용" or (self.levelMode and "칸 레벨 최고템 착용" or "칸 BIS 착용"))
 	p.hint:SetText(pvpView and "마우스를 올리면 툴팁 · 획득처\nPvP 점수: 직업마다 PvP 공략의 능력치 순서로 FOA가 계산해요"
 		or (self.levelMode and "마우스를 올리면 툴팁 · 획득처\n제작템은 클릭하면 제조법 상인 위치를 지도에 찍어요"
-		or "마우스를 올리면 툴팁 · 획득처\n대체템은 BIS 장비의 능력치 비중으로 FOA가 고른 거예요"))
+		or (self.guideBis == false and "마우스를 올리면 툴팁 · 획득처\n공략 BIS가 없는 전문화라 BIS · 대체 모두 FOA 점수로 골랐어요"
+		or "마우스를 올리면 툴팁 · 획득처\n대체템은 BIS 장비의 능력치 비중으로 FOA가 고른 거예요")))
 	for _, list in pairs(bySlot) do table.sort(list, function(a, b) return a.rank < b.rank end) end
 	local wornBis = 0
 	self.bisSel = self.bisSel or 1
