@@ -1139,6 +1139,22 @@ M.FitChatTabs = function()
 	end
 end
 
+-- 채팅 판 배경: 기본 채팅창(과 거기 붙은 탭)은 밑에 입력칸 자리까지, 떼어 낸 창은 내역 바로 밑에서 끝낸다
+--  (입력칸은 기본 채팅창 밑 한 자리뿐이라, 떼어 낸 창에 입력칸 자리만큼 빈 여백이 남아 있었다)
+local function ChatBG(cf)
+	local sk = cf and chatSkin[cf]
+	local bg = sk and sk.bg
+	if not bg then return end
+	local docked = cf == ChatFrame1 or plain(cf.isDocked)
+	bg:ClearAllPoints()
+	bg:SetPoint("TOPLEFT", -10, 30)
+	bg:SetPoint("BOTTOMRIGHT", 10, docked and -40 or -8)
+end
+M.UpdateChatBGs = function()
+	for i = 1, (NUM_CHAT_WINDOWS or 10) do ChatBG(_G["ChatFrame" .. i]) end
+	for _, n in ipairs(CHAT_FRAMES or {}) do ChatBG(_G[n]) end
+end
+
 local function SkinChatFrame(cf)
 	if not cf or chatSkinned[cf] then return end
 	chatSkinned[cf] = true
@@ -1159,10 +1175,9 @@ local function SkinChatFrame(cf)
 	local bf = cf.buttonFrame or _G[name .. "ButtonFrame"]
 	if bf then Ink:KeepHidden(bf) end
 	local cbg = Ink:Round(cf, "BACKGROUND", false, false, -7)
-	cbg:SetPoint("TOPLEFT", -10, 30)
-	cbg:SetPoint("BOTTOMRIGHT", 10, -40)
 	cbg:SetVertexColor(0, 0, 0, 0.28)
 	chatSkin[cf] = { bg = cbg }
+	ChatBG(cf)
 	local _, size = cf:GetFont()
 	local cpath, cflags = M:ChatFont()
 	cf:SetFont(cpath, (size and size > 0) and size or 13, cflags)
@@ -1343,6 +1358,7 @@ function M:SkinChat()
 					for _, n in ipairs(CHAT_FRAMES or {}) do SkinChatFrame(_G[n]) end
 					C_Timer.After(0, M.UpdateChatGrips)
 					C_Timer.After(0, M.FitChatTabs)
+					C_Timer.After(0, M.UpdateChatBGs)
 				end)
 			end
 		end
@@ -1363,6 +1379,7 @@ function M:SkinChat()
 	-- 접속 직후 블리자드가 창 이름을 다시 넣으며 탭 폭을 예전 글꼴로 다시 재는 경우가 있어 한 번 더
 	C_Timer.After(1, M.FitChatTabs)
 	C_Timer.After(4, M.FitChatTabs)
+	C_Timer.After(1, M.UpdateChatBGs)
 end
 
 -------------------------------------------------------------------------------
