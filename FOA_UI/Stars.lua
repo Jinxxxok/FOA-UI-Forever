@@ -1143,21 +1143,36 @@ end
 -- 마법부여 발동 표식
 --  별자리 = "지금 눌러", 마법부여 = "지금 세졌어" → 한 단계 작게: 유성 하나가 떨어져 발밑에 작은 별로 앉는다.
 --  자리: 캐릭터 발밑 · 거리 표시와 쿨다운 줄 사이 (시안 y 540). 별 둘레 궤도가 남은 시간만큼 시계 방향으로 줄고,
---  시간이 없는 계시는 숨 쉬다가 다음 주문에 캐릭터 쪽으로 빨려 든다. 색은 직업색이 아니라 마법부여 고유색.
+--  계시는 15초 궤도를 돌다가 다음 주문에 쓰이면 캐릭터 쪽으로 빨려 든다. 색은 직업색이 아니라 마법부여 고유색.
 --  순간 피해만 주는 마법부여(불타는 무기 · 생명력 흡수 · 빙결 · 부정의 무기)는 띄우지 않는다.
---  /foa 마부 · /foa 마부 계시 · /foa 마부 시전 · /foa 마부 크기 0.7 · /foa 마부 높이 -40
+--  12.x 포에버: 전투 중엔 애드온이 몸의 효과를 읽을 수 없다(비공개). 그래서 실제 발동은 게임 엔진이 그린다 —
+--  AuraContainer 슬롯에 "이 주문 번호만" 거름망을 걸어 두면, 효과가 붙는 순간 엔진이 표식을 보이고 · 시간 고리를 돌리고 ·
+--  미리 만들어 둔 착지 애니메이션을 재생한다. 애드온이 직접 그리는 쪽(아래 E)은 미리 보기와 엔진이 없는 클라이언트용.
+--  /foa 마부 · /foa 마부 계시 · /foa 마부 시전 · /foa 마부 진단 · /foa 마부 크기 0.7 · /foa 마부 높이 -40
 -------------------------------------------------------------------------------
 local EKEY = "enchMarks"
 local function EN_ON() return not ns.FX or ns.FX.on(EKEY) end
+-- ench = 무기에 붙는 마법부여 번호 (아이템 링크 두 번째 칸) · ids = 발동하면 몸에 붙는 효과 번호 (포에버 1.60.1)
 local ENCH = {
-	{ key = "crusader", name = "성전사", en = "Crusader", color = "FFC94D", ids = { 20007 }, dur = 15,
+	{ key = "crusader", name = "성전사", en = "Crusader", color = "FFC94D", ench = { 1900 }, ids = { 20007 }, dur = 15,
 		names = { "성전사", "Crusader", "신성한 힘", "성스러운 힘", "Holy Strength" } },
-	{ key = "revelation", name = "계시", en = "Revelation", color = "8FD8FF", ids = {}, dur = 0, names = { "계시", "Revelation" } },
-	{ key = "insight", name = "통찰", en = "Insight", color = "5BE3C4", ids = {}, dur = 10, names = { "통찰", "Insight" } },
+	-- 계시: 직업마다 효과 번호가 따로 (법사 · 사제 · 흑마 · 드루 · 냥꾼 · 술사 · 기사). 15초 또는 다음 주문까지
+	{ key = "revelation", name = "계시", en = "Revelation", color = "8FD8FF", ench = { 8217 }, dur = 15, consume = true,
+		ids = { 1248808, 1323377, 1323392, 1323400, 1323410, 1323418, 1323419 }, names = { "계시", "Revelation" } },
+	{ key = "insight", name = "통찰", en = "Insight", color = "5BE3C4", ench = { 8216 }, ids = { 1299796 }, dur = 10,
+		names = { "통찰", "Insight" } },
 }
 S.ENCH = ENCH
-local E = { slots = {}, pool = {}, active = {} }
+local E = { slots = {}, pool = {}, active = {}, seen = {}, x = {}, equipped = {} }
 S.E = E
+
+-- 지금 몸의 효과가 비공개인지 (전투 · 우두머리 전투 중)
+local function AurasSecret()
+	local fn = C_Secrets and C_Secrets.ShouldAurasBeSecret
+	if not fn then return false end
+	local ok, v = pcall(fn)
+	return ok and plain(v) == true
+end
 local E_DEF_SCALE, E_DEF_Y = 0.7, -40                -- 기본: 마부 표식 크기 0.7 · 높이 -40
 local ROW_Y, GAP, CHAR_X, CHAR_Y = 540, 50, 800, 460
 local MET_L, MET_H, MET_DX, MET_DY = 120, 11, 170, -119       -- 유성: 길이 · 두께 · 오른쪽 위에서 날아오는 거리
@@ -1170,9 +1185,14 @@ local function ELayoutFrame()
 	local k = (UIParent:GetHeight() or 1080) / 900
 	local sc = db.scale or E_DEF_SCALE
 	E.base, E.pxk = k * sc, PhysH() / 900 * sc
-	E.holder:ClearAllPoints()
-	E.holder:SetPoint("CENTER", UIParent, "CENTER", 0, (50 + (db.y or E_DEF_Y)) * k)
-	E.ov:SetScale(E.base)
+	local y = (50 + (db.y or E_DEF_Y)) * k
+	for _, w in ipairs({ E, E.live or false }) do                  -- 애드온이 그리는 쪽 · 엔진이 그리는 쪽 같은 자리
+		if w and w.holder then
+			w.holder:ClearAllPoints()
+			w.holder:SetPoint("CENTER", UIParent, "CENTER", 0, y)
+			w.ov:SetScale(E.base)
+		end
+	end
 end
 
 local function ECreate()
@@ -1277,11 +1297,12 @@ end
 local function EStart(def, exp, dur, preview, delay)
 	ECreate()
 	local now = GetTime()
-	local timed = (exp and dur and dur > 0) and true or false
+	local real = (exp and dur and dur > 0) and true or false   -- 게임이 알려 준 진짜 시간인지
+	local timed = real
 	if not timed and def.dur > 0 then exp, dur, timed = now + (delay or 0) + 0.3 + def.dur, def.dur, true end
 	local o = E.active[def.key]
-	if o and not o.ending then                       -- 이미 떠 있으면 시간만 새로
-		if timed and o.e.exp ~= exp then
+	if o and not o.ending then                       -- 이미 떠 있으면 시간만 새로 (어림 시간으로는 덮지 않는다)
+		if real and o.e.exp ~= exp then
 			o.e.exp, o.e.dur = exp, dur
 			pcall(o.cd.SetCooldown, o.cd, exp - dur, dur)
 		end
@@ -1439,6 +1460,220 @@ function S.EFrame()
 	if #E.slots == 0 then E.holder:Hide() end
 end
 
+-- 엔진 표식이 사라진 자리에서 별만 캐릭터 쪽으로 빨려 드는 잔상 (효과를 읽을 수 있을 때 · 시간 전에 쓰였을 때)
+local function EGhost(def)
+	ECreate()
+	if not E.holder:IsShown() then ELayoutFrame() end
+	local o = ESlot()
+	local c = rgbOf(def.color)
+	local now = GetTime()
+	o.e = { key = def.key, label = def.label or def.name, c = c, hi = lighten(c, 0.45), timed = false }
+	o.t0, o.last, o.preview = now - 3, now, nil                   -- 이미 앉아 있던 별: 유성 · 섬광 없이 시작
+	EBind(o)
+	ETex(o)
+	o.halo:Hide()
+	o.track:Show()
+	o.track:SetAlpha(0.14)
+	o.x = E.x[def.key] or CHAR_X
+	o.tx = o.x
+	o.ending, o.tEnd = "suck", now
+	E.slots[#E.slots + 1] = o
+	o.f:SetAlpha(1)
+	o.f:Show()
+	E.holder:Show()
+end
+
+-------------------------------------------------------------------------------
+-- 엔진이 그리는 표식 (실제 발동)
+--  모양 · 시각은 위 ESlotFrame 과 같은 시안 값. 단, 엔진에게 넘긴 뒤엔 손댈 수 없으니 전부 애니메이션 그룹으로 미리 짠다.
+--  나타날 때(AuraShownAnimation): 유성 낙하 0.3초 → 섬광 · 충격파 → 별이 톡 → 이름이 살짝 내려오며.
+--  있는 동안: 엔진이 진짜 남은 시간으로 궤도를 돌리고, 별 위에 2.8초마다 반짝임.
+-------------------------------------------------------------------------------
+local function LiveAnim(region, steps, loop)
+	local ag = region:CreateAnimationGroup()
+	ag:SetToFinalAlpha(true)
+	if loop then ag:SetLooping("REPEAT") end
+	for _, s in ipairs(steps) do
+		local a = ag:CreateAnimation(s[1])
+		if s[1] == "Alpha" then
+			a:SetFromAlpha(s[2])
+			a:SetToAlpha(s[3])
+		elseif s[1] == "Scale" then
+			a:SetScaleFrom(s[2], s[2])
+			a:SetScaleTo(s[3], s[3])
+		else
+			a:SetOffset(s[2], s[3])
+		end
+		a:SetStartDelay(s[4])
+		a:SetDuration(s[5])
+		if s[6] then a:SetSmoothing(s[6]) end
+		if s.order then a:SetOrder(s.order) end
+	end
+	return ag
+end
+
+local function LiveInit(def)
+	return function(b)
+		local L, k = E.live, E.pxk or 1.2
+		local c = rgbOf(def.color)
+		local hi = lighten(c, 0.45)
+		pcall(b.SetSize, b, 80, 80)
+		pcall(b.SetMouseClickEnabled, b, false)
+		pcall(b.SetMouseMotionEnabled, b, false)
+		b:ClearAllPoints()
+		b:SetPoint("CENTER", L.anchor[def.key], "CENTER", 0, 0)
+		local function T(layer, sub, file, size, col, a)
+			local t = Tex(b, layer, sub, file)
+			t:SetPoint("CENTER", b, "CENTER", 0, 0)
+			t:SetSize(size, size)
+			if col then Col(t, col) else t:SetVertexColor(1, 1, 1) end
+			t:SetAlpha(a)
+			return t
+		end
+		local flash = T("BACKGROUND", 0, TEX .. "EnBurst", 90, c, 0)
+		local soft = T("BACKGROUND", 1, TEX .. "Spill", 52, c, 0.22)
+		local shock = T("BACKGROUND", 2, Pick("EnShock", 56 * k), 56, hi, 0)
+		local track = T("BACKGROUND", 4, Pick("EnOrbit", 30 * k), 30, hi, 0.14)
+		local star = T("ARTWORK", 2, Pick("EnStar", 32 * k), 32, c, 0.9)
+		local hot = T("OVERLAY", 0, Pick("EnStarHot", 32 * k), 32, nil, 1)
+		local glint = T("OVERLAY", 1, Pick("EnStarHot", 32 * k), 32, nil, 0)
+		-- 유성: 오른쪽 위 출발점에 두고, 착지점까지 0.3초에 떨어뜨린다
+		local cx, cy = MET_DX - MET_L / 2 * MET_UX, MET_DY - MET_L / 2 * MET_UY
+		local mets = {}
+		for i, file in ipairs({ "EnMeteor", "EnMeteorHot" }) do
+			local m = Tex(b, "ARTWORK", i - 1, Pick(file, MET_L * k))
+			m:SetPoint("CENTER", b, "CENTER", cx, -cy)
+			m:SetSize(MET_L, MET_H)
+			m:SetRotation(rad(-145))
+			if i == 1 then Col(m, c) else m:SetVertexColor(1, 1, 1) end
+			m:SetAlpha(0)
+			mets[i] = m
+		end
+		-- 남은 시간 궤도: 엔진이 진짜 시간으로 돌린다
+		local cd = CreateFrame("Cooldown", nil, b)
+		cd:SetSize(30, 30)
+		cd:SetPoint("CENTER", b, "CENTER", 0, 0)
+		for _, fn in ipairs({ { "SetDrawBling", false }, { "SetHideCountdownNumbers", true }, { "SetDrawEdge", true },
+			{ "SetUseCircularEdge", true }, { "SetReverse", false }, { "SetDrawSwipe", true } }) do
+			if cd[fn[1]] then pcall(cd[fn[1]], cd, fn[2]) end
+		end
+		if cd.SetSwipeTexture then pcall(cd.SetSwipeTexture, cd, Pick("EnOrbit", 30 * k)) end
+		if cd.SetEdgeTexture then pcall(cd.SetEdgeTexture, cd, Pick("EnGlint", 10 * k)) end
+		if cd.SetSwipeColor then pcall(cd.SetSwipeColor, cd, c[1], c[2], c[3], 1) end
+		local name = b:CreateFontString(nil, "OVERLAY")
+		name:SetShadowColor(0, 0, 0, 0.75)
+		name:SetShadowOffset(1, -1)
+		FontPx(name, F.semi, 8.5, 8, k)
+		name:SetText(def.label or def.name)
+		name:SetTextColor(hi[1], hi[2], hi[3])
+		name:SetPoint("TOP", b, "CENTER", 0, -21)
+		name:SetAlpha(0.85)
+
+		local land = 0.3
+		local groups = {}
+		for _, m in ipairs(mets) do
+			groups[#groups + 1] = LiveAnim(m, { { "Alpha", 0, 1, 0, 0.066 }, { "Translation", -MET_DX, MET_DY, 0, land, "IN" },
+				{ "Alpha", 1, 0, land, 0.25 } })
+		end
+		groups[#groups + 1] = LiveAnim(flash, { { "Scale", 0.4, 1.35, land, 0.5 }, { "Alpha", 0, 0.9, land, 0.1 }, { "Alpha", 0.9, 0, land + 0.1, 0.4 } })
+		groups[#groups + 1] = LiveAnim(shock, { { "Scale", 0.1, 1, land, 0.5, "OUT" }, { "Alpha", 0, 1, land, 0.06 }, { "Alpha", 1, 0, land + 0.06, 0.44 } })
+		for _, t in ipairs({ { star, 0.9 }, { hot, 1 } }) do
+			groups[#groups + 1] = LiveAnim(t[1], { { "Alpha", 0, 0, 0, land - 0.02 }, { "Alpha", 0, t[2], land - 0.02, 0.12 },
+				{ "Scale", 0.2, 1, land - 0.02, 0.28, "OUT" } })
+		end
+		groups[#groups + 1] = LiveAnim(soft, { { "Alpha", 0, 0, 0, land - 0.02 }, { "Alpha", 0, 0.22, land - 0.02, 0.28 } })
+		groups[#groups + 1] = LiveAnim(track, { { "Alpha", 0, 0, 0, land + 0.1 }, { "Alpha", 0, 0.14, land + 0.1, 0.3 } })
+		groups[#groups + 1] = LiveAnim(name, { { "Alpha", 0, 0, 0, land + 0.12 }, { "Alpha", 0, 0.85, land + 0.12, 0.3 },
+			{ "Translation", 0, 3, 0, 0.01 }, { "Translation", 0, -3, land + 0.12, 0.3, "OUT" } })
+		groups[#groups + 1] = LiveAnim(glint, { { "Alpha", 0, 0, 0, 0.9, order = 1 }, { "Alpha", 0, 0.45, 0, 0.7, "OUT", order = 2 },
+			{ "Alpha", 0.45, 0, 0, 1.2, "IN", order = 3 } }, true)
+		pcall(function()                                             -- 궤도도 착지 뒤에 차오르게 (안 되면 처음부터 보임)
+			groups[#groups + 1] = LiveAnim(cd, { { "Alpha", 0, 0, 0, land + 0.1 }, { "Alpha", 0, 1, land + 0.1, 0.3 } })
+		end)
+		L.cd[def.key] = pcall(b.SetDurationCooldown, b, cd)
+		local n = 0
+		for _, ag in ipairs(groups) do
+			if pcall(b.AddAuraShownAnimation, b, ag) then n = n + 1 end
+		end
+		L.anims[def.key] = n .. "/" .. #groups
+	end
+end
+
+-- 무기에 붙은 마법부여를 보고 자리 잡기: 하나면 가운데, 둘이면 양옆 (엔진 표식은 전투 중 옮길 수 없어서 미리 정해 둔다)
+local function ELiveLayout()
+	local present = {}
+	for slot = 16, 17 do
+		local link = GetInventoryItemLink("player", slot)
+		local id = link and tonumber(link:match("item:%d+:(%d+)"))
+		if id then
+			for _, d in ipairs(ENCH) do
+				for _, e in ipairs(d.ench) do if e == id then present[d.key] = true end end
+			end
+		end
+	end
+	local list = {}
+	for _, d in ipairs(ENCH) do
+		E.x[d.key] = CHAR_X
+		if present[d.key] then list[#list + 1] = d.key end
+	end
+	for i, key in ipairs(list) do E.x[key] = CHAR_X + (i - (#list + 1) / 2) * GAP end
+	E.equipped = present
+	local L = E.live
+	if L then
+		for key, a in pairs(L.anchor) do
+			a:ClearAllPoints()
+			a:SetPoint("CENTER", L.ov, "TOPLEFT", E.x[key] or CHAR_X, -ROW_Y)
+		end
+	end
+end
+S.ELiveLayout = ELiveLayout
+
+local function ELiveCreate()
+	if E.live ~= nil or not (AnchorUtil and AnchorUtil.FlowDirection) then return end
+	E.live = false
+	ELayoutFrame()                                                  -- 크기 배율(E.pxk) 먼저
+	local h = CreateFrame("Frame", "FOAEnchantLive", UIParent)
+	h:SetSize(2, 2)
+	h:SetFrameStrata("BACKGROUND")
+	h:SetFrameLevel(4)
+	h:EnableMouse(false)
+	local ov = CreateFrame("Frame", nil, h)
+	ov:SetSize(1600, 900)
+	ov:SetPoint("TOPLEFT", h, "CENTER", -800, 400)
+	local L = { holder = h, ov = ov, anchor = {}, slots = {}, anims = {}, cd = {} }
+	for _, d in ipairs(ENCH) do
+		local a = CreateFrame("Frame", nil, ov)
+		a:SetSize(2, 2)
+		L.anchor[d.key] = a
+	end
+	E.live = L
+	ELiveLayout()
+	ELayoutFrame()
+	local ok = pcall(function()
+		local c = CreateFrame("AuraContainer", nil, ov, "CustomAuraContainerTemplate")
+		c:SetSize(1, 1)
+		c:SetPoint("TOPLEFT", ov, "TOPLEFT", 0, 0)
+		pcall(c.EnableMouse, c, false)
+		L.c = c
+		for _, d in ipairs(ENCH) do
+			local only = {}
+			for _, id in ipairs(d.ids) do only[id] = true end
+			L.slots[d.key] = c:AddAuraSlot("ench_" .. d.key, "HELPFUL", {
+				candidateFilters = { includeSpellIDs = only },
+				initializeFrame = LiveInit(d),
+			})
+		end
+		c:SetUnit("player")
+	end)
+	if not ok or not L.c then
+		if L.c then L.c:Hide() end
+		h:Hide()
+		E.live = false
+		return
+	end
+	h:SetShown(EN_ON())
+end
+
 local function EPrepare()
 	local ko = (GetLocale and GetLocale() or "koKR") == "koKR"
 	for _, d in ipairs(ENCH) do
@@ -1452,17 +1687,39 @@ end
 
 local function EScan()
 	eDirty = false
+	local secret = AurasSecret()
+	local now = GetTime()
 	for _, d in ipairs(ENCH) do
-		local a = FindAura(d.find)
-		local o = E.active[d.key]
-		if a then
-			local exp, dur = plain(a.expirationTime), plain(a.duration)
-			if not (exp and exp > 0 and dur and dur > 0) then exp, dur = nil, nil end
-			if not o then Log("ench+", d.key, plain(a.name)) end
-			EStart(d, exp, dur)
-		elseif o and not o.preview then
-			local left = o.e.timed and (o.e.exp - GetTime()) or 99
-			EEnd(d.key, left > 0.4)                          -- 시간 전에 사라짐 = 소모 (계시: 다음 주문)
+		local a = (not secret) and FindAura(d.find) or nil
+		if E.live then
+			-- 표식은 엔진이 그린다. 여기선 읽을 수 있을 때만 지켜보다가, 시간 전에 쓰이면 잔상을 빨려 들게 한다
+			local s = E.seen[d.key]
+			if secret then
+				E.seen[d.key] = nil                              -- 비공개 동안엔 모른다 → 잔상 없음
+			elseif a then
+				local exp = plain(a.expirationTime)
+				exp = (exp and exp > 0) and exp or nil
+				if not s then
+					E.seen[d.key] = { exp = exp or (now + d.dur) }
+					Log("ench+", d.key, plain(a.name))
+				elseif exp then
+					s.exp = exp
+				end
+			elseif s then
+				E.seen[d.key] = nil
+				if s.exp - now > 0.4 then EGhost(d) end            -- 시간 전에 사라짐 = 소모 (계시: 다음 주문)
+			end
+		elseif not secret then
+			local o = E.active[d.key]
+			if a then
+				local exp, dur = plain(a.expirationTime), plain(a.duration)
+				if not (exp and exp > 0 and dur and dur > 0) then exp, dur = nil, nil end
+				if not o then Log("ench+", d.key, plain(a.name)) end
+				EStart(d, exp, dur)
+			elseif o and not o.preview then
+				local left = o.e.timed and (o.e.exp - now) or 99
+				EEnd(d.key, left > 0.4)
+			end
 		end
 	end
 end
@@ -1475,9 +1732,9 @@ function S.EPreview(which)
 	for i, d in ipairs(list) do
 		local dl = (i - 1) * 0.5
 		EStart(d, nil, nil, true, dl)
-		if d.dur == 0 then                               -- 계시: 미리 보기에선 7초 뒤 다음 주문을 쓴 것처럼 빨려 든다
+		if d.consume then                                -- 계시: 미리 보기에선 5초 뒤 다음 주문을 쓴 것처럼 빨려 든다
 			local o = E.active[d.key]
-			C_Timer.After(7 + dl, function() if E.active[d.key] == o then EEnd(d.key, true) end end)
+			C_Timer.After(5 + dl, function() if E.active[d.key] == o then EEnd(d.key, true) end end)
 		end
 	end
 end
@@ -1496,21 +1753,23 @@ function S.ESlash(arg)
 		local v = tonumber(rest)
 		if v then db.scale = max(0.4, min(1.6, v)) end
 		Say(string.format("마법부여 표식 크기 %.2f (기본 %.1f · 0.4~1.6)", db.scale or E_DEF_SCALE, E_DEF_SCALE))
-		if E.holder then ELayoutFrame() end
+		ELayoutFrame()
 		S.EPreview()
 	elseif cmd == "높이" or cmd == "y" then
 		local v = tonumber(rest)
 		if v then db.y = max(-300, min(300, floor(v + 0.5))) end
 		Say(string.format("마법부여 표식 높이 %d (기본 %d · 위로 +, 아래로 -)", db.y or E_DEF_Y, E_DEF_Y))
-		if E.holder then ELayoutFrame() end
+		ELayoutFrame()
 		S.EPreview()
 	elseif cmd == "초기화" or cmd == "reset" then
 		db.scale, db.y = nil, nil
-		if E.holder then ELayoutFrame() end
+		ELayoutFrame()
 		Say("마법부여 표식 크기 · 높이를 기본으로 되돌렸어요.")
 		S.EPreview()
 	elseif cmd == "시전" or cmd == "cast" or cmd == "사용" then
 		if E.active.revelation then EEnd("revelation", true) else Say("지금 떠 있는 계시가 없어요. /foa 마부 계시 로 먼저 띄워 주세요.") end
+	elseif cmd == "진단" or cmd == "diag" then
+		S.EDiag()
 	elseif cmd == "끄기" or cmd == "off" or cmd == "켜기" or cmd == "on" then
 		local on = (cmd == "켜기" or cmd == "on")
 		if ns.FX then ns.FX.set(EKEY, on) end
@@ -1520,8 +1779,35 @@ function S.ESlash(arg)
 	elseif ENCH_KO[cmd] or (cmd == "crusader" or cmd == "revelation" or cmd == "insight") then
 		S.EPreview(ENCH_KO[cmd] or cmd)
 	else
-		Say("/foa 마부 [성전사|계시|통찰|시전|크기 0.7|높이 -40|초기화|끄기|켜기]")
+		Say("/foa 마부 [성전사|계시|통찰|시전|진단|크기 0.7|높이 -40|초기화|끄기|켜기]")
 	end
+end
+
+-- /foa 마부 진단: 무기 마부 · 표시 방식 · 지금 읽히는지 한눈에
+function S.EDiag()
+	ELiveLayout()
+	local L = E.live
+	Say("마법부여 표식 진단")
+	if L then
+		local parts = {}
+		for _, d in ipairs(ENCH) do
+			parts[#parts + 1] = (d.label or d.name) .. " " .. (L.anims[d.key] or "-") .. (L.cd[d.key] and "" or " · 궤도 없음")
+		end
+		print("  표시: |cff8FD8FF게임 엔진|r (전투 중에도 뜸) · 애니메이션 " .. table.concat(parts, ", "))
+	else
+		print("  표시: |cffFFC94D애드온 직접 읽기|r (이 클라이언트는 엔진 표식을 못 써서 전투 중엔 안 보일 수 있음)")
+	end
+	local eq = {}
+	for _, d in ipairs(ENCH) do if E.equipped[d.key] then eq[#eq + 1] = d.label or d.name end end
+	print("  무기 마부: " .. (#eq > 0 and table.concat(eq, " · ") or "성전사 · 계시 · 통찰 없음"))
+	local secret = AurasSecret()
+	print("  몸의 효과: " .. (secret and "비공개 (전투 중) — 엔진만 볼 수 있음" or "읽을 수 있음"))
+	if not secret then
+		for _, d in ipairs(ENCH) do
+			if FindAura(d.find) then print("  지금 붙어 있음: " .. (d.label or d.name)) end
+		end
+	end
+	if not EN_ON() then print("  |cffFF7A7A꺼져 있음|r — /foa 마부 켜기") end
 end
 
 local function HideBlizzardOverlay(on)
@@ -1539,16 +1825,23 @@ function M:Init()
 	end
 	Prepare()
 	EPrepare()
+	do
+		local ok, err = pcall(ELiveCreate)
+		if not ok then E.live = false Ink:LogError("Stars.EnchLive: " .. tostring(err)) end
+	end
 	local ev = CreateFrame("Frame")
 	for _, e in ipairs({ "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW", "SPELL_ACTIVATION_OVERLAY_GLOW_HIDE", "SPELL_ACTIVATION_OVERLAY_SHOW",
 		"SPELL_ACTIVATION_OVERLAY_HIDE", "SPELLS_CHANGED", "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "LEARNED_SPELL_IN_TAB",
-		"PLAYER_ENTERING_WORLD", "PLAYER_DEAD", "DISPLAY_SIZE_CHANGED", "UI_SCALE_CHANGED" }) do
+		"PLAYER_ENTERING_WORLD", "PLAYER_DEAD", "DISPLAY_SIZE_CHANGED", "UI_SCALE_CHANGED", "PLAYER_EQUIPMENT_CHANGED" }) do
 		pcall(ev.RegisterEvent, ev, e)
 	end
 	pcall(ev.RegisterUnitEvent, ev, "UNIT_AURA", "player")
 	pcall(ev.RegisterUnitEvent, ev, "UNIT_SPELLCAST_SUCCEEDED", "player")
+	pcall(ev.RegisterUnitEvent, ev, "UNIT_INVENTORY_CHANGED", "player")
 	ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
-		if event == "UNIT_AURA" then
+		if event == "UNIT_INVENTORY_CHANGED" then            -- 무기에 마부를 새로 바르면 자리 다시
+			pcall(ELiveLayout)
+		elseif event == "UNIT_AURA" then
 			auraDirty, eDirty = true, true
 		elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
 			if FX_ON() then pcall(S.Cast, a3) end
@@ -1557,12 +1850,15 @@ function M:Init()
 		elseif event == "SPELL_ACTIVATION_OVERLAY_SHOW" or event == "SPELL_ACTIVATION_OVERLAY_HIDE" then
 			if FX_ON() then pcall(S.Overlay, a1, event == "SPELL_ACTIVATION_OVERLAY_SHOW") end
 		elseif event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_DEAD" then
-			if event == "PLAYER_ENTERING_WORLD" then pcall(Prepare) pcall(EPrepare) eDirty = true end
+			if event == "PLAYER_ENTERING_WORLD" then pcall(Prepare) pcall(EPrepare) pcall(ELiveLayout) eDirty = true end
 			S.ClearReal()
 			auraDirty = true
 			HideBlizzardOverlay(FX_ON())
 		elseif event == "DISPLAY_SIZE_CHANGED" or event == "UI_SCALE_CHANGED" then
 			if V.shown then Layout() ApplyTex() end
+			if E.holder or E.live then pcall(ELayoutFrame) end
+		elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+			if a1 == 16 or a1 == 17 then pcall(ELiveLayout) end
 		else
 			pcall(S.Resolve)
 		end
@@ -1586,7 +1882,10 @@ function M:Init()
 		end
 	end)
 	if ns.FX then
-		ns.FX.onToggle[EKEY] = function(on) if not on then S.EStop() else eDirty = true end end
+		ns.FX.onToggle[EKEY] = function(on)
+			if E.live then E.live.holder:SetShown(on) end
+			if not on then S.EStop() else eDirty = true end
+		end
 		ns.FX.onToggle[KEY] = function(on)
 			HideBlizzardOverlay(on)
 			if not on then S.ClearReal() end
