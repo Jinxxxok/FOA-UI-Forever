@@ -630,6 +630,47 @@ local function WhoLines(t, label, w)
 	if w.map then t[#t + 1] = TipKV(" ", string.format("%s  %.0f, %.0f", ZoneName(w.map), w.x, w.y), TIP_SOFT, TIP_MUTED) end
 end
 -- 툴팁 줄 · 누르면 찍을 곳 (퀘스트 시작 NPC 가 따로 있고 자리를 알면 그쪽 먼저)
+-- 심화 과정 전 연계 퀘스트: 단계마다 끝냈는지(초록 "완료") · 아직이면 낼 재료 한 줄
+local function QuestDone(qid)
+	local f = C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted
+	if not (f and qid) then return false end
+	local ok, v = pcall(f, qid)
+	return ok and v == true
+end
+local function QuestTitle(qid, fallback)
+	local f = C_QuestLog and C_QuestLog.GetTitleForQuestID
+	if f and qid then
+		local ok, v = pcall(f, qid)
+		if ok and type(v) == "string" and v ~= "" then return v end
+	end
+	return fallback
+end
+local function ChainLines(t, s)
+	local fi = UnitFactionGroup("player") == "Horde" and 2 or 1
+	t[#t + 1] = TipH("연계 순서")
+	local nDone = 0
+	for i, c in ipairs(s.chain) do
+		local qid = c.q[fi]
+		local done = QuestDone(qid)
+		if done then nDone = nDone + 1 end
+		local mark = done and "|cff6FD39A완료|r  " or ("|cffE3C07A" .. i .. "|r  ")
+		t[#t + 1] = TipKV(mark .. QuestTitle(qid, c.name), c.get or " ", done and TIP_MUTED or TIP_WHITE, TIP_MUTED)
+		if not done then
+			local need
+			if c.items then
+				local parts = {}
+				for _, it in ipairs(c.items) do parts[#parts + 1] = ItemNameOf(it) .. " " .. it[2] end
+				need = table.concat(parts, " · ")
+			elseif c.text then
+				need = c.text[fi]
+			end
+			if need then t[#t + 1] = TipT(need, TIP_SOFT) end
+		end
+	end
+	if nDone > 0 then t[#t + 1] = TipT(nDone .. " / " .. #s.chain .. " 끝냄", TIP_GREEN) end
+	if s.chainNote then t[#t + 1] = TipT(s.chainNote, TIP_DIM) end
+end
+
 local function SpecTip(prof, s, def, isMaster, withSwitch)
 	local cls = MyClass()
 	local t = { SpecNameC(s) }
@@ -644,6 +685,7 @@ local function SpecTip(prof, s, def, isMaster, withSwitch)
 	if st then WhoLines(t, "|cffE3C07A1|r  퀘스트 시작", st) end
 	WhoLines(t, st and "|cffE3C07A2|r  배우는 곳" or "배우는 곳", w)
 	if s.how then t[#t + 1] = TipT(s.how, TIP_MUTED) end
+	if s.chain then ChainLines(t, s) end
 	if s.items then
 		t[#t + 1] = TipH("가져갈 것")
 		for _, it in ipairs(s.items) do
