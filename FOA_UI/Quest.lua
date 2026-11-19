@@ -7,6 +7,8 @@ local F, C = Ink.font, Ink.c
 local safe, plain = Ink.safe, Ink.plain
 
 local W, MAX_OBJ = 240, 3
+-- 아직 못 한 목표는 이만큼까지 다 보여 준다 (예전엔 목표를 3줄에서 잘라 4번째 목표가 사라졌다 · 마력의 수정 4색)
+local MAX_OPEN = 6
 -- 한 번에 보이는 퀘스트 수 (설정 → 지도 · 퀘스트 → 한 번에 보이는 수, 3~10)
 local function MaxQuests() return math.max(3, math.min(10, tonumber(Ink.db and Ink.db.questMax) or 6)) end
 
@@ -943,8 +945,18 @@ function M:Update()
 			o:Show()
 			oy = oy - 18
 		else
+			-- 못 한 목표는 모두 (6개까지) · 끝낸 목표는 목표가 3개 이하일 때만 줄로, 많으면 한 줄 요약
+			local showDone, open, moreOpen, doneHidden = #objs <= MAX_OBJ, 0, 0, 0
 			for oi, ob in ipairs(objs) do
-				if used < MAX_OBJ and (not ob.finished or #objs <= MAX_OBJ) then
+				local show
+				if ob.finished then
+					show = showDone
+					if not show then doneHidden = doneHidden + 1 end
+				else
+					show = open < MAX_OPEN
+					if show then open = open + 1 else moreOpen = moreOpen + 1 end
+				end
+				if show then
 					used = used + 1
 					local o = ObjectiveLine(r, used)
 					o:ClearAllPoints()
@@ -982,6 +994,20 @@ function M:Update()
 					end
 					o:Show()
 				end
+			end
+			if moreOpen > 0 or doneHidden > 0 then
+				used = used + 1
+				local o = ObjectiveLine(r, used)
+				o:ClearAllPoints()
+				o:SetPoint("TOPLEFT", r, "TOPLEFT", 0, oy)
+				o.text:SetWidth(W - 50)
+				o.text:SetText((moreOpen > 0 and ("남은 목표 " .. moreOpen .. "개 더") or "")
+					.. ((moreOpen > 0 and doneHidden > 0) and "  ·  " or "") .. (doneHidden > 0 and ("끝낸 목표 " .. doneHidden .. "개") or ""))
+				o.text:SetTextColor(C.dim[1], C.dim[2], C.dim[3])
+				o.count:SetText("")
+				o.bar:Hide()
+				o:Show()
+				oy = oy - 16
 			end
 		end
 		-- 시간 제한 퀘스트: 남은 시간 (1초마다 글자만 갱신)
