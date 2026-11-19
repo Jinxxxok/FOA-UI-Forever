@@ -1457,7 +1457,8 @@ function M:AddQuestRewards(pool, lvl)
 					if slot and not added[id] and (owned or (qlvl >= lvl - 22 and not qdone)) then
 						local it = self.questById[id]
 						if not it then
-							it = { id = id, icon = icon, slot = slot, quest = qid, qlvl = q[2] or 0, need = qlvl, qmap = q[4], qx = q[5], qy = q[6], qnpc = q[7], dq = inst }
+							it = { id = id, icon = icon, slot = slot, quest = qid, qlvl = q[2] or 0, need = qlvl, qmap = q[4], qx = q[5], qy = q[6], qnpc = q[7], dq = inst,
+								qkind = q[14], qitem = q[13], qdrop = q[11], qturn = q[15] }
 							self.questById[id] = it
 						end
 						if not it.name then
@@ -1625,8 +1626,23 @@ function M:QuestRewardTooltip(it, tt)
 	local Q = Ink.modules.QuestMap
 	local giver = it.qnpc and it.qnpc > 0 and Q and Q.GiverName and Q:GiverName(it.qnpc)
 	local info = it.qmap and it.qmap > 0 and C_Map.GetMapInfo and C_Map.GetMapInfo(it.qmap)
-	if giver then tt:AddLine("주는 NPC: " .. giver, 1, 0.82, 0.32) end
-	if info then tt:AddLine(info.name .. string.format("  %.1f, %.1f", it.qx or 0, it.qy or 0), 0.7, 0.72, 0.75) end
+	-- 좌표가 주는 곳이 아니라 보고하는 곳인 퀘스트 (아이템으로 시작 · 주는 곳 모름): 그렇다고 밝힌다
+	local turnin = it.qkind == 1
+	if (it.qitem or 0) > 0 then
+		local nm = C_Item.GetItemNameByID and C_Item.GetItemNameByID(it.qitem)
+		if not nm and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(it.qitem) end
+		local from = (it.qdrop or 0) == -1 and "던전 몹" or ((it.qdrop or 0) > 0 and Q and Q.GiverName and Q:GiverName(it.qdrop))
+		tt:AddLine("시작: 아이템" .. (nm and (" [" .. nm .. "]") or ""), 1, 0.82, 0.32)
+		if from then tt:AddLine("      " .. from .. " 드랍", 0.7, 0.72, 0.75) end
+	elseif giver then tt:AddLine("주는 NPC: " .. giver, 1, 0.82, 0.32) end
+	if info then
+		if turnin then
+			local who = (it.qturn or 0) > 0 and Q and Q.GiverName and Q:GiverName(it.qturn)
+			tt:AddLine("보고: " .. (who and (who .. "  ·  ") or "") .. info.name .. string.format("  %.1f, %.1f", it.qx or 0, it.qy or 0), 0.7, 0.72, 0.75)
+		else
+			tt:AddLine(info.name .. string.format("  %.1f, %.1f", it.qx or 0, it.qy or 0), 0.7, 0.72, 0.75)
+		end
+	end
 	local inLog = C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(it.quest)
 	if inLog then tt:AddLine("지금 진행 중인 퀘스트예요", 0.44, 0.83, 0.55)
 	else
@@ -1655,7 +1671,7 @@ function M:QuestRewardTooltip(it, tt)
 			tt:AddLine("선행 퀘스트가 있을 수 있어요", 0.56, 0.58, 0.61)
 		end
 	end
-	if info then tt:AddLine("클릭: 퀘스트 주는 곳을 지도에", 0.56, 0.58, 0.61) end
+	if info then tt:AddLine(turnin and "클릭: 보고하는 곳을 지도에" or "클릭: 퀘스트 주는 곳을 지도에", 0.56, 0.58, 0.61) end
 end
 
 -- 만렙 전 "레벨 최고템": 부위마다 지금 착용 가능한(요구 레벨 ≤ 내 레벨) 내 직업 장비를 FOA 점수 순으로 (12개까지 · 휠로 넘겨 봄)
@@ -4300,6 +4316,7 @@ local function StepSub(st)
 			local from = DropFrom(q)
 			t = "아이템으로 시작" .. (from and ("  ·  " .. from .. " 드랍") or "")
 		elseif q[7] > 0 then t = (giver or "NPC") .. (zone and ("  ·  " .. zone) or (kind == KIND_IN_NPC and "  ·  던전 안" or ""))
+		elseif kind == KIND_TURNIN and (q[15] or 0) > 0 then t = "보고: " .. (NpcOf(q[15]) or "NPC") .. (zone and ("  ·  " .. zone) or "")
 		else t = zone or "" end
 	else
 		local s2 = M.QuestStep(st.id)
@@ -4310,6 +4327,15 @@ local function StepSub(st)
 	return t
 end
 M.StepSub = StepSub
+-- 설명 조각 잇기: 빈 조각은 건너뛴다 (자리를 모르는 단계에서 "·  ·" 처럼 점만 남지 않게)
+local function SubJoin(...)
+	local out = {}
+	for i = 1, select("#", ...) do
+		local v = select(i, ...)
+		if type(v) == "string" and v ~= "" then out[#out + 1] = v end
+	end
+	return table.concat(out, "  ·  ")
+end
 
 -- 타임라인 그림: 화면 픽셀에 맞춘 짝수 크기 (5K · 4K · QHD 처럼 1칸이 정수 픽셀이 아니면 원 · 선이 번지고
 --  점과 고리가 반 픽셀씩 어긋나 보였다) · 모두 같은 중심(x = RAIL)에 짝수 픽셀이라 한가운데가 맞는다
@@ -4505,7 +4531,8 @@ function M:QuestTip(r)
 	end
 	local note = DQNote(e.id)
 	if note and note[2] then Ink.TipLine(tt, note[2], 0.78, 0.8, 0.84) end
-	if note and note[1] and note[1] > 0 and q[4] == 0 then
+	-- 던전 안에서 시작하는 퀘스트 (좌표가 보고하는 곳이어도: 아이템으로 시작하는 퀘스트)
+	if note and note[1] and note[1] > 0 and (q[4] == 0 or (q[14] or 0) == KIND_TURNIN) then
 		local data = self.showing and self:Scan(self.showing)
 		for _, bb in ipairs(data and data.bosses or {}) do
 			if bb.npc == note[1] then Ink.TipLine(tt, "던전 화면: " .. (BossName(bb) or bb.name) .. " 근처 (경로에 느낌표)", 0.89, 0.75, 0.48) break end
@@ -4601,15 +4628,15 @@ function M:PaintChainRow(r, g, y, LC)
 	elseif g.state == "log" then
 		sub = "진행 중: " .. nowT .. (now.dung and "  ·  던전 안" or "")
 	elseif g.state == "pre" then
-		sub = "먼저 " .. nowT .. "  ·  " .. StepSub(now)
+		sub = SubJoin("먼저 " .. nowT, StepSub(now))
 	elseif g.state == "after" then
-		sub = "다음: " .. nowT .. "  ·  " .. StepSub(now)
+		sub = SubJoin("다음: " .. nowT, StepSub(now))
 	else
-		sub = (now and now.id ~= g.id) and ("지금: " .. nowT .. "  ·  " .. StepSub(now)) or StepSub(now or g.head)
+		sub = (now and now.id ~= g.id) and SubJoin("지금: " .. nowT, StepSub(now)) or StepSub(now or g.head)
 	end
 	r.sub:SetPoint("RIGHT", -26, 0)
 	r.chip:SetPoint("TOPRIGHT", DQ_CHIP_R, -6)
-	r.sub:SetText(sub .. (g.nMain > 1 and ("  ·  " .. g.nMain .. "단계") or ""))
+	r.sub:SetText(SubJoin(sub, g.nMain > 1 and (g.nMain .. "단계") or nil))
 	local stText, col, fill, edge, icon = "", C.muted, 0, 0, nil
 	if g.state == "log" then
 		local ready = C_QuestLog.ReadyForTurnIn and C_QuestLog.ReadyForTurnIn(now.id)
