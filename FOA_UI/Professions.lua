@@ -1009,7 +1009,7 @@ local function Row(body)
 		ShowTip(self)
 	end)
 	r:SetScript("OnLeave", function(self) self.hl:SetVertexColor(1, 1, 1, 0); GameTooltip:Hide() end)
-	r:SetScript("OnClick", function(self) if self.vendor then Waypoint(self.vendor) end end)
+	r:SetScript("OnClick", function(self) if self.onClick then self.onClick(self) elseif self.vendor then Waypoint(self.vendor) end end)
 	return r
 end
 
@@ -1473,6 +1473,280 @@ function M:Paint()
 	self:PaintList(p, name, prof, skill, max, route, rkey, known, byName, curI, capped, lv, spec)
 end
 
+-------------------------------------------------------------------------------
+-- 주요 제조법 (ProfessionPicks.lua): 많이 쓰이거나 만들어 팔 만한 것 · 도안 얻는 곳 · 재료비와 예상 이익
+--  이익 = 경매장 판매가(수수료 5% 뺌) - 재료비 · 가격은 FOA 경매장 가격(가격 스캔 · 둘러본 값)
+--  값을 모르는 재료가 있으면 이익을 짐작하지 않는다 (상인이 파는 실은 상인 값으로)
+-------------------------------------------------------------------------------
+local PICK_SRC = { v = "상인", t = "훈련사", d = "드랍", w = "무작위 드랍", q = "퀘스트" }
+local Q_HEX = { [1] = "FFFFFF", [2] = "1EFF00", [3] = "0070DD", [4] = "A335EE", [5] = "FF8000" }
+local function UnitCost(id)
+	local p = Price(nil, id)
+	if p then return p, false end
+	if (ns.PROF_VENDOR_REAGENT or {})[id] and C_Item.GetItemInfo then
+		local sell = select(11, C_Item.GetItemInfo(id))
+		if type(sell) == "number" and sell > 0 then return sell * 4, true end   -- 상인 값은 보통 되파는 값의 4배
+	end
+end
+local function CraftCost(r)
+	local cost, miss = 0, 0
+	for _, x in ipairs(r or {}) do
+		local u = UnitCost(x[1])
+		if u then cost = cost + u * x[2] else miss = miss + 1 end
+	end
+	return cost, miss
+end
+-- 이익 · 재료비 · 값 모르는 재료 수 · 판매가 · 귀속(팔 수 없음)
+local function PickProfit(item, r)
+	local cost, miss = CraftCost(r)
+	local bind = C_Item.GetItemInfo and select(14, C_Item.GetItemInfo(item))
+	local sale = Price(nil, item)
+	if bind == 1 then return nil, cost, miss, sale, true end
+	if sale and miss == 0 then return math.floor(sale * 0.95 - cost), cost, miss, sale end
+	return nil, cost, miss, sale
+end
+-- 짧은 골드 (목록 오른쪽)
+local function Gold(c)
+	c = math.abs(c or 0)
+	if c >= 1000000 then return string.format("%dg", math.floor(c / 10000)) end
+	if c >= 10000 then
+		local g, sv = math.floor(c / 10000), math.floor(c / 100) % 100
+		return sv > 0 and string.format("%dg %ds", g, sv) or string.format("%dg", g)
+	end
+	return string.format("%ds", math.max(1, math.floor(c / 100)))
+end
+local function ProfitText(v)
+	if not v then return nil end
+	return v >= 0 and ("|cff6FD39A+" .. Gold(v) .. "|r") or ("|cffFF6B5E-" .. Gold(v) .. "|r")
+end
+local function PickItemName(item, spell)
+	local n = C_Item.GetItemNameByID and C_Item.GetItemNameByID(item)
+	if not n then ItemIcon(item); n = spell and SpellName(spell) end
+	local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(item)
+	return n and (Q_HEX[q] and ("|cff" .. Q_HEX[q] .. n .. "|r") or n) or "…", n
+end
+local function ReagentName(id)
+	local n = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+	if not n then ItemIcon(id) end
+	return n or "…"
+end
+-- 내 진영 자리 하나 (가까운 곳)
+local function PickSpot(who)
+	local fac, best, bd = MyFac(), nil, nil
+	for _, w in ipairs(who or {}) do
+		if w[2] == 0 or w[2] == fac then
+			local d = (w[3] or 0) > 0 and Dist(w[3], w[4], w[5]) or 9e9
+			if not best or d < bd then best, bd = w, d end
+		end
+	end
+	return best
+end
+local function SpotName(w, src)
+	return TrainerName(w[1], (w[6] and w[6] ~= "") and w[6] or (src == "t" and "훈련사" or (src == "q" and "퀘스트 NPC" or "상인")))
+end
+-- 평판 이름 · 단계 (게임 글자) · 지금 단계가 되는지
+local function RepText(fid, need)
+	local name, have
+	if C_Reputation and C_Reputation.GetFactionDataByID then
+		local ok, d = pcall(C_Reputation.GetFactionDataByID, fid)
+		if ok and type(d) == "table" then name, have = d.name, d.reaction end
+	end
+	if not name and GetFactionInfoByID then
+		local ok, n, _, st = pcall(GetFactionInfoByID, fid)
+		if ok then name, have = n, st end
+	end
+	local id = need >= 42000 and 8 or (need >= 21000 and 7 or (need >= 9000 and 6 or (need >= 3000 and 5 or 4)))
+	return (name or "평판") .. " " .. (_G["FACTION_STANDING_LABEL" .. id] or ""), have and have >= id
+end
+local function CostText(c)
+	if not c then return end
+	if c[1] == "i" then return ReagentName(c[2]) .. " " .. c[3] .. "개" end
+	if c[1] == "c" then
+		local nm
+		if C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
+			local ok, info = pcall(C_CurrencyInfo.GetCurrencyInfo, c[2])
+			nm = ok and type(info) == "table" and info.name or nil
+		end
+		return (nm or "전문기술 화폐") .. " " .. c[3] .. "개"
+	end
+end
+-- 도안 얻는 곳 줄들 (툴팁)
+local function PickSourceLines(t, e, w, learned, skill)
+	t[#t + 1] = TipH("도안 얻는 곳")
+	t[#t + 1] = TipKV("필요 숙련도", learned and "|cff6FD39A배움|r" or (skill < (e.la or 0) and ("|cffFF6B5E" .. e.la .. "|r") or tostring(e.la or 0)), TIP_SOFT, TIP_WHITE)
+	if w then
+		t[#t + 1] = TipKV(e.src == "d" and "떨어뜨리는 몹" or (PICK_SRC[e.src] or ""), SpotName(w, e.src) .. ((e.src == "d" and #e.who > 1) and (" 외 " .. (#e.who - 1)) or ""), TIP_SOFT, TIP_WHITE)
+		if (w[3] or 0) > 0 then t[#t + 1] = TipKV(" ", string.format("%s  %.0f, %.0f", ZoneName(w[3]), w[4], w[5]), TIP_SOFT, TIP_MUTED) end
+		local c = not e.costs and w[7]   -- 레벨업 장비 묶음은 숙련마다 값이 달라 아래에 따로
+		if c then
+			t[#t + 1] = TipKV("값", CostText(c) or "", TIP_SOFT, TIP_GOLD)
+			if c[1] == "c" and c[4] then
+				local rt, ok = RepText(c[4], c[5] or 0)
+				t[#t + 1] = TipKV("평판", rt, TIP_SOFT, ok and TIP_GREEN or TIP_WHITE)
+			end
+		end
+	end
+	if e.lim then t[#t + 1] = TipT("수량 한정: 팔리고 없으면 다시 채워질 때까지 기다려야 해요", TIP_MUTED) end
+	if e.src == "w" then t[#t + 1] = TipT("필드 · 던전 몹이 무작위로 떨어뜨려요 · 경매장에서 도안을 찾아보세요", TIP_SOFT) end
+	if e.how then t[#t + 1] = TipT(e.how, TIP_SOFT) end
+end
+local function ReagentLines(t, r, title)
+	t[#t + 1] = TipH(title or "재료 (한 번 만들 때)")
+	for _, x in ipairs(r or {}) do
+		local u, vend = UnitCost(x[1])
+		local have = Count(nil, x[1])
+		t[#t + 1] = TipKV(ReagentName(x[1]) .. "  |cff8A9099" .. x[2] .. "개" .. (have > 0 and (" · 가방 " .. have) or "") .. "|r",
+			u and (Money(u * x[2]) .. (vend and " |cff5E636B상인|r" or "")) or "|cff5E636B값 모름|r", TIP_SOFT, TIP_WHITE)
+	end
+end
+local function MoneyLines(t, profit, cost, miss, sale, bound)
+	t[#t + 1] = TipKV("재료비", (cost > 0 and Money(cost) or "") .. (miss > 0 and ("  |cff8A9099값 모르는 재료 " .. miss .. "개|r") or ""), TIP_SOFT, TIP_WHITE)
+	if bound then
+		t[#t + 1] = TipT("획득 시 귀속 · 경매장에 팔 수 없어요 (직접 쓰거나 주문 제작)", TIP_GOLD)
+		return
+	end
+	t[#t + 1] = TipKV("경매장 판매가", sale and Money(sale) or "|cff5E636B기록 없음|r", TIP_SOFT, TIP_WHITE)
+	if profit then
+		t[#t + 1] = TipKV("예상 이익", (profit >= 0 and "|cff6FD39A+" or "|cffFF6B5E-") .. Money(math.abs(profit)) .. "|r  |cff5E636B수수료 5% 뺌|r", TIP_SOFT, TIP_WHITE)
+	end
+end
+
+-- 목록에 넣을 묶음 하나 계산 { e, w, learned, ok, profit, ... }
+local function PickState(e, skill, byName, mySpec, cls)
+	local w = PickSpot(e.who)
+	local st = { e = e, w = w }
+	local function known(sid) local nm = SpellName(sid); return (nm and byName[nm]) and true or Knows(sid) end
+	st.specOK = (e.spec or 0) == 0 or (mySpec and e.spec == mySpec)
+	st.skillOK = skill >= (e.la or 0)
+	if e.items then
+		local n, best = 0, nil
+		for _, it in ipairs(e.items) do
+			local kn = known(it[1])
+			if kn then n = n + 1 end
+			local pr, cost, miss, sale, bound = PickProfit(it[2], it[3])
+			if pr and (not best or pr > best.profit) then best = { profit = pr, it = it } end
+			it.k, it.p, it.c, it.m, it.s, it.b = kn, pr, cost, miss, sale, bound
+		end
+		st.nKnown, st.best = n, best
+		st.profit = best and best.profit
+		st.item = (best and best.it or e.items[1])[2]
+		st.mine = e.set == cls
+	else
+		st.learned = known(e.s)
+		st.profit, st.cost, st.miss, st.sale, st.bound = PickProfit(e.i, e.r)
+		st.item = e.i
+	end
+	return st
+end
+
+function M:PaintPicks(prof, skill, byName, spec, head, row)
+	local list = prof and ns.PROF_PICKS and ns.PROF_PICKS[prof]
+	if not list or skill < 200 then return 0 end
+	local mySpec = spec and spec.learned and spec.learned.spell
+	local cls = MyClass()
+	local all = {}
+	for i, e in ipairs(list) do
+		-- 다른 심화 과정 전용은 뺀다 (아직 안 골랐으면 보여 주되 흐리게)
+		if (e.spec or 0) == 0 or not mySpec or e.spec == mySpec then
+			local st = PickState(e, skill, byName, mySpec, cls)
+			st.order = i - ((st.mine and 100) or 0)
+			all[#all + 1] = st
+		end
+	end
+	-- 이익을 아는 것(많이 남는 순) → 나머지는 정리한 순서 (내 직업 세트 먼저)
+	table.sort(all, function(a, b)
+		local pa, pb = a.profit and a.profit > 0, b.profit and b.profit > 0
+		if pa ~= pb then return pa end
+		if pa and a.profit ~= b.profit then return a.profit > b.profit end
+		return a.order < b.order
+	end)
+	local limit = Ink.db.profPicksAll and #all or math.min(#all, 10)
+	head("주요 제조법", "도안 · 재료비 · 경매장 이익")
+	local SPEC = {}
+	for _, s in ipairs(spec and spec.def and spec.def.list or {}) do SPEC[s.spell] = s end
+	for k = 1, limit do
+		local st = all[k]
+		local e, w = st.e, st.w
+		local dim = not st.skillOK or not st.specOK
+		local specTag = ((e.spec or 0) > 0 and SPEC[e.spec] and not mySpec) and ("  " .. SpecShortC(SPEC[e.spec])) or ""
+		local where = w and (w[3] or 0) > 0 and ZoneName(w[3]) or nil
+		local srcT = PICK_SRC[e.src] or ""
+		if e.src == "d" and w then srcT = srcT .. " · " .. SpotName(w, "d") .. (#e.who > 1 and " 등" or "")
+		elseif w then srcT = srcT .. " · " .. SpotName(w, e.src) end
+		if e.lim then srcT = srcT .. " (한정)" end
+		local tip, nameT, icon
+		if e.items then
+			local n = #e.items
+			local label = e.set and (ClassText(e.set) .. " 영웅 세트") or "레벨업 희귀 장비"
+			nameT = label .. "  |cff8A9099" .. n .. (e.set and "부위" or "종") .. "|r" .. specTag
+			icon = ItemIcon(st.item)
+			tip = { label, TipT(e.why or "", TIP_GOLD) }
+			PickSourceLines(tip, e, w, st.nKnown == n, skill)
+			if e.cost then
+				for i = 1, #e.cost, 2 do
+					local sid, c = e.cost[i], e.cost[i + 1]
+					for _, it in ipairs(e.items) do
+						if it[1] == sid then
+							local _, pn = PickItemName(it[2], it[1])
+							tip[#tip + 1] = TipKV("  " .. (pn or "…") .. " 도안", CostText(c) or "", TIP_MUTED, TIP_GOLD)
+							break
+						end
+					end
+				end
+			elseif e.set then
+				tip[#tip + 1] = TipT("도안 값은 상인 창에서 확인해 주세요 (자료에 아직 없어요)", TIP_MUTED)
+			end
+			if e.costs then
+				for _, la in ipairs({ 210, 225, 235, 250 }) do
+					local c = e.costs[la]
+					if c then
+						local rt, ok = RepText(MyFac() == 1 and 2587 or 2586, c[2])
+						tip[#tip + 1] = TipKV("  숙련 " .. la, CostText({ "c", 3402, c[1] }) .. " · " .. rt, TIP_MUTED, ok and TIP_GREEN or TIP_WHITE)
+					end
+				end
+			end
+			tip[#tip + 1] = TipH((e.set and "부위" or "종류") .. "마다 예상 이익" .. (st.nKnown > 0 and ("  |cff6FD39A배움 " .. st.nKnown .. "/" .. n .. "|r") or ""))
+			local shown, rows = 0, {}
+			for _, it in ipairs(e.items) do rows[#rows + 1] = it end
+			table.sort(rows, function(a, b)
+				if (a.p ~= nil) ~= (b.p ~= nil) then return a.p ~= nil end
+				if a.p and b.p and a.p ~= b.p then return a.p > b.p end
+				return (a[4] or 0) < (b[4] or 0)
+			end)
+			for _, it in ipairs(rows) do
+				shown = shown + 1
+				if shown > 14 then tip[#tip + 1] = TipT("… " .. (#rows - 14) .. "개 더", TIP_MUTED) break end
+				local nm = PickItemName(it[2], it[1])
+				local r = it.b and "|cffFFD15F귀속|r" or (it.p and ProfitText(it.p) or (it.c and it.c > 0 and it.m == 0 and ("재료 " .. Gold(it.c)) or "|cff5E636B값 모름|r"))
+				tip[#tip + 1] = TipKV((it.k and "|cff6FD39A✓|r " or "") .. nm .. (it[4] and ("  |cff8A9099" .. it[4] .. "|r") or ""), r, TIP_SOFT, TIP_WHITE)
+			end
+			local first = (st.best and st.best.it) or e.items[1]
+			ReagentLines(tip, first[3], "재료 (" .. (select(2, PickItemName(first[2], first[1])) or "한 부위") .. ")")
+		else
+			nameT = PickItemName(e.i, e.s) .. specTag
+			icon = ItemIcon(e.i)
+			tip = { select(2, PickItemName(e.i, e.s)) or "제조법", TipT(e.why or "", TIP_GOLD) }
+			if (e.spec or 0) > 0 and SPEC[e.spec] then tip[#tip + 1] = TipKV("심화 과정", SpecNameC(SPEC[e.spec]), TIP_SOFT, st.specOK and TIP_GREEN or TIP_WHITE) end
+			PickSourceLines(tip, e, w, st.learned, skill)
+			ReagentLines(tip, e.r)
+			MoneyLines(tip, st.profit, st.cost, st.miss, st.sale, st.bound)
+		end
+		tip[#tip + 1] = TipHint("가격: FOA 경매장 가격 (경매장에서 가격 스캔 · 둘러본 값)" .. (w and (w[3] or 0) > 0 and " · 누르면 지도에 표시" or ""))
+		local learned = st.learned or (st.nKnown and st.nKnown > 0)
+		local right = ProfitText(st.profit) or (st.bound and "|cffFFD15F귀속|r") or (learned and "|cff6FD39A배움|r") or (not st.skillOK and ("숙련 " .. e.la)) or ""
+		local dot = learned and GREEN or ((st.skillOK and st.specOK) and GOLD or nil)
+		local r = row(icon or 134400, nameT, Short(22, srcT, where), right, dot, tip, dim)
+		r.item = st.item
+		if w and (w[3] or 0) > 0 then r.vendor = { w[1], w[3], w[4], w[5], label = PICK_SRC[e.src] == "드랍" and "도안 드랍" or (PICK_SRC[e.src] or "상인") } end
+	end
+	if #all > 10 then
+		local r = row(134400, Ink.db.profPicksAll and "접기" or ("그 밖에 " .. (#all - 10) .. "개 더 보기"), "", "", nil, nil, true)
+		r.icon:SetTexture(Ink.icon and Ink.icon("Chevron") or 134400)
+		r.onClick = function() Ink.db.profPicksAll = not Ink.db.profPicksAll; M:Paint() end
+	end
+	return limit
+end
+
 -- 목록 (Paint 에서 나눔: 한 함수가 쓰는 바깥 변수가 60개를 넘으면 Lua 5.1 에서 안 열린다)
 function M:PaintList(p, name, prof, skill, max, route, rkey, known, byName, curI, capped, lv, spec)
 	-- 2) 목록
@@ -1499,10 +1773,11 @@ function M:PaintList(p, name, prof, skill, max, route, rkey, known, byName, curI
 		r.right:SetText(right or "")
 		if dotC then r.dot:SetVertexColor(dotC[1], dotC[2], dotC[3]); r.dot:Show() else r.dot:Hide() end
 		r.tip = tip
-		r.vendor = nil
+		r.vendor, r.onClick = nil, nil
 		r.item, r.link, r.spell = nil, nil, nil
 		r:ClearAllPoints(); r:SetPoint("TOPLEFT", 0, -y); r:Show()
 		y = y + ROW + 2
+		return r
 	end
 	-- 단계 로드맵: 남은 단계 전부 (숙련도가 모자라도 "몇에는 어디로" 를 미리 · 이미 배운 단계는 뺀다)
 	if prof and max > 0 and max < 300 then
@@ -1578,6 +1853,8 @@ function M:PaintList(p, name, prof, skill, max, route, rkey, known, byName, curI
 	end
 	local specNear = spec and (spec.learned or max >= 300 or skill >= (spec.def.skill or 0) - 50)
 	if specNear then specSection() end
+	-- 주요 제조법: 많이 쓰이거나 만들어 팔 만한 것 (도안 얻는 곳 · 재료비 · 경매장 이익)
+	if self:PaintPicks(prof, skill, byName, spec, head, row) > 0 then y = y + 6 end
 	-- 숙련이 오르는 아는 제조법
 	local up = {}
 	for _, r in ipairs(known) do if r.diff <= 1 then up[#up + 1] = r end end
