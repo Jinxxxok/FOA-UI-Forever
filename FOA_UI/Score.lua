@@ -45,7 +45,7 @@ local K = {
 --  출처: Icy Veins 포에버 능력치 우선순위 (전 전문화 27개, 2026-11-16 다시 확인) · Warcraft Tavern 포에버 직업 공략
 --  우선순위(같은 아이템 예산일 때 어느 능력치가 나은가)를 클래식 환산(힘 → 공격력, 민첩 → 치명 등)으로 숫자로 옮겼다.
 --  포에버는 적중 · 치명타가 물리 · 주문 공통이라 시전자도 hit / crit 를 shit / scrit 과 같은 값으로 친다.
---  상한: 근접 · 원거리 적중 8% · 주문 적중 17% · 숙련 6.5% → 이미 채웠으면 적중 가치를 낮춘다 (CapAdjust).
+--  상한: 근접 · 원거리 적중 8% · 주문 적중 17% · 숙련 6.5% → 그 칸 장비를 뺀 적중 기준으로 넘친 만큼만 낮춘다 (HitRoom).
 -- 시전자: 주문 적중 · 치명 = 적중 · 치명
 --  rdps(마법봉 초당 공격력): 레벨업 중엔 마나를 아끼려고 마법봉을 많이 쓴다 (마법사 · 흑마법사 · 사제만 마법봉을 낀다)
 local function Caster(t) t.hit = t.hit or t.shit; t.crit = t.crit or t.scrit; t.rdps = t.rdps or 0.6; return t end
@@ -136,7 +136,7 @@ local SPELL_HIT = { MAGE = true, WARLOCK = true, ["PRIEST:shadow"] = true, ["DRU
 --  전사: 체력이 가장 중요 (Omnivore) · 사냥꾼: 민첩 > 치명, 유리 대포 (Captain · Feor)
 --  수양 · 신성 사제: 체력 · 지능 먼저, 치유량 · 정신력 · 마나 회복은 그다음, 치명은 낮게 (Hydra)
 --  공략이 없는 직업: 클래식 PvP 관례 (체력 ↑ · 적중 ↓ · 치명 조금 ↑ · 시전자 주문 관통 ↑)
---  set = 그 값으로 · mul = 원래 값에 곱하기 · 적중 상한은 PvP 기준(근접 5% · 주문 4%)으로 따로 (CapAdjust)
+--  set = 그 값으로 · mul = 원래 값에 곱하기 · 적중 상한은 PvP 기준(근접 5% · 주문 4%)으로 따로 (HitRoom)
 local PVP_BASE = { set = {}, mul = { hit = 0.5, shit = 0.5, exp = 0.6, spi = 0.4, mp5 = 0.6, crit = 1.1, scrit = 1.1, spen = 1.5 } }
 local PVP_HEAL = { set = { sta = 1.2 }, mul = { int = 1.3, mp5 = 0.8, spi = 0.5, crit = 0.9, scrit = 0.9, hit = 0.3, shit = 0.3 } }
 local PVP_PROFILE = {
@@ -167,7 +167,7 @@ local function PvP(w, class, spec)
 end
 
 -- 육성(레벨업) 가중치: Icy Veins 포에버 전문화별 레벨업 공략의 Stats 항목 (2026-11-16 확인)
---  공통: 같은 레벨 몹 상대라 적중 상한이 낮다(근접 5% · 주문 4%, CapAdjust) · 숙련은 레벨업 장비에 드물다
+--  공통: 같은 레벨 몹 상대라 적중 상한이 낮다(근접 5% · 주문 4%, HitRoom) · 숙련은 레벨업 장비에 드물다
 --  근접 · 사냥꾼: 무기 공격력 > 적중 · 숙련 > 민첩(힘) > 치명 · 쉬는 시간이 줄도록 체력을 조금 더
 --  시전자: 주문력 > 치명 > 지능 > 정신력(레벨업에선 과소평가된 능력치) > 체력 · 냉기 마법사는 적중을 그대로 높게
 --  힐러: 혼자 사냥할 땐 피해도 필요 → 주문력(피해 + 치유)을 치유량보다 위로 · 탱커: 레벨업은 딜 위주 (무기 · 힘 · 적중)
@@ -447,24 +447,25 @@ local function CurHit(spell)
 	return v
 end
 
--- 적중 상한을 이미 넘겼으면 적중 가치를 크게 낮춘다 (조금은 남겨서 같은 조건이면 적중 있는 쪽)
-local capCache = { pve = {}, pvp = {}, lvl = {} }
--- PvE: 보스 상대 (근접 8% · 주문 17%) · PvP · 육성: 같은 레벨 상대 (근접 5% · 주문 4%)
-local function CapAdjust(w, class, spec, prof)
-	local spell = SPELL_HIT[class] or SPELL_HIT[class .. ":" .. spec]
-	local cap = prof == "pve" and (spell and 17 or 8) or (spell and 4 or 5)
-	local over = CurHit(spell) >= cap
-	if not over then return w, "" end
-	local cc = capCache[prof] or capCache.pve
-	cc[w] = cc[w] or (function()
-		local p = {}
-		for k, v in pairs(w) do p[k] = v end
-		if p.hit then p.hit = p.hit * 0.15 end
-		if p.shit then p.shit = p.shit * 0.15 end
-		return p
-	end)()
-	return cc[w], "cap"
+-- 적중 상한: PvE 는 보스 상대 (근접 8% · 주문 17%) · PvP · 육성은 같은 레벨 상대 (근접 5% · 주문 4%)
+--  아이템마다 "그 칸 장비를 뺐을 때의 적중"을 기준으로 상한까지 남은 만큼만 제값, 넘는 부분은 조금만 친다.
+--  (예전엔 지금 적중이 상한을 넘었는지만 봐서, 적중 장비를 끼면 그 장비의 적중이 깎여
+--   방금 벗은 장비가 더 좋아 보이고 → 바꾸면 다시 반대가 되는 반복이 생겼다)
+--  쌍수(도적 · 분노 전사)는 상한을 넘어도 흰 공격 빗나감이 줄어서 넘친 적중도 절반은 쳐준다
+local function HitCap(class, spec, prof)
+	local spell = SPELL_HIT[class] or SPELL_HIT[(class or "") .. ":" .. (spec or "")]
+	return prof == "pve" and (spell and 17 or 8) or (spell and 4 or 5), spell and true or false
 end
+local DW_SPEC = { ["ROGUE:assassination"] = true, ["ROGUE:combat"] = true, ["ROGUE:subtlety"] = true, ["WARRIOR:fury"] = true }
+local HIT_SLOTS = {
+	INVTYPE_HEAD = { 1 }, INVTYPE_NECK = { 2 }, INVTYPE_SHOULDER = { 3 }, INVTYPE_CHEST = { 5 }, INVTYPE_ROBE = { 5 },
+	INVTYPE_WAIST = { 6 }, INVTYPE_LEGS = { 7 }, INVTYPE_FEET = { 8 }, INVTYPE_WRIST = { 9 }, INVTYPE_HAND = { 10 },
+	INVTYPE_FINGER = { 11, 12 }, INVTYPE_TRINKET = { 13, 14 }, INVTYPE_CLOAK = { 15 },
+	INVTYPE_WEAPON = { 16, 17 }, INVTYPE_2HWEAPON = { 16 }, INVTYPE_WEAPONMAINHAND = { 16 },
+	INVTYPE_WEAPONOFFHAND = { 17 }, INVTYPE_SHIELD = { 17 }, INVTYPE_HOLDABLE = { 17 },
+	INVTYPE_RANGED = { 18 }, INVTYPE_RANGEDRIGHT = { 18 }, INVTYPE_THROWN = { 18 }, INVTYPE_RELIC = { 18 },
+}
+M.HIT_SLOTS = HIT_SLOTS
 
 -- 가중치 만들기: 특성 표 → 적중 상한 (기준마다) → PvP · 육성이면 그 기준 가중치
 --  기준(prof): "pve" 레이드 · "pvp" · "lvl" 육성(레벨업)
@@ -472,8 +473,7 @@ local profCache = { pvp = {}, lvl = {} }
 local function Build(class, spec, wkey, prof)
 	local w = W[wkey]
 	if not w then return end
-	local sig
-	w, sig = CapAdjust(w, class, spec, prof)
+	local sig = ""                                -- 적중 상한은 아이템마다 M:Score 에서 (HitRoom)
 	local sk = wkey:match(":(.+)$")
 	if prof == "pvp" then
 		profCache.pvp[w] = profCache.pvp[w] or PvP(w, class, sk)
@@ -1045,18 +1045,86 @@ local function EffectPoints(tip, w, prof, class, wkey)
 end
 M.EffectPoints = EffectPoints
 
+-- 아이템 하나의 적중 % (툴팁의 % → 없으면 등급을 내 레벨 기준 % 로)
+local function ItemHitPct(link, key)
+	local v = ReadTooltip(link).pcts[key]
+	if v == nil then
+		local stats = GetItemStats(link)
+		local r = stats and stats[K[key]]
+		if r and r ~= 0 then v = RatingPct(RATING_IDX[key], r) end
+	end
+	return type(v) == "number" and v or 0
+end
+-- 이 아이템이 들어가면 빠질 장비의 적중 (그 아이템을 이미 끼고 있으면 자기 자신 · 반지 · 장신구는 적중 적은 쪽)
+--  self = 그 칸에 끼고 있는 같은 아이템 번호 (있으면 그 장비의 적중을 뺀다)
+local function SlotsFor(loc, asOffhand)
+	local slots = HIT_SLOTS[loc]
+	if loc == "INVTYPE_WEAPON" then slots = asOffhand and { 17 } or { 16 } end
+	return slots
+end
+local function ReplacedHit(slots, key, selfId)
+	if not slots then return 0 end
+	local low
+	for _, sl in ipairs(slots) do
+		local el = GetInventoryItemLink("player", sl)
+		if selfId then
+			if el and GetItemInfoInstant(el) == selfId then return ItemHitPct(el, key) end
+		else
+			local h = el and ItemHitPct(el, key) or 0
+			if not low or h < low then low = h end
+		end
+	end
+	return low or 0
+end
+-- 상한까지 남은 적중 (그 칸 장비를 뺀 기준)
+--  칸마다 0.5초 동안 기억 (BIS 판이 수천 개를 한꺼번에 매길 때) · 그 칸에 끼고 있는 아이템이면 자기 적중을 빼서 따로
+local roomMemo, roomAt = {}, -10
+local function HitRoom(link, loc, asOffhand, key, cap, spellCls)
+	local now = GetTime and GetTime() or 0
+	if now - roomAt > 0.5 then wipe(roomMemo); roomAt = now end
+	local slots = SlotsFor(loc, asOffhand)
+	local mk = (loc or "") .. (asOffhand and "#oh" or "") .. key .. cap
+	local m = roomMemo[mk]
+	if not m then
+		local cur = CurHit(spellCls or key == "shit")
+		m = { cur = cur, room = math.max(0, cap - math.max(0, cur - ReplacedHit(slots, key))), worn = {} }
+		for _, sl in ipairs(slots or {}) do
+			local el = GetInventoryItemLink("player", sl)
+			local id = el and GetItemInfoInstant(el)
+			if id then m.worn[id] = true end
+		end
+		roomMemo[mk] = m
+	end
+	local id = GetItemInfoInstant(link)
+	if id and m.worn[id] then
+		return math.max(0, cap - math.max(0, m.cur - ReplacedHit(slots, key, id)))
+	end
+	return m.room
+end
+M.HitRoom = HitRoom
+
 -- spec: 다른 특성 기준으로 점수 (BIS · 던전 전리품에서 특성 아이콘을 눌렀을 때). 없으면 지금 내 특성
 function M:Score(link, asOffhand, spec)
 	if not link then return 0 end
 	local w, sig
 	if spec then w, sig = self:WeightsFor(spec) else w = self:Weights(); sig = weightSig end
 	if not w then return end
-	local key = link .. (asOffhand and "#oh" or "") .. self:Mode() .. sig
+	local loc = select(4, GetItemInfoInstant(link))
+	-- 적중 상한 (칸 기준): 남은 적중이 점수에 들어가므로 기억 열쇠에도 넣는다
+	local class = UnitClass and select(2, UnitClass("player"))
+	local prof = (sig and sig:match("#(%a+)$")) or self:Profile()
+	local wkey = sig and sig:match("^(%u+:%a+)") or ""
+	local wspec = wkey:match(":(%a+)$")
+	local cap, spellCls = HitCap(class, wspec, prof)
+	local roomH = HitRoom(link, loc, asOffhand, "hit", cap, spellCls)
+	local roomS = HitRoom(link, loc, asOffhand, "shit", spellCls and cap or (prof == "pve" and 17 or 4), true)
+	local overF = DW_SPEC[wkey] and 0.5 or 0.15
+	local key = link .. (asOffhand and "#oh" or "") .. self:Mode() .. sig .. string.format("#r%.1f/%.1f", roomH, roomS)
 	if scoreCache[key] then return scoreCache[key] end
 	local stats = GetItemStats(link)
 	if not stats then M.missed = true return end
-	local loc = select(4, GetItemInfoInstant(link))
 	local total = 0
+	local hitAcc
 	for short, full in pairs(K) do
 		local v = stats[full]
 		if v and v ~= 0 then
@@ -1075,18 +1143,35 @@ function M:Score(link, asOffhand, spec)
 					local tp = ReadTooltip(link).pcts[short]
 					v = tp or RatingPct(cr, v)
 				end
-				total = total + v * (w[short] or 0)
+				if short == "hit" or short == "shit" then
+					hitAcc = hitAcc or {}
+					hitAcc[short] = (hitAcc[short] or 0) + v
+				else
+					total = total + v * (w[short] or 0)
+				end
 			end
 		end
 	end
 	-- 툴팁에만 있는 효과 (GetItemStats 가 못 읽는 것): 능력치 문장 · 사용 · 발동 · 효용
 	local tip = ReadTooltip(link)
 	for short, v in pairs(tip.effects) do
-		if short ~= "wskill" and not stats[K[short] or ""] then total = total + v * (w[short] or 0) end
+		if short ~= "wskill" and not stats[K[short] or ""] then
+			if (short == "hit" or short == "shit") and type(v) == "number" then
+				hitAcc = hitAcc or {}
+				hitAcc[short] = (hitAcc[short] or 0) + v
+			else
+				total = total + v * (w[short] or 0)
+			end
+		end
 	end
-	local class = UnitClass and select(2, UnitClass("player"))
-	local prof = (sig and sig:match("#(%a+)$")) or self:Profile()
-	local wkey = sig and sig:match("^(%u+:%a+)") or ""
+	-- 적중: 상한까지 남은 만큼은 제값, 넘는 부분은 overF 배
+	if hitAcc then
+		for k, v in pairs(hitAcc) do
+			local room = k == "shit" and roomS or roomH
+			local full = math.min(v, room)
+			total = total + (w[k] or 0) * (full + (v - full) * overF)
+		end
+	end
 	total = total + EffectPoints(tip, w, prof, class, wkey)
 	-- 주장비로 쓸 무기가 단검이 아니면 (잠행 · 암살)
 	if not asOffhand and MH_LOC[loc] then
@@ -1416,6 +1501,7 @@ end
 local lastTip = {}
 function M:Invalidate()
 	wipe(scoreCache)
+	roomAt = -10                                 -- 칸별 적중 기준도 다시
 	wipe(lastTip)
 	specCache.at = -100
 	baseAt = -10
@@ -1675,8 +1761,9 @@ function M:Init()
 			return
 		end
 		if event == "PLAYER_EQUIPMENT_CHANGED" then
-			-- 아이템 점수는 장비와 상관없다 (적중 상한은 가중치 서명에 들어 있음) → 평균 · 화살표만 다시
+			-- 적중은 칸마다 "그 칸 장비를 뺀 적중" 기준이라 칸 기준만 새로 (점수 기억 열쇠에 남은 적중이 들어 있어서 지울 것 없음)
 			baseAt = -10
+			roomAt = -10
 			M:Refresh()
 			return
 		end
