@@ -225,6 +225,7 @@ end
 function M:UpdateParty(f)
 	local u = f.unit
 	if not u or not UnitExists(u) then return end
+	f.dirty = nil
 	f.name:SetText((UnitName(u)))
 	f.name:SetTextColor(ns.ClassColor(u))
 	local lvl = plain(UnitLevel(u))
@@ -541,10 +542,18 @@ end
 -------------------------------------------------------------------------------
 -- 생성
 -------------------------------------------------------------------------------
+-- 파티 칸 묶음 보이기 조건
+--  전투 중에는 묶음을 늘 켜 두고, 칸 하나하나는 "그 파티원이 있느냐"(RegisterUnitWatch)로만 보인다.
+--  예전엔 묶음이 [group:party] 하나에 달려 있어서, 전투 중에 파티가 꾸려지면 묶음이 안 켜지고
+--  전투가 끝나야 나타났다. 대상 프레임과 같은 방식(유닛 감시)이라 전투 중에도 바로 뜬다.
+--  전투 밖 혼자일 때는 지금처럼 숨긴다 (편집 모드 자석 정렬이 빈 상자에 붙지 않게).
+local PARTY_VIS = "[group:raid] hide; [group:party] show; [combat] show; hide"
+M.PARTY_VIS = PARTY_VIS
+
 function M:BuildParty()
 	local holder = CreateFrame("Frame", "InkUIParty", Ink.root, "SecureHandlerStateTemplate")
 	holder:SetSize(P_W, 4 * (P_H + P_GAP))
-	RegisterStateDriver(holder, "visibility", "[group:raid] hide; [group:party] show; hide")
+	RegisterStateDriver(holder, "visibility", PARTY_VIS)
 	self.party = {}
 	for i = 1, 4 do
 		local f = CreateFrame("Button", "InkUIParty" .. i, holder, "SecureUnitButtonTemplate")
@@ -558,6 +567,7 @@ function M:BuildParty()
 		f:SetScript("OnEnter", UnitFrame_OnEnter)
 		f:SetScript("OnLeave", UnitFrame_OnLeave)
 		f:SetScript("OnShow", function(self) M:UpdateParty(self) end)
+		f.dirty = true
 		BuildPartyVisual(f)
 		M:AttachPartyAuras(f)
 		RegisterUnitWatch(f)
@@ -884,8 +894,11 @@ function M:Init()
 				-- 자리가 바뀐 파티원은 잔상 · 사망 표시를 새로 시작
 				for _, f in ipairs(M.party or {}) do
 					f.fxWasDead = nil
+					f.dirty = true
 					if ns.FX and UnitExists(f.unit) then ns.FX.TrailSnap(f.hp, f.unit) end
 				end
+				-- 칸을 실제로 켜는 건 보안 관리자(0.2초 주기)라 이 이벤트보다 늦다 → 조금 뒤에 다시 채운다
+				M:QueueRefresh()
 			end
 			for _, f in ipairs(M.party or {}) do if f:IsShown() then M:UpdateParty(f) end end
 			for _, f in ipairs(M.raidButtons or {}) do if f:IsShown() then M:UpdateRaid(f) end end
@@ -913,16 +926,65 @@ function M:Init()
 	Ink.ProfFrame(e, "파티 · 공격대")
 
 	-- 사거리는 이벤트가 드물어서 주기적으로 갱신
+	--  보이는데 아직 못 채운 칸(파티가 막 꾸려짐)은 여기서 통째로 채운다 (OnShow 를 놓쳐도 0.5초 안에)
 	local t = 0
 	e:SetScript("OnUpdate", function(_, el)
 		t = t + el
 		if t < 0.5 then return end
 		t = 0
-		for _, f in ipairs(M.party or {}) do if f:IsShown() then M:UpdatePartyRange(f) end end
+		for _, f in ipairs(M.party or {}) do
+			if f:IsVisible() then
+				if f.dirty then M:UpdateParty(f) else M:UpdatePartyRange(f) end
+			end
+		end
 	end)
 end
 
 function M:Refresh()
 	for _, f in ipairs(self.party or {}) do if f:IsShown() then self:UpdateParty(f) end end
 	for _, f in ipairs(self.raidButtons or {}) do if f:IsShown() then self:UpdateRaid(f) end end
+end
+
+-- 파티 구성이 바뀐 뒤 0.3초 · 1.2초에 한 번 더 채우고, 전투 중이면 2초 뒤 상태를 점검한다
+function M:QueueRefresh()
+	if self.refreshQueued then return end
+	self.refreshQueued = true
+	C_Timer.After(0.3, function()
+		M.refreshQueued = nil
+		M:Refresh()
+	end)
+	C_Timer.After(1.2, function() M:Refresh() end)
+	if InCombatLockdown() then
+		C_Timer.After(2, function() pcall(M.DiagParty, M) end)
+	end
+end
+
+-- 진단: 전투 중 파티가 바뀐 뒤에도 있는 파티원의 칸이 안 보이면 그때 상태를 남긴다
+--  (InkUIDB.partyDiag · 최근 8건. 다시 생기면 이 기록으로 어디서 막혔는지 바로 안다)
+local function B(v) return v and "1" or "0" end
+function M:DiagParty()
+	if not (self.party and self.partyHolder) then return end
+	local bad = false
+	for _, f in ipairs(self.party) do
+		if UnitExists(f.unit) and not f:IsVisible() then bad = true end
+	end
+	if not bad then return end
+	local h = self.partyHolder
+	local drv = SecureCmdOptionParse and SecureCmdOptionParse(PARTY_VIS) or "?"
+	local grp = SecureCmdOptionParse and SecureCmdOptionParse("[group:raid] raid; [group:party] party; solo") or "?"
+	local parts = {
+		date("%m-%d %H:%M:%S"), Ink.version or "?", (GetRealZoneText and GetRealZoneText() or ""),
+		"combat=" .. B(InCombatLockdown()), "drv=" .. tostring(drv), "grp=" .. tostring(grp),
+		"in=" .. B(IsInGroup()) .. B(IsInRaid()) .. tostring(GetNumGroupMembers and GetNumGroupMembers() or "?"),
+		"H=" .. B(h:IsShown()) .. B(h:IsVisible()) .. "p" .. tostring(h:GetNumPoints()) .. "a" .. tostring(plain(h:GetAlpha()) or "s"),
+	}
+	for i, f in ipairs(self.party) do
+		local nm = plain(f.name:GetText())
+		parts[#parts + 1] = i .. ":" .. B(UnitExists(f.unit)) .. B(f:IsShown()) .. B(f:IsVisible())
+			.. "h" .. B(f:GetAttribute("statehidden")) .. "n" .. ((nm and nm ~= "") and "1" or (nm == nil and "s" or "0"))
+	end
+	Ink.db.partyDiag = Ink.db.partyDiag or {}
+	local L = Ink.db.partyDiag
+	table.insert(L, 1, table.concat(parts, " | "))
+	while #L > 8 do table.remove(L) end
 end
