@@ -285,6 +285,7 @@ local function VendorText(x)
 	local who = NpcName(x[1]) or "상인"
 	local zone = x[2] > 0 and C_Map.GetMapInfo and (C_Map.GetMapInfo(x[2]) or {}).name or nil
 	local where = zone and string.format("%s %.0f, %.0f", zone, x[3], x[4]) or ""
+	if x[9] == 1 then where = where .. (where ~= "" and " · " or "") .. "수량 한정" end   -- 팔리고 없으면 다시 채워질 때까지 기다려야 한다
 	local price = ""
 	if x[7] and x[7] > 0 then
 		local iname = C_Item.GetItemNameByID and C_Item.GetItemNameByID(x[7])
