@@ -205,13 +205,52 @@ local FLIGHT_OFF = { 0.55, 0.57, 0.60 }
 
 -- 다른 지도(대륙 · 세계 · 도시를 품은 지역) 위치로 바꾸기
 local rectCache = {}
+-- 다른 지도의 사각형: 게임의 지도 사각형 → 안 되면 세계 좌표로 두 점을 옮겨 계산 (퀘스트 지도와 같은 방법)
+--  예전엔 첫 계산이 한 번 실패하면 그 뒤로 내내 '없음'으로 기억해서, 다른 대륙에 있다가 칼림도어 대륙 지도를 열면
+--  도서관 책이 하나도 안 찍혔다 (지역 지도는 같은 지도라 계산이 필요 없어서 보였다)
+local rectFailAt = {}
+-- toID 가 fromID 를 품은 위 지도(대륙 · 세계)인지
+local function IsAncestor(fromID, toID)
+	local id = fromID
+	for _ = 1, 8 do
+		local mi = C_Map.GetMapInfo and C_Map.GetMapInfo(id)
+		id = mi and mi.parentMapID
+		if not id or id == 0 then return false end
+		if id == toID then return true end
+	end
+	return false
+end
+-- 사각형 { minX, maxX, minY, maxY } · false = 이 지도엔 안 들어감 · nil = 지금은 못 구함 (잠시 뒤 다시)
+local function RectOnMap(fromID, toID)
+	local ok, minX, maxX, minY, maxY = pcall(C_Map.GetMapRectOnMap, fromID, toID)
+	if ok and minX and maxX and minY and maxY and maxX > minX and maxY > minY then return { minX, maxX, minY, maxY } end
+	if not IsAncestor(fromID, toID) then return false end
+	if C_Map.GetWorldPosFromMapPos and C_Map.GetMapPosFromWorldPos and CreateVector2D then
+		local function P(u, v)
+			local ok1, cont, wp = pcall(C_Map.GetWorldPosFromMapPos, fromID, CreateVector2D(u, v))
+			if not (ok1 and cont and wp) then return end
+			local ok2, _, mp = pcall(C_Map.GetMapPosFromWorldPos, cont, wp, toID)
+			if ok2 and mp and mp.GetXY then return mp:GetXY() end
+		end
+		local ax, ay = P(0.25, 0.25)
+		local bx, by = P(0.75, 0.75)
+		if ax and ay and bx and by and bx ~= ax and by ~= ay then
+			local sx, sy = (bx - ax) * 2, (by - ay) * 2
+			local x0, y0 = ax - sx * 0.25, ay - sy * 0.25
+			local x1, y1 = x0 + sx, y0 + sy
+			return { math.min(x0, x1), math.max(x0, x1), math.min(y0, y1), math.max(y0, y1) }
+		end
+	end
+	return nil
+end
 local function ToMap(fromID, x, y, toID)
 	if fromID == toID then return x, y end
 	local key = fromID .. ">" .. toID
 	local r = rectCache[key]
-	if r == nil then
-		local ok, minX, maxX, minY, maxY = pcall(C_Map.GetMapRectOnMap, fromID, toID)
-		r = (ok and minX and maxX and maxX > minX and maxY > minY) and { minX, maxX, minY, maxY } or false
+	-- 위 지도인데 못 구한 값은 잠깐만 기억하고 다시 해 본다 (지도 자료가 아직 안 들어왔을 때 등)
+	if r == nil or (r == false and rectFailAt[key] and GetTime() - rectFailAt[key] > 30) then
+		r = RectOnMap(fromID, toID)
+		if r == nil then r = false; rectFailAt[key] = GetTime() else rectFailAt[key] = nil end
 		rectCache[key] = r
 	end
 	if not r then return end
@@ -1540,7 +1579,29 @@ function M:PaintBooks(mapID)
 		end
 	end
 	local lib = LIBRARIANS[mapID]
-	if #lines == 0 and not lib then box:Hide() self:LayoutUnder() return end
+	-- 대륙 · 세계 지도: 모은 수 + 이 지도 안에서 아직 안 모은 책이 있는 지역 (많은 순)
+	local mi = C_Map.GetMapInfo and C_Map.GetMapInfo(mapID)
+	local wide = mi and mi.mapType and mi.mapType <= 2
+	if wide then
+		local left, order, any = {}, {}, false
+		for _, b in ipairs(BOOKS) do
+			if (b[8] == 0 or b[8] == fac) and ToMap(b[1], b[2] / 100, b[3] / 100, mapID) then
+				any = true
+				if not BookState(b) then
+					if not left[b[1]] then left[b[1]] = 0; order[#order + 1] = b[1] end
+					left[b[1]] = left[b[1]] + 1
+				end
+			end
+		end
+		table.sort(order, function(a, c) if left[a] ~= left[c] then return left[a] > left[c] end return a < c end)
+		for i, z in ipairs(order) do
+			if i > 8 then lines[#lines + 1] = "|cff8E939B… " .. (#order - 8) .. "곳 더|r" break end
+			local zi = C_Map.GetMapInfo and C_Map.GetMapInfo(z)
+			lines[#lines + 1] = "|cffF3F2EE" .. ((zi and zi.name) or ("지도 " .. z)) .. "|r  |cff8E939B" .. left[z] .. "권 남음|r"
+		end
+		if any and #order == 0 then lines[#lines + 1] = "|cff6FD39A이 지도에 있는 책은 모두 모았어요|r" end
+	end
+	if #lines == 0 and not lib and not wide then box:Hide() self:LayoutUnder() return end
 	-- 지도를 크게(최대화) 띄우면 아래 칸이 화면 밖이라 지도 안 왼쪽 아래로
 	local wm = WorldMapFrame
 	box:ClearAllPoints()
