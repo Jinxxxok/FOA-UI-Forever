@@ -458,7 +458,8 @@ function M:WatchPortals()
 		local m = C_Map.GetBestMapForUnit("player")
 		if not (m and watch[m]) then last = nil return end
 		local pos = C_Map.GetPlayerMapPosition(m, "player")
-		local x, y = pos and pos:GetXY()
+		local x, y
+		if pos then x, y = pos:GetXY() end   -- (`pos and pos:GetXY()` 는 y 를 버려서 차원문 자리를 한 번도 못 배웠다)
 		if plain then x, y = plain(x), plain(y) end
 		if type(x) ~= "number" or type(y) ~= "number" then return end
 		local now = GetTime()
@@ -653,7 +654,9 @@ end
 
 -- 비행 지점을 알고 있는지 (비행 조련사 지도를 열 때 기억)
 local function FlightKnown(id)
-	return Ink.cdb and Ink.cdb.flightKnown and Ink.cdb.flightKnown[id]
+	local t = Ink.cdb and Ink.cdb.flightKnown
+	-- 로그마르는 번호를 몰라 이름 키("rogmar")로 기억하던 때가 있었다 (지금은 3203)
+	return t and (t[id] or (id == 3203 and t.rogmar))
 end
 
 -- 지금 서 있는 곳에서 가장 가까운 비행 지점을 "가 본 곳"으로 (새 비행 경로를 배웠을 때 · 비행 지도를 열 때)
@@ -813,11 +816,15 @@ function M:Refresh()
 		local fac = UnitFactionGroup("player")
 		local facN = fac == "Horde" and 1 or (fac == "Alliance" and 2 or 0)
 		local shown = 0
+		local apiIDs, apiXY = {}, {}
 		if C_TaxiMap and C_TaxiMap.GetTaxiNodesForMap then
 			local ok, nodes = pcall(C_TaxiMap.GetTaxiNodesForMap, mapID)
 			for _, nd in ipairs(ok and nodes or {}) do
+				if nd.nodeID then apiIDs[nd.nodeID] = true end
 				local pos = nd.position
-				local x, y = pos and pos.GetXY and pos:GetXY()
+				-- (예전엔 `pos and pos.GetXY and pos:GetXY()` 라서 y 가 늘 비어 게임 목록이 한 번도 안 그려졌다)
+				local x, y
+				if pos and pos.GetXY then x, y = pos:GetXY() end
 				local mine = true
 				if Enum.FlightPathFaction then
 					if nd.faction == Enum.FlightPathFaction.Horde then mine = facN == 1
@@ -827,14 +834,23 @@ function M:Refresh()
 					local off = nd.isUndiscovered and not FlightKnown(nd.nodeID)
 					put(x, y, "flight", "flight", nd.name or "비행 지점", off and "아직 안 가 본 비행 지점" or "가 본 비행 지점", nil, off)
 					shown = shown + 1
+					apiXY[#apiXY + 1] = { x, y }
 				end
 			end
 		end
-		if shown == 0 then
+		-- 게임 목록에 없는 지점은 포에버 비행 자료로 채운다 (예전엔 게임이 하나라도 알려 주면 자료를 안 봐서,
+		--  하이잘 산처럼 게임 목록에 빠진 새 지역 비행 지점이 하나도 안 보였다) · 같은 번호 · 같은 자리는 건너뜀
+		do
 			for id, f in pairs(ns.FLIGHT_DB or {}) do
-				if f[4] == 0 or f[4] == facN then
+				if (f[4] == 0 or f[4] == facN) and not apiIDs[id] then
 					local x, y = ToMap(f[1], f[2] / 100, f[3] / 100, mapID)
+					local dup = false
 					if x then
+						for _, q in ipairs(apiXY) do
+							if (q[1] - x) ^ 2 + (q[2] - y) ^ 2 < 0.012 ^ 2 then dup = true break end
+						end
+					end
+					if x and not dup then
 						local off = not FlightKnown(id)
 						put(x, y, "flight", "flight", "비행 조련사", off and "아직 안 가 본 비행 지점 (비행 조련사 지도를 한 번 열면 갱신)" or "가 본 비행 지점", nil, off)
 					end
