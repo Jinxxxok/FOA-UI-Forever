@@ -1527,6 +1527,14 @@ local function SkinActionButton(b, small)
 		local r = b[k]
 		if r and r.SetAlpha then r:SetAlpha(0) end
 	end
+	-- 착용 아이템 초록 테두리(Border): 블리자드 그림이 칸보다 커서 삐져나온다 → 누가 다시 켜도 바로 끈다
+	--  (FOA 바는 칸 크기에 맞춘 초록 테두리를 따로 그린다 · ActionBars.lua PaintEquipped)
+	if b.Border and b.Border.Show and not b.inkBorderHooked then
+		b.inkBorderHooked = true
+		hooksecurefunc(b.Border, "Show", function(t) t:Hide() end)
+		hooksecurefunc(b.Border, "SetAlpha", function(t, a) if a and a > 0 then t:SetAlpha(0) end end)
+		b.Border:Hide()
+	end
 	if icon then
 		icon:ClearAllPoints()
 		icon:SetPoint("TOPLEFT", 1, -1)

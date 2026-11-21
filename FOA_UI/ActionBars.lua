@@ -163,7 +163,9 @@ local function ButtonConfig(d, i, s)
 		cooldownCount = true, -- 쿨타임 남은 시간 숫자 (게임 설정과 상관없이 항상)
 		showGrid = s.grid ~= false,
 		colors = { range = { 0.85, 0.25, 0.22 }, mana = { 0.45, 0.55, 1 } },
-		hideElements = { macro = false, hotkey = false, equipped = false, border = true, borderIfEmpty = true },
+		-- 착용 중인 장신구 · 무기의 초록 테두리: 블리자드 그림(46x45 · 왼쪽 위 고정)이 FOA 칸보다 커서 오른쪽 아래로 삐져나왔다
+		--  → LAB 기본 테두리는 끄고 FOA 둥근 테두리를 초록으로 칸 안에 맞춰 그린다 (PaintEquipped)
+		hideElements = { macro = false, hotkey = false, equipped = true, border = true, borderIfEmpty = true },
 		keyBoundTarget = d.bind .. i,
 		flyoutDirection = "UP",
 		actionButtonUI = d.main and true or false,
@@ -184,6 +186,25 @@ local function Skin(b, small)
 	if bz and bz.SkinActionButton then pcall(bz.SkinActionButton, b, small) end
 end
 
+-- 착용 중인 아이템(장신구 · 무기 등)이 들어 있는 칸: 칸 크기에 맞춘 초록 둥근 테두리
+local EQUIP_C = { 0.44, 0.83, 0.6 }
+local function PaintEquipped(b)
+	local sk = b and b.inkSkin
+	if not sk then return end
+	local eq = false
+	if b.IsEquipped then
+		local ok, v = pcall(b.IsEquipped, b)
+		eq = ok and Ink.plain(v) and true or false
+	end
+	if eq and not sk.equip then
+		sk.equip = Ink:Round(sk.top, "OVERLAY", false, true, 1)
+		sk.equip:SetAllPoints(b)
+		sk.equip:SetVertexColor(EQUIP_C[1], EQUIP_C[2], EQUIP_C[3], 0.9)
+	end
+	if sk.equip then sk.equip:SetShown(eq) end
+end
+M.PaintEquipped = PaintEquipped
+
 function M:BuildBar(d)
 	local s = Settings(d.key)
 	local h = CreateFrame("Frame", "FOA" .. d.key:gsub("^%l", string.upper), Ink.root, "SecureHandlerStateTemplate")
@@ -203,6 +224,7 @@ function M:BuildBar(d)
 		b:SetAttribute("buttonlock", Ink.db.barLock ~= false)
 		d.buttons[i] = b
 		Skin(b)
+		pcall(PaintEquipped, b)
 	end
 	if d.main then
 		h:SetAttribute("_onstate-page", [[
@@ -701,6 +723,9 @@ end
 function M:Init()
 	if Ink.db.actionBars == false or not LAB then return end
 	self.on = true
+	if LAB.RegisterCallback then
+		LAB.RegisterCallback(self, "OnButtonUpdate", function(_, b) pcall(PaintEquipped, b) end)
+	end
 	self.bindOwner = CreateFrame("Frame")
 	Ink.cdb.bars = Ink.cdb.bars or {}
 	self.list = {}
