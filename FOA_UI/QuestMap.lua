@@ -15,6 +15,18 @@ local plain = Ink.plain
 local GOLD = { 1.00, 0.80, 0.30 }
 local BLUE = { 0.40, 0.75, 1.00 }
 local SOON = { 0.62, 0.64, 0.68 }
+local PVP = { 1.00, 0.42, 0.40 }   -- 전장 퀘스트 (QuestBG.lua)
+M.PVP = PVP
+-- 전장 이름 (게임 지도 이름이 있으면 그것)
+local BG_MAP = { AV = 1459, WSG = 1460, AB = 1461, DI = 2524 }
+local BG_KO = { AV = "알터랙 계곡", WSG = "전쟁노래 협곡", AB = "아라시 분지", DI = "검은창 섬" }
+local function IsBG(r) return ns.QUEST_BG and ns.QUEST_BG[r[1]] end
+local function BGName(tag)
+	local m = BG_MAP[tag]
+	local info = m and C_Map.GetMapInfo and C_Map.GetMapInfo(m)
+	return (info and info.name) or BG_KO[tag] or "전장"
+end
+M.IsBG, M.BGName = IsBG, BGName
 
 -------------------------------------------------------------------------------
 -- 자료 정리: 지도별로 묶기
@@ -65,10 +77,57 @@ local function CityMaps()
 	return cityMaps
 end
 
+-- 지역 → 대륙 · 세계 지도 위 사각형 (크기 제한 없음 · 전장 퀘스트를 큰 지도에 옮길 때)
+local zoneRect = {}
+local function ZoneRect(child, parent)
+	local key = child * 100000 + parent
+	local v = zoneRect[key]
+	if v == nil then
+		v = false
+		if C_Map.GetMapRectOnMap then
+			local ok, l, r, t, b = pcall(C_Map.GetMapRectOnMap, child, parent)
+			if ok and l and r and t and b and r > l and b > t and l > -0.05 and r < 1.05 and t > -0.05 and b < 1.05 then
+				v = { l, r, t, b }
+			end
+		end
+		zoneRect[key] = v
+	end
+	return v or nil
+end
+
+-- 대륙 · 세계 지도: 전장 퀘스트만 모든 지역에서 모아 그 지도 좌표로 (다른 퀘스트는 너무 많아 지역 지도에서만)
+local bgWide = {}
+local function WideBG(mapID)
+	if bgWide[mapID] then return bgWide[mapID] end
+	local out = {}
+	if ns.QUEST_BG then
+		for m, list in pairs(Index()) do
+			if m ~= mapID then
+				local rc
+				for _, e in ipairs(list) do
+					if IsBG(e.r) then
+						if rc == nil then rc = ZoneRect(m, mapID) or false end
+						if rc then out[#out + 1] = { r = e.r, x = rc[1] + e.x * (rc[2] - rc[1]), y = rc[3] + e.y * (rc[4] - rc[3]), wide = m } end
+					end
+				end
+			end
+		end
+	end
+	bgWide[mapID] = out
+	return out
+end
+
 -- 이 지도에 그릴 퀘스트 목록 (지역 지도면 안에 든 도시 것까지)
 local function MapEntries(mapID)
 	local own = Index()[mapID]
 	local info = C_Map.GetMapInfo and C_Map.GetMapInfo(mapID)
+	local CONT = Enum.UIMapType and Enum.UIMapType.Continent or 2
+	local WORLD = Enum.UIMapType and Enum.UIMapType.World or 1
+	if info and (info.mapType == CONT or info.mapType == WORLD) and Ink.db.questMapBGWide ~= false then
+		local w = WideBG(mapID)
+		if #w > 0 then return w end
+		return own
+	end
 	local ZONE = Enum.UIMapType and Enum.UIMapType.Zone or 3
 	if not (info and info.mapType == ZONE) then return own end
 	local out
@@ -527,6 +586,8 @@ function M:Tip(p)
 		local name = QuestName(r[1]) or ("퀘스트 #" .. r[1] .. " (불러오는 중)")
 		local tag = {}
 		if q.state == 2 then tag[#tag + 1] = "|cffA0A4AA" .. r[3] .. "레벨부터|r" else tag[#tag + 1] = "|cff8E939B필요 " .. r[3] .. "|r" end
+		local bgt = IsBG(r)
+		if bgt then tag[#tag + 1] = "|cffFF6B66전장 · " .. BGName(bgt) .. "|r" end
 		if bit.band(r[12], 1) ~= 0 then tag[#tag + 1] = "|cff66BFFF반복|r" end
 		if bit.band(r[12], 2) ~= 0 then tag[#tag + 1] = "|cffB4B8BF다른 지역으로 안내|r" end
 		if r[13] ~= 0 then tag[#tag + 1] = "|cffE3C07A아이템으로 시작|r" end
@@ -534,7 +595,7 @@ function M:Tip(p)
 		if es then tag[#tag + 1] = es[1] == 2 and "|cffF0B370NPC 지키기|r" or "|cffF0B370호위|r" end
 		local tm = Ink.TimerTag and Ink.TimerTag(r[1])
 		if tm then tag[#tag + 1] = tm end
-		local c = q.state == 2 and SOON or (bit.band(r[12], 1) ~= 0 and BLUE or { 0.96, 0.95, 0.90 })
+		local c = q.state == 2 and SOON or (bgt and PVP or (bit.band(r[12], 1) ~= 0 and BLUE or { 0.96, 0.95, 0.90 }))
 		GameTooltip:AddDoubleLine(name, table.concat(tag, "  "), c[1], c[2], c[3], 1, 1, 1)
 		-- 시간 제한 퀘스트: 바로 아래 강조 한 줄
 		if Ink.TimerTipLine then Ink.TimerTipLine(GameTooltip, r[1], "   ") end
@@ -603,7 +664,8 @@ function M:BuildLegend()
 	b:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
 		GameTooltip:AddLine("받을 수 있는 퀘스트", 1, 0.82, 0.32)
-		Ink.TipLine(GameTooltip, "금색 = 지금 받을 수 있음 · 파랑 = 반복 · 회색 = 1~2레벨 뒤", 0.75, 0.77, 0.8)
+		Ink.TipLine(GameTooltip, "금색 = 지금 받을 수 있음 · 파랑 = 반복 · 빨강 = 전장 퀘스트 · 회색 = 1~2레벨 뒤", 0.75, 0.77, 0.8)
+		Ink.TipLine(GameTooltip, "전장 퀘스트는 대륙 · 세계 지도에서도 모든 지역 것을 보여 줘요", 0.75, 0.77, 0.8)
 		Ink.TipLine(GameTooltip, "조건(선행 · 전문기술 숙련도 · 평판 · 연결 퀘스트)이 안 맞는 퀘스트는 숨기고, 열리면 보여요", 0.75, 0.77, 0.8)
 		if ns.QUEST_NOTES then
 			Ink.TipLine(GameTooltip, "점선 = 돌아다니는 NPC 의 동선 · 작은 원 = 그 NPC 가 나타나는 다른 자리 · 호위 퀘스트는 목록에 표시", 0.75, 0.77, 0.8)
@@ -637,13 +699,15 @@ function M:PaintLegend(nOn, nSoon, nRep)
 		b:SetPoint("TOPRIGHT", wm, "BOTTOMRIGHT", 0, -6)
 	end
 	local Map = Ink.modules.Map
-	if nOn + nSoon + nRep == 0 and not (self.turnUnknown and #self.turnUnknown > 0) and not Ink.db.questMapHide then b:Hide() if Map and Map.LayoutUnder then Map:LayoutUnder() end return end
+	local nBG = self.nBG or 0
+	if nOn + nSoon + nRep + nBG == 0 and not (self.turnUnknown and #self.turnUnknown > 0) and not Ink.db.questMapHide then b:Hide() if Map and Map.LayoutUnder then Map:LayoutUnder() end return end
 	local parts
 	if Ink.db.questMapHide then
 		parts = "|cff8E939B퀘스트 숨김 · 눌러서 보기|r"
 	else
 		parts = string.format("받을 수 있는 퀘스트 |cffFFCC4D%d|r", nOn)
 		if nRep > 0 then parts = parts .. string.format("  |cff66BFFF반복 %d|r", nRep) end
+		if nBG > 0 then parts = parts .. string.format("  |cffFF6B66전장 %d|r", nBG) end
 		if nSoon > 0 then parts = parts .. string.format("  |cffA0A4AA곧 %d|r", nSoon) end
 		local unk = self.turnUnknown and #self.turnUnknown or 0
 		if unk > 0 then parts = parts .. string.format("  |cff8E939B보고 위치 모름 %d|r", unk) end
@@ -660,7 +724,7 @@ end
 -------------------------------------------------------------------------------
 function M:Groups(mapID)
 	local list = mapID and MapEntries(mapID)
-	local order, cnt = {}, { on = 0, soon = 0, rep = 0 }
+	local order, cnt = {}, { on = 0, soon = 0, rep = 0, bg = 0 }
 	if not list then return order, cnt end
 	local _, _, raceID = UnitRace("player")
 	local _, _, classID = UnitClass("player")
@@ -679,8 +743,13 @@ function M:Groups(mapID)
 			end
 			g.list[#g.list + 1] = { r = e.r, state = st }
 			if st == 1 then g.state = 1 end
+			local bg = IsBG(e.r)
+			if bg and st == 1 then g.bg = true end
 			if bit.band(e.r[12], 1) == 0 then g.rep = false end
-			if st == 2 then cnt.soon = cnt.soon + 1 elseif bit.band(e.r[12], 1) ~= 0 then cnt.rep = cnt.rep + 1 else cnt.on = cnt.on + 1 end
+			if st == 2 then cnt.soon = cnt.soon + 1
+			elseif bg then cnt.bg = cnt.bg + 1
+			elseif bit.band(e.r[12], 1) ~= 0 then cnt.rep = cnt.rep + 1
+			else cnt.on = cnt.on + 1 end
 		end
 	end
 	return order, cnt
@@ -1173,6 +1242,7 @@ function M:Refresh()
 	if list and not Ink.db.questMapHide then
 		local order, cnt = self:Groups(mapID)
 		nOn, nSoon, nRep = cnt.on, cnt.soon, cnt.rep
+		self.nBG = cnt.bg
 		local W, H = cv:GetWidth(), cv:GetHeight()
 		local scale = (wm.GetCanvasScale and wm:GetCanvasScale()) or 1
 		-- 가까이 붙은 핀(마을 한가운데 여러 NPC)은 하나로 합친다. 확대할수록 덜 합친다
@@ -1188,6 +1258,7 @@ function M:Refresh()
 				for _, q in ipairs(g.list) do host.list[#host.list + 1] = q end
 				if g.state == 1 then host.state = 1 end
 				if not g.rep then host.rep = false end
+				if g.bg then host.bg = true end
 				if host.giver ~= g.giver then host.giver = 0 end
 			else
 				merged[#merged + 1] = g
@@ -1208,7 +1279,8 @@ function M:Refresh()
 			-- 크기를 바꾼 틀의 위치 값은 그 크기만큼 곱해지므로 나눠서 제자리에
 			M.Place(p, cv, g.x * W / p.baseScale, -g.y * H / p.baseScale)
 			p.list, p.giver, p.state, p.mapID, p.wx, p.wy = g.list, g.giver, g.state, mapID, g.x, g.y
-			local col = (g.state == 2) and SOON or (g.rep and BLUE or GOLD)
+			-- 전장 퀘스트가 섞인 자리는 전장 색 (일반 퀘스트와 한눈에 구분)
+			local col = (g.state == 2) and SOON or (g.bg and PVP or (g.rep and BLUE or GOLD))
 			Paint(p, col, g.state == 2, #g.list)
 			p.lv:SetText(g.state == 2 and ("Lv" .. g.list[1].r[3]) or "")
 			p:SetFrameLevel(self.layer:GetFrameLevel() + (g.state == 2 and 1 or 5))
@@ -1217,6 +1289,7 @@ function M:Refresh()
 		pcall(self.DrawRoutes, self, order, mapID, cv, W, H, pinScale)
 	else
 		self:HideRoutes()
+		self.nBG = 0
 	end
 	for i = n + 1, #(self.pins or {}) do self.pins[i]:Hide() end
 	-- 보고할 퀘스트 "?"
@@ -1346,7 +1419,7 @@ function M:MiniPoints()
 		local pts = {}
 		if not Ink.db.questMapHide then
 			for _, g in ipairs(self:Groups(mapID)) do
-				if g.state == 1 then pts[#pts + 1] = { x = g.x, y = g.y, list = g.list, giver = g.giver, state = g.state, rep = g.rep } end
+				if g.state == 1 then pts[#pts + 1] = { x = g.x, y = g.y, list = g.list, giver = g.giver, state = g.state, rep = g.rep, bg = g.bg } end
 			end
 			if Ink.db.questTurnIn ~= false then
 				for _, t in ipairs(self:TurnIns(mapID)) do
@@ -1423,7 +1496,7 @@ function M:MiniUpdate()
 			p.list, p.giver, p.state, p.ids, p.poi, p.src = q.list, q.giver, q.state, q.ids, q.poi, q.src
 			p.mapID, p.wx, p.wy = mapID, q.x, q.y
 			p.icon:SetTexture(Ink.icon(q.turn and "QuestTurnIn" or "QuestBang"))
-			local col = q.turn and GOLD or (q.rep and BLUE or GOLD)
+			local col = q.turn and GOLD or (q.bg and PVP or (q.rep and BLUE or GOLD))
 			p.icon:SetVertexColor(col[1], col[2], col[3])
 			p.ring:SetVertexColor(col[1], col[2], col[3], inside and 1 or 0.6)
 			local sz = inside and (q.turn and 17 or 16) or 11
