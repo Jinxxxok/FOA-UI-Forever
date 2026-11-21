@@ -481,7 +481,8 @@ function M:SourceText(it)
 	if it.wsrc then return self:WorldSourceText(it) end
 	if it.craft then
 		local t = "제작 · " .. (M.CRAFT_PROF and M.CRAFT_PROF[it.craft] or "전문기술")
-		if it.spell and M.RecipeFor and M:RecipeFor(it.spell) then t = t .. " · 제조법 상인" end
+		local tag = it.spell and M.RecipeSrcTag and M:RecipeSrcTag(it.spell)
+		if tag then t = t .. " · " .. tag end
 		local price = ns.AHPrice and ns.AHPrice(it.id)
 		local A = Ink.modules.AHPrice
 		if price and A and A.Money then t = t .. "  ·  경매장 " .. A.Money(price) end
@@ -1205,6 +1206,136 @@ function M:RecipeFor(spell)
 	return recipeBySpell[spell]
 end
 
+-- 상인이 안 파는 제조법은 어디서 나오나 (RecipeSources.lua · QuestieDB · ATT)
+function M:RecipeSrc(spell)
+	return spell and ns.RECIPE_SRC and ns.RECIPE_SRC[spell]
+end
+
+-- 목록 한 줄에 붙이는 짧은 꼬리표
+function M:RecipeSrcTag(spell)
+	if self:RecipeFor(spell) then return "제조법 상인" end
+	local e = self:RecipeSrc(spell)
+	if not e then return nil end
+	if e.v then return e.rep and "제조법 평판 상인" or "제조법 상인" end
+	if e.d or e.z then return "도안 드랍" end
+	if e.w then return "도안 월드 드랍" end
+	if e.q then return "도안 퀘스트" end
+	if e.o or e.i then return "도안 상자" end
+	if e.t then return "훈련사" end
+	if e.r then return "도안 출처 미확인" end
+end
+
+local function MapName(id)
+	if not (id and id > 0 and C_Map and C_Map.GetMapInfo) then return nil end
+	local info = C_Map.GetMapInfo(id)
+	return info and info.name or nil
+end
+local function LvRange(lo, hi)
+	if not lo or lo <= 0 then return "" end
+	return (hi and hi > lo) and string.format("Lv %d–%d", lo, hi) or ("Lv " .. lo)
+end
+local function ItemNameAsync(id)
+	local n = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+	if not n and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+	return n
+end
+-- 제조법 아이템 툴팁에서: 획득 시 귀속인가 · 필요 숙련
+local function RecipeFacts(item, prof)
+	local bop, skill
+	if not (C_TooltipInfo and C_TooltipInfo.GetItemByID) then return end
+	local ok, data = pcall(C_TooltipInfo.GetItemByID, item)
+	if not (ok and data and data.lines) then return end
+	for _, ln in ipairs(data.lines) do
+		local t = plain(ln.leftText)
+		if type(t) == "string" then
+			if t == _G.ITEM_BIND_ON_PICKUP then bop = true end
+			if prof and t:find(prof, 1, true) then skill = tonumber(t:match("%((%d+)%)")) or skill end
+		end
+	end
+	return bop, skill
+end
+M.RecipeFacts = RecipeFacts
+
+-- 상인이 안 파는 제조법: 출처를 툴팁에 (드랍 · 월드 드랍 · 퀘스트 · 상자 · 평판 상인 · 훈련사)
+function M:RecipeSrcTooltip(e, prof, tt)
+	local P = Ink.modules.Professions
+	local soft, dim = { 0.7, 0.72, 0.75 }, { 0.56, 0.58, 0.61 }
+	if e.r then
+		local bop, skill = RecipeFacts(e.r, prof)
+		Ink.TipLine(tt, "제조법: " .. (ItemNameAsync(e.r) or "도안") .. (skill and ("  ·  " .. prof .. " " .. skill .. " 필요") or ""), 0.96, 0.95, 0.9)
+		e._bop = bop
+	end
+	local any = false
+	if e.v then
+		local fac = UnitFactionGroup and UnitFactionGroup("player")
+		fac = fac == "Horde" and 1 or (fac == "Alliance" and 2 or 0)
+		for _, x in ipairs(e.v) do
+			if x[5] == 0 or x[5] == fac then
+				local where = MapName(x[2]) or ""
+				if x[3] and x[3] >= 0 then where = string.format("%s %.0f, %.0f", where, x[3], x[4]) end
+				tt:AddDoubleLine((M.BossName({ npc = x[1] }) or "상인") .. " 판매", "", 1, 0.82, 0.32, 1, 1, 1)
+				if where ~= "" then tt:AddLine(where, soft[1], soft[2], soft[3]) end
+				any = true
+				break
+			end
+		end
+	end
+	if e.rep and P and P.RepText then
+		local txt, ok = P.RepText(e.rep[1], e.rep[2])
+		tt:AddLine("평판 필요: " .. txt .. (ok and "  (지금 됨)" or ""), ok and 0.44 or 1, ok and 0.83 or 0.72, ok and 0.6 or 0.35)
+	end
+	if e.d then
+		for i, x in ipairs(e.d) do
+			if i > 3 then break end
+			local n = M.BossName({ npc = x[1] }) or "몹"
+			local where = MapName(x[2])
+			local lv = LvRange(x[3], x[4])
+			tt:AddDoubleLine("드랍: " .. n, (where or "") .. (lv ~= "" and ("  " .. lv) or ""), 1, 0.82, 0.32, soft[1], soft[2], soft[3])
+		end
+		local more = (e.dn or #e.d) - math.min(3, #e.d)
+		if more > 0 then tt:AddLine("그 밖에 " .. more .. "종이 더 떨궈요", soft[1], soft[2], soft[3]) end
+		any = true
+	end
+	if e.z then
+		tt:AddLine((MapName(e.z[1]) or "그 지역") .. (e.z[2] == 1 and " 던전 몹 · 보스가 떨궈요" or " 몹이 떨궈요"), 1, 0.82, 0.32)
+		any = true
+	end
+	if e.w then
+		local n, lo, hi, zones = e.w[1], e.w[2], e.w[3], e.w[4] or {}
+		local lv = LvRange(lo, hi)
+		tt:AddLine("월드 드랍" .. (n > 0 and ("  ·  몹 " .. n .. "종") or "") .. (lv ~= "" and ("  ·  " .. lv) or ""), 1, 0.82, 0.32)
+		local zn = {}
+		for _, z in ipairs(zones) do local m = MapName(z) if m then zn[#zn + 1] = m end end
+		if #zn > 0 then tt:AddLine("자주 나오는 곳: " .. table.concat(zn, " · "), soft[1], soft[2], soft[3]) end
+		any = true
+	end
+	if e.q then
+		local qt = M.QuestTitleOf and M.QuestTitleOf(e.q[1])
+		tt:AddLine("퀘스트 보상: " .. (qt or ("퀘스트 #" .. e.q[1])), 1, 0.82, 0.32)
+		any = true
+	end
+	if e.i then
+		tt:AddLine((ItemNameAsync(e.i[1]) or "상자 아이템") .. " 안에서 나와요", 1, 0.82, 0.32)
+		any = true
+	end
+	if e.o then
+		local m = MapName(e.o[1][2])
+		tt:AddLine((m and (m .. "의 ") or "") .. "상자 · 물체에서 나와요", 1, 0.82, 0.32)
+		any = true
+	end
+	if e.t then
+		tt:AddLine("훈련사가 가르쳐요" .. (any and " (도안으로도 배울 수 있어요)" or ""), 0.96, 0.95, 0.9)
+		any = true
+	end
+	if not any then
+		tt:AddLine("이 도안은 어디서 나오는지 아직 알려진 자료가 없어요", 1, 0.72, 0.35)
+		tt:AddLine("포에버 새 도안이라 드랍 정보가 안 모였어요", soft[1], soft[2], soft[3])
+	end
+	if e._bop then
+		tt:AddLine("도안은 획득 시 귀속 · 경매장에선 못 사요", dim[1], dim[2], dim[3])
+	end
+end
+
 -- BIS 툴팁에 붙이는 제작 정보
 function M:CraftTooltip(it, tt)
 	tt = tt or GameTooltip
@@ -1230,8 +1361,15 @@ function M:CraftTooltip(it, tt)
 			tt:AddLine("내 진영에서 파는 상인이 없어요", 0.7, 0.72, 0.75)
 		end
 	else
-		tt:AddLine("제조법은 상인이 팔지 않아요", 0.96, 0.95, 0.9)
-		tt:AddLine("상급자 · 드랍 · 퀘스트로 배워요", 0.7, 0.72, 0.75)
+		local e = self:RecipeSrc(it.spell)
+		if e then
+			self:RecipeSrcTooltip(e, prof, tt)
+			local x = e.v and e.v[1]
+			if x and x[3] and x[3] >= 0 then tt:AddLine("클릭: 제조법 상인 위치를 지도에", 0.56, 0.58, 0.61) end
+		else
+			tt:AddLine("제조법 출처 자료가 없어요", 0.96, 0.95, 0.9)
+			tt:AddLine("훈련사 · 드랍 · 퀘스트 중 하나예요", 0.7, 0.72, 0.75)
+		end
 	end
 	tt:AddLine("직접 못 만들면 경매장 · 제작 의뢰", 0.56, 0.58, 0.61)
 end
@@ -1590,6 +1728,7 @@ local function QuestTitleOf(qid)
 	if C_QuestLog.RequestLoadQuestByID then pcall(C_QuestLog.RequestLoadQuestByID, qid) end
 	return db and db.questTitles[qid] or nil
 end
+M.QuestTitleOf = QuestTitleOf
 
 -- 던전 퀘스트 → 던전 이름 (날개가 여러 개인 곳은 공통 이름)
 local DQ_COMMON = { [316] = "붉은십자군 수도원", [229] = "검은바위 첨탑", [230] = "혈투의 전장", [236] = "스트라솔름" }
@@ -5512,7 +5651,15 @@ function M:BuildBisPanel()
 			local rc = M:RecipeFor(it.spell)
 			local P = Ink.modules.Professions
 			local x = rc and P and P.PickVendor and P.PickVendor(rc)
-			if x and P.Waypoint then P.Waypoint(x) end
+			if not x then
+				local e = M:RecipeSrc(it.spell)
+				local fac = UnitFactionGroup and UnitFactionGroup("player")
+				fac = fac == "Horde" and 1 or (fac == "Alliance" and 2 or 0)
+				for _, v in ipairs(e and e.v or {}) do
+					if (v[5] == 0 or v[5] == fac) and v[3] and v[3] >= 0 then x = { v[1], v[2], v[3], v[4], label = "제조법 상인" } break end
+				end
+			end
+			if x and P and P.Waypoint then P.Waypoint(x) end
 		end)
 		p.ranks[i] = r
 	end

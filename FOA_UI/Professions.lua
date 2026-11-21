@@ -1559,6 +1559,7 @@ local function RepText(fid, need)
 	local id = need >= 42000 and 8 or (need >= 21000 and 7 or (need >= 9000 and 6 or (need >= 3000 and 5 or 4)))
 	return (name or "평판") .. " " .. (_G["FACTION_STANDING_LABEL" .. id] or ""), have and have >= id
 end
+M.RepText = RepText
 local function CostText(c)
 	if not c then return end
 	if c[1] == "i" then return ReagentName(c[2]) .. " " .. c[3] .. "개" end
