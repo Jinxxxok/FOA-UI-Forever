@@ -3796,6 +3796,12 @@ local DQ_WING = {
 	--  던전 전체에서 하는 것(검은무쇠 처치 · 정수 모으기 · 바깥 연결)은 두 날개 모두
 	brd_low = { [3701] = true, [3702] = true, [3801] = true, [3802] = true, [3906] = true, [3907] = true, [3981] = true, [3982] = true, [4001] = true, [4002] = true, [4022] = true, [4023] = true, [4024] = true, [4061] = true, [4062] = true, [4063] = true, [4081] = true, [4082] = true, [4121] = true, [4122] = true, [4123] = true, [4132] = true, [4182] = true, [4183] = true, [4184] = true, [4185] = true, [4186] = true, [4223] = true, [4224] = true, [4241] = true, [4242] = true, [4262] = true, [4263] = true, [4264] = true, [4282] = true, [4286] = true, [4295] = true, [4322] = true, [4341] = true, [4342] = true, [4361] = true, [6402] = true, [6403] = true, [6501] = true, [7201] = true },
 	brd_up = { [3701] = true, [3702] = true, [4003] = true, [4004] = true, [4081] = true, [4082] = true, [4083] = true, [4121] = true, [4122] = true, [4126] = true, [4128] = true, [4133] = true, [4134] = true, [4136] = true, [4182] = true, [4201] = true, [4286] = true, [4295] = true, [4324] = true, [4362] = true, [4363] = true, [6642] = true, [6643] = true, [6644] = true, [6645] = true, [6646] = true, [7201] = true },
+	-- 검은바위 첨탑: 하층 · 상층이 던전 번호 하나(229)를 같이 써서 두 날개에 같은 퀘스트가 떴다 → 목표가 있는 쪽으로
+	--  하층: 할리콘 · 거미알 · 어미 거미 · 우로크 · 오목 · 부운 · 웜타락 · 비주 · 둠리거 상자 · 모샤루 석판 · 승천의 인장 보석
+	--  상층: 렌드 · 드라키사스 · 둥지 알 · 짐승(핀클) · 인간의 유해 · 고랄루크 · 아우비 · 오닉시아 입장 퀘스트
+	--  두 날개 모두: 승천의 인장(2/2 · 상층 열쇠) · 에이트리그의 지혜(하층 → 상층으로 이어짐)
+	lbrs = { [4788] = true, [5065] = true, [8181] = true, [8182] = true, [4701] = true, [4724] = true, [4729] = true, [4862] = true, [4866] = true, [4867] = true, [4903] = true, [98325] = true, [4941] = true, [4981] = true, [4982] = true, [4983] = true, [5001] = true, [5002] = true, [5081] = true, [5089] = true, [4742] = true, [4743] = true, [4764] = true, [4765] = true, [4766] = true, [4768] = true, [4769] = true },
+	ubrs = { [4743] = true, [4941] = true, [4974] = true, [7761] = true, [5102] = true, [6502] = true, [6566] = true, [6567] = true, [6568] = true, [6569] = true, [6570] = true, [6582] = true, [6583] = true, [6584] = true, [6585] = true, [6601] = true, [6602] = true, [4809] = true, [4907] = true, [4734] = true, [4735] = true, [5047] = true, [5063] = true, [5067] = true, [5068] = true, [5103] = true, [5124] = true, [5126] = true, [5127] = true, [5160] = true, [5161] = true, [5162] = true, [5164] = true, [5166] = true, [5167] = true },
 }
 M.DQ_WING = DQ_WING
 local DQ_W = 300
