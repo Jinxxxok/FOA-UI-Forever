@@ -76,9 +76,14 @@ ns.AHPrice = function(item) return M:Price(item) end
 local function Modern() return C_AuctionHouse and C_AuctionHouse.ReplicateItems and true or false end
 
 local SCAN_GAP = 15 * 60 + 5
+local WAIT_MAX = 45          -- 서버 응답을 이만큼(초) 기다린다
+local READ_STEP = 2500       -- 한 번(한 프레임)에 읽는 매물 수 (한꺼번에 읽으면 화면이 멈춘다)
+
+-- 마지막으로 서버에 전체 목록을 "요청"한 때 기준 (응답이 없었던 요청도 서버는 15분 제한에 센다)
+local function LastAsk(s) return math.max(s.scan or 0, s.tryAt or 0) end
+
 function M:CanScan()
-	local last = self:Store().scan or 0
-	if time() - last < SCAN_GAP then return false end
+	if time() - LastAsk(self:Store()) < SCAN_GAP then return false end
 	if Modern() then return true end
 	if CanSendAuctionQuery then
 		local ok, _, all = pcall(CanSendAuctionQuery)
@@ -87,38 +92,105 @@ function M:CanScan()
 	return false
 end
 
-function M:Scan()
-	if self.scanning then return end
-	self.scanning = true
-	self.seen = {}
-	self.cur = self:Store()
-	self:Status("경매장 가격 받는 중…")
-	self:Busy(true)
-	if Modern() then
-		pcall(C_AuctionHouse.ReplicateItems)
-	elseif QueryAuctionItems then
-		pcall(QueryAuctionItems, "", nil, nil, 0, false, 0, true)
-	else
-		self.scanning = nil
-	end
-	-- 응답이 없으면 1분 뒤 풀기
-	C_Timer.After(60, function() if M.scanning then M.scanning = nil; M:Busy(false); M:Status("응답이 없어요 · 잠시 뒤 자동으로 다시") end end)
+local function Open()
+	local f = _G.AuctionHouseFrame or _G.AuctionFrame
+	return f and f:IsShown()
 end
 
-function M:ReadReplicate()
-	local n = C_AuctionHouse.GetNumReplicateItems and C_AuctionHouse.GetNumReplicateItems() or 0
-	if n == 0 then return end
-	local now = time()
-	local cnt, missing = 0, 0
-	for i = 0, n - 1 do
-		local ok, name, _, count, _, _, _, _, _, _, buyout, _, _, _, _, _, _, itemID, hasAll = pcall(C_AuctionHouse.GetReplicateItemInfo, i)
-		if ok and itemID and buyout and buyout > 0 and (count or 0) > 0 then
-			self:Record(itemID, name, buyout / count, now, true)
-			cnt = cnt + 1
-		end
-		if ok and not hasAll then missing = missing + 1 end
+function M:Scan()
+	if self.scanning then return end
+	local s = self:Store()
+	self.scanning = true
+	self.reading = nil
+	self.seen = {}
+	self.cur = s
+	self.scanT0 = GetTime()
+	self.scanID = (self.scanID or 0) + 1
+	s.tryAt = time()
+	self:Busy(true)
+	self:Status("서버에 전체 목록 요청 중…")
+	if Modern() then
+		pcall(C_AuctionHouse.ReplicateItems)
+		self:PollReplicate(self.scanID)
+	elseif QueryAuctionItems then
+		pcall(QueryAuctionItems, "", nil, nil, 0, false, 0, true)
+		local id = self.scanID
+		C_Timer.After(WAIT_MAX + 15, function()
+			if M.scanning and M.scanID == id and not M.reading then M:Abort("no") end
+		end)
+	else
+		self:Abort("none")
 	end
-	self:Finish(cnt)
+end
+
+-- 받는 중 / 기다리는 중을 1초마다 숫자로 보여 주고, 매물 수가 더 늘지 않으면 읽는다
+--  (예전엔 이벤트 한 번만 기다려서, 이벤트가 안 오거나 0개일 때 막대만 계속 흘렀다)
+function M:PollReplicate(id)
+	local last, same = -1, 0
+	local function tick()
+		if not M.scanning or M.scanID ~= id or M.reading then return end
+		if not Open() then M:Abort("closed") return end
+		local ok, n = pcall(C_AuctionHouse.GetNumReplicateItems)
+		n = (ok and tonumber(n)) or 0
+		local el = math.floor(GetTime() - (M.scanT0 or GetTime()))
+		if n > 0 and n == last then same = same + 1 else same = 0 end
+		last = n
+		if n > 0 then
+			M:Status(string.format("목록 받는 중… 매물 %d개", n))
+		else
+			M:Status(string.format("서버 응답 기다리는 중… %d초", el))
+		end
+		if n > 0 and (same >= 2 or (M.repEvent and same >= 1)) then M:ReadReplicate(n) return end
+		if el >= WAIT_MAX then
+			if n > 0 then M:ReadReplicate(n) else M:Abort("no") end
+			return
+		end
+		C_Timer.After(1, tick)
+	end
+	M.repEvent = nil
+	C_Timer.After(1, tick)
+end
+
+-- 나눠서 읽기 (매물이 수만 개여도 화면이 안 멈추게)
+function M:ReadReplicate(n)
+	if self.reading then return end
+	self.reading = true
+	local id, now = self.scanID, time()
+	local i, cnt = 0, 0
+	local function step()
+		if M.scanID ~= id then return end
+		local stop = math.min(n - 1, i + READ_STEP - 1)
+		for k = i, stop do
+			local ok, name, _, count, _, _, _, _, _, _, buyout, _, _, _, _, _, _, itemID = pcall(C_AuctionHouse.GetReplicateItemInfo, k)
+			if ok and itemID and buyout and buyout > 0 and (count or 0) > 0 then
+				M:Record(itemID, name, buyout / count, now, true)
+				cnt = cnt + 1
+			end
+		end
+		i = stop + 1
+		if i < n then
+			M:Status(string.format("가격 읽는 중… %d / %d", i, n))
+			C_Timer.After(0, step)
+		else
+			M.reading = nil
+			M:Finish(cnt)
+		end
+	end
+	step()
+end
+
+-- 멈춤: 응답 없음 · 창 닫음
+function M:Abort(why)
+	self.scanning, self.reading, self.cur = nil, nil, nil
+	self.scanID = (self.scanID or 0) + 1
+	self:Busy(false)
+	if why == "closed" then
+		-- 창을 닫아서 멈춘 것: 요청은 이미 서버가 셌을 수 있지만 다음에 열면 다시 해 본다
+		self:Store().tryAt = nil
+		return
+	end
+	local wait = math.max(1, math.ceil((SCAN_GAP - (time() - LastAsk(self:Store()))) / 60))
+	self:Status(string.format("|cffFFB75A서버가 목록을 안 보내 줬어요|r · 전체 목록은 15분에 한 번만 돼요 · %d분 뒤 자동으로 다시", wait))
 end
 
 function M:ReadClassicList(full)
@@ -139,10 +211,13 @@ end
 function M:Finish(cnt)
 	local s = self:Store()
 	s.scan = time()
+	s.tryAt = nil
 	local total = 0
 	for _ in pairs(s.p) do total = total + 1 end
 	self.scanning = nil
+	self.reading = nil
 	self.cur = nil
+	self.scanID = (self.scanID or 0) + 1
 	self:Busy(false)
 	self:Status(string.format("|cff6FD39A스캔 완료|r · 매물 %d개 · 아이템 %d종 가격", cnt, total))
 	print(string.format("|cffFFF468FOA|r 경매장 가격 스캔 완료 · 아이템 %d종", total))
@@ -196,7 +271,7 @@ function M:AutoScan()
 		self:Scan()
 	else
 		local s = self:Store()
-		local wait = math.max(1, math.ceil((SCAN_GAP - (time() - (s.scan or 0))) / 60))
+		local wait = math.max(1, math.ceil((SCAN_GAP - (time() - LastAsk(s))) / 60))
 		self:Status(self:LastText() .. string.format("  ·  %d분 뒤 자동 스캔", wait))
 	end
 end
@@ -235,7 +310,8 @@ function M:BuildBar(parent)
 	b.btn.t:SetText("가격 스캔")
 	b.btn:SetScript("OnClick", function()
 		if M.scanning then return end
-		if not M:CanScan() then M:AutoScan() return end
+		-- Shift+클릭: 15분이 안 지났어도 다시 요청해 본다 (서버가 거절하면 45초 뒤 알려 줌)
+		if not M:CanScan() and not IsShiftKeyDown() then M:AutoScan() return end
 		M:Scan()
 	end)
 	b.btn:SetScript("OnEnter", function(self)
@@ -244,6 +320,7 @@ function M:BuildBar(parent)
 		GameTooltip:AddLine("경매장 전체 가격 스캔", 1, 1, 1)
 		Ink.TipLine(GameTooltip, "모든 매물의 최저 단가를 기억해서 아이템 툴팁에 보여 줘요", 0.7, 0.72, 0.75)
 		Ink.TipLine(GameTooltip, "경매장에 들어오면 자동으로 해요 (서버가 15분에 한 번만 허락)", 0.55, 0.57, 0.6)
+		Ink.TipLine(GameTooltip, "Shift+클릭: 15분이 안 지났어도 다시 요청", 0.55, 0.57, 0.6)
 		GameTooltip:Show()
 	end)
 	b.btn:SetScript("OnLeave", function(self) self.bg:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.14); GameTooltip:Hide() end)
@@ -332,11 +409,10 @@ function M:Init()
 			C_Timer.After(0.1, function() pcall(M.OnShow, M) end)
 		elseif event == "AUCTION_HOUSE_CLOSED" then
 			if M.bar then M.bar:Hide() end
+			if M.scanning and not M.reading then M:Abort("closed") end
 		elseif event == "REPLICATE_ITEM_LIST_UPDATE" then
-			if M.scanning then
-				-- 정보가 다 오도록 잠깐 기다렸다 읽는다
-				C_Timer.After(1.5, function() pcall(M.ReadReplicate, M) end)
-			end
+			-- 목록이 왔다는 신호: 1초마다 보는 쪽(PollReplicate)이 개수가 멈추면 읽는다
+			if M.scanning then M.repEvent = true end
 		elseif event == "AUCTION_ITEM_LIST_UPDATE" then
 			local full = M.scanning
 			pcall(M.ReadClassicList, M, full)

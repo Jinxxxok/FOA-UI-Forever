@@ -398,6 +398,8 @@ function M:BuildRegistry()
 			} },
 			{ t = "창", rows = {
 				SW("charSheet", "캐릭터 창", "FOA 스타일 · BIS 탭", { reload = true }),
+				SW("moveWindows", "기본 창 옮기기", "특성 · 마법책 · 은행 · 상인 · 우편 · 경매장 · 전문기술 … 빈 곳이나 제목 줄을 끌어서 · 다음에도 그 자리 · 제목 줄 Shift+오른쪽 클릭 = 원래 자리",
+					{ apply = function() call("Mover", "Apply") end }),
 				{ kind = "seg", key = "charSlotText", label = "장비 칸 옆 글자", desc = "마법부여 · 보석 효과를 짧게 (민+2 체+8) 또는 아이템 이름", dep = "charSheet",
 					opts = { { "ench", "마부 · 보석" }, { "name", "아이템 이름" } }, def = "ench",
 					apply = function() call("Character", "PaintAll") end },

@@ -1986,7 +1986,8 @@ function M:MakeMovable()
 	h:EnableMouse(true)
 	h:RegisterForDrag("LeftButton")
 	h:SetScript("OnDragStart", function()
-		if InCombatLockdown() or (wm.IsMaximized and wm:IsMaximized()) then return end
+		-- 보호된 상태일 때만 전투 중에 막는다 (예전엔 전투 중이면 늘 안 움직였다)
+		if (wm:IsProtected() and InCombatLockdown()) or (wm.IsMaximized and wm:IsMaximized()) then return end
 		wm:StartMoving()
 	end)
 	h:SetScript("OnDragStop", function()
@@ -1998,7 +1999,12 @@ function M:MakeMovable()
 	end)
 	h:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
-		GameTooltip:AddLine("끌어서 지도 옮기기", 1, 1, 1)
+		if wm.IsMaximized and wm:IsMaximized() then
+			GameTooltip:AddLine("큰 지도(최대화)는 옮길 수 없어요", 1, 1, 1)
+			GameTooltip:AddLine("오른쪽 위 단추로 창 지도로 줄이면 끌어서 옮길 수 있어요", 0.7, 0.72, 0.75)
+		else
+			GameTooltip:AddLine("끌어서 지도 옮기기", 1, 1, 1)
+		end
 		GameTooltip:Show()
 	end)
 	h:SetScript("OnLeave", GameTooltip_Hide)
@@ -2006,7 +2012,7 @@ function M:MakeMovable()
 	local function restore()
 		M:ApplyScale()
 		local pos = Ink.db.mapPos
-		if not pos or InCombatLockdown() or (wm.IsMaximized and wm:IsMaximized()) then return end
+		if not pos or (wm:IsProtected() and InCombatLockdown()) or (wm.IsMaximized and wm:IsMaximized()) then return end
 		local sc = pos.ui and (wm:GetScale() or 1) or 1
 		wm:ClearAllPoints()
 		wm:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pos[1] / sc, pos[2] / sc)
@@ -2018,7 +2024,7 @@ function M:MakeMovable()
 	local function snap()
 		if busy then return end
 		local pos = Ink.db.mapPos
-		if not pos or InCombatLockdown() or (wm.IsMaximized and wm:IsMaximized()) then return end
+		if not pos or (wm:IsProtected() and InCombatLockdown()) or (wm.IsMaximized and wm:IsMaximized()) then return end
 		busy = true
 		local sc = pos.ui and (wm:GetScale() or 1) or 1
 		wm:ClearAllPoints()
