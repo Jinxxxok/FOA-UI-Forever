@@ -135,11 +135,13 @@ local function ViewKey()
 end
 
 -- BIS 판 보기: 육성(지금 레벨 최고템) · PvE(공략 BIS) · PvP(명예 · 계급 장비 + PvP 점수)
---  고른 적이 없으면 만렙 전 = 육성, 만렙 = PvE
+--  고른 적이 없으면 만렙 전 = 육성, 만렙 = PvE · 만렙이면 육성 칸 자체가 없다 (예전에 육성을 골라 뒀어도 PvE)
+local function MaxLevel() return (UnitLevel("player") or 60) >= 60 end
 local function BisView()
 	local v = Ink.cdb and Ink.cdb.bisView
+	if v == "lvl" and MaxLevel() then v = nil end
 	if v == "lvl" or v == "pve" or v == "pvp" then return v end
-	return (UnitLevel("player") or 60) < 60 and "lvl" or "pve"
+	return MaxLevel() and "pve" or "lvl"
 end
 M.BisView = BisView
 
@@ -500,21 +502,58 @@ function M:SourceText(it)
 	return (inst and inst.name or "던전") .. " · " .. (it.boss or "?") .. "넴 " .. (it.bossName or "")
 end
 
--- 포에버 획득처 (Method 공략 영어) → 한글로 짧게
+-- 포에버 획득처 (공략 영어 · MythicSim · wowforever.be · Method) → 한글로 짧게
+--  {n:번호|영어} NPC · {q:번호|영어} 퀘스트 · {f:번호|영어} 평판 = 게임 언어 이름 (못 받으면 영어 그대로)
+--  순서가 중요: 긴 말 · 앞에 붙는 말이 먼저 (예: 검은바위 첨탑 하층 → 검은바위 첨탑)
 local SRC_KO = {
+	{ "^Dungeon · ", "" }, { "^Crafted · ", "" }, { "^Vendor · ", "상인 · " }, { "^Reputation · ", "평판 · " },
+	{ "^Quest · Tier 0%.5 upgrade quest", "티어 0.5 강화 퀘스트" },
+	{ "(%d+) Tickets", "티켓 %1장" }, { "(%d+) Tarnished Undermine Reals?", "빛바랜 언더마인 주화 %1개" },
+	{ "Tarnished Undermine Reals?", "빛바랜 언더마인 주화" },
+	{ " %- Exalted", " (Exalted)" }, { "BoE World Drop", "월드 드랍 (착귀)" }, { "World BoE", "월드 드랍 (착귀)" }, { "World Drop %(BoE%)", "월드 드랍 (착귀)" },
 	{ "Leatherworking", "가죽세공" }, { "Blacksmithing", "대장기술" }, { "Tailoring", "재봉술" }, { "Enchanting", "마법부여" },
 	{ "Engineering", "기계공학" }, { "World Drop", "월드 드랍" }, { "BoE", "착귀" }, { "Quest", "퀘스트" }, { "Unknown", "획득처 미확인" },
 	{ "No known source yet", "획득처 미확인" }, { "Exalted", "확고한 동맹" }, { "Revered", "매우 우호적" }, { "Friendly", "우호적" },
-	{ "Darkmoon Faire", "다크문 축제" }, { "Razorfen Downs", "가시덩굴 구릉" }, { "Lower Blackrock Spire", "검은바위 첨탑 하층" },
-	{ "Upper Blackrock Spire", "검은바위 첨탑 상층" }, { "Blackrock Depths", "검은바위 나락" }, { "Stratholme", "스트라솔름" },
-	{ "Dire Maul", "혈투의 전장" }, { "Tarnished Undermine Real", "빛바랜 언더마인 주화" }, { "rep", "평판" }, { " or ", " / " },
-	{ "Reputation:", "평판:" }, { "Drop:", "" },
+	{ "The Darkmoon Faire", "다크문 축제" }, { "Darkmoon Faire", "다크문 축제" }, { "Razorfen Downs", "가시덩굴 구릉" },
+	{ "Lower Blackrock Spire", "검은바위 첨탑 하층" }, { "Upper Blackrock Spire", "검은바위 첨탑 상층" },
+	{ "Blackrock Depths", "검은바위 나락" }, { "Blackrock Spire", "검은바위 첨탑" }, { "Stratholme", "스트라솔름" },
+	{ "Scholomance", "스칼로맨스" }, { "Dire Maul", "혈투의 전장" }, { "Tribute", "공물 상자" },
+	{ "Stranglethorn Vale", "가시덤불 골짜기" }, { "Azshara", "아즈샤라" }, { "Alterac Valley", "알터랙 계곡" },
+	{ "Warsong Gulch", "전쟁노래 협곡" }, { "Arathi Basin", "아라시 분지" }, { "Darkspear Islands", "검은창 섬" },
+	{ " rep$", " 평판" }, { " or ", " / " }, { " %- ", " · " }, { "Reputation:", "평판:" }, { "Drop:", "" },
 }
+local function FactionName(id)
+	if C_Reputation and C_Reputation.GetFactionDataByID then
+		local ok, d = pcall(C_Reputation.GetFactionDataByID, id)
+		if ok and type(d) == "table" and type(d.name) == "string" and d.name ~= "" then return d.name end
+	end
+	if GetFactionInfoByID then
+		local ok, n = pcall(GetFactionInfoByID, id)
+		if ok and type(n) == "string" and n ~= "" then return n end
+	end
+end
+local function TokenName(kind, id, en)
+	id = tonumber(id)
+	local ok, t = pcall(function()
+		if kind == "n" then return M.BossName and M.BossName({ npc = id })
+		elseif kind == "q" then return M.QuestTitleOf and M.QuestTitleOf(id)
+		elseif kind == "f" then return FactionName(id) end
+	end)
+	return (ok and type(t) == "string" and t ~= "") and t or en
+end
 local function KoSource(s)
 	if not s then return "기타" end
+	-- 번호 표시는 먼저 빼 두고(영어 이름이 아래 바꾸기에 걸리지 않게) 마지막에 게임 언어 이름으로
+	local names = {}
+	s = s:gsub("{(%a):(%d+)|([^}]*)}", function(k, id, en)
+		names[#names + 1] = TokenName(k, id, en)
+		return "\001" .. #names .. "\002"
+	end)
 	for _, r in ipairs(SRC_KO) do s = s:gsub(r[1], r[2]) end
+	s = s:gsub("\001(%d+)\002", function(i) return names[tonumber(i)] or "" end)
 	return s
 end
+M.KoSource = KoSource
 
 -- 포에버 던전 전리품 (ForeverLoot.lua · 던전 도감 대신)
 local EQUIP_EJ = {
@@ -678,7 +717,8 @@ function M:BuildRanksForever()
 	wipe(self.ranks)
 	wipe(self.rankCount)
 	local spec = ns.BIS_FOREVER and ns.BIS_FOREVER.specs[skey]
-	self.spec = spec and { src = ns.BIS_FOREVER.src, g = spec.g, fo = spec } or nil
+	-- 출처 이름은 전문화마다 (MythicSim 시뮬 · wowforever.be · Method 공략)
+	self.spec = spec and { src = (spec.from and spec.from ~= "" and spec.from) or ns.BIS_FOREVER.src, g = spec.g, fo = spec } or nil
 	self.guideBis = (spec and next(spec.g) ~= nil) and true or false   -- 공략이 장비 표를 낸 전문화인지
 	self.isExample = false
 	local per = {}
@@ -904,7 +944,11 @@ function M:SourceLabel()
 		return (UnitLevel("player") or 1) .. "레벨 착용 가능\n" .. table.concat(srcs, " · ") .. " 중 FOA 점수 순"
 	end
 	if FOREVER then
-		if self.guideBis then return "BIS · 대체: " .. self.spec.src .. " (레이드 전) + FOA 점수" end
+		if self.guideBis then
+			local fo = self.spec.fo
+			if fo and fo.alt and #fo.alt > 0 then return "BIS · 대체: " .. self.spec.src .. " (레이드 전) + FOA 점수" end
+			return "BIS: " .. self.spec.src .. " (레이드 전) · 대체: FOA 점수 순"
+		end
 		return "BIS · 대체: FOA 점수 순 (공략 BIS 표가 아직 없는 전문화)"
 	end
 	if self.spec then return "BIS: " .. self.spec.src .. " · 대체: FOA 계산" end
@@ -5996,6 +6040,7 @@ function M:PaintBis()
 	local mode = self.bisMode or "gear"
 	local view = BisView()
 	for _, b in ipairs(p.modes) do
+		b:SetShown(not (b.view == "lvl" and MaxLevel()))   -- 만렙: 육성 칸 숨김
 		local on = (b.view and mode == "gear" and b.view == view) or (not b.view and mode == b.mode)
 		b.on = on
 		b.label:SetTextColor(on and C.text[1] or C.muted[1], on and C.text[2] or C.muted[2], on and C.text[3] or C.muted[3])

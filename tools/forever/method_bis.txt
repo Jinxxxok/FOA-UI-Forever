@@ -1,0 +1,127 @@
+@PALADIN:holy
+PRE|Head|Living Crown|252561|Leatherworking
+PRE|Neck|Glowing Eye of Mordresh|10769|Razorfen Downs
+PRE|Shoulder|Theramore Mantle|271957|Theramore Expeditionary Force
+PRE|Shoulder|Darkspear Mantle|272107|Darkspear Raiders - Exalted
+PRE|Cloak|Hide Of The Wild|18510|Leatherworking
+PRE|Chest|Breastplate of Salvation|250601|Blacksmithing
+PRE|Wrist|Dryad's Wrist Bindings|19595|Silverwing Sentinels or Warsong Outriders rep
+PRE|Hands|Theramore Handwraps|271945|Theramore Expeditionary Force
+PRE|Hands|Raider Handwraps|272097|Darkspear Raiders - Exalted
+PRE|Waist|Belt of the Archmage|18405|Tailoring
+PRE|Legs|Martyr's Legplate|250600|Blacksmithing
+PRE|Feet|Mooncloth Boots|15802|Tailoring
+PRE|Ring|Warden's Signet of Resolv|275983|The Watchers (Exalted)
+PRE|Ring|Blessed Band Of Light|272407|75 Tarnished Undermine Real
+PRE|Trinket|Serenity Field|272439|125 Tarnished Undermine Real
+PRE|Trinket|Uther's Strength|11302|World Drop (BoE)
+PRE|1H Weapon|Hand of Edward the Odd|2243|World Drop (BoE)
+PRE|Off hand|Lei of the Lifegiver|19312|Stormpike/Frostwolf (Exalted)
+PRE|Libram|Libram of Infusion|279248|Enchanting
+ALT|Head|Whitesoul Helm|12633|Blacksmithing
+ALT|Neck|Orb Of The Darkmoon|19426|The Darkmoon Faire
+ALT|Shoulder|Dawnbringer Shoulders|12625|Blacksmithing
+ALT|Chest|Soulforge Breastplate|22089|Quest
+ALT|Wrist|Prefect's Wristguards|250584|Blacksmithing
+ALT|Hands|Prefect's Glove|250554|Blacksmithing
+ALT|Waist|Prefect's Waistguard|250574|Blacksmithing
+ALT|Feet|Soulforge Boots|22087|Quest
+ALT|1H Weapon|Sageblade|22383|Blacksmithing
+ALT|Off hand|Evergreen Shield|279262|Blacksmithing
+ALT|Libram|Libram of Economy|272436|50 Tarnished Undermine Real
+STATS|Healing Power > Intellect > Crit Chance > MP5 > Spirit > Haste
+@PALADIN:prot
+PRE|Head|Stalwart Helm|250599|Blacksmithing
+PRE|Neck|Horn of Ve'han|275736|Unknown
+PRE|Shoulder|Warder's Pauldrons|250578|Blacksmithing
+PRE|Cloak|Cloak of Warding|18413|Tailoring
+PRE|Chest|Enriched Thorium Breastplate|250595|Blacksmithing
+PRE|Wrist|Warder's Wristguards|250583|Blacksmithing
+PRE|Hands|Warder's Gloves|250553|Blacksmithing
+PRE|Waist|Warder's Waistguard|250573|Blacksmithing
+PRE|Legs|Enriched Thorium Leggings|250596|Blacksmithing
+PRE|Feet|Warder's Sabatons|250563|Blacksmithing
+PRE|Ring|Initiate's Signet of Vigilance|275971|The Watchers
+PRE|Ring|Don Julio's Band|19325|Stormpike Guard
+PRE|Trinket|Adaptive Combat Assistant|272437|125 Tarnished Undermine Real
+PRE|Trinket|Cleansed Vilebranch Icon|270276|Unknown
+PRE|1H Weapon|Sageblade|22383|Blacksmithing
+PRE|Off hand|Antique Bulwark|281637|Unknown
+PRE|Libram|Libram of Law|272435|50 Tarnished Undermine Real
+ALT|Head|Enriched Thorium Helm|250597|Blacksmithing
+ALT|Cloak|Arcanoweave Cloak|272411|75 Tarnished Undermine Real
+ALT|Hands|Darkrune Gauntlets|20549|Blacksmithing
+ALT|Waist|Vindicator's Belt|272404|100 Tarnished Undermine Real
+ALT|Legs|Sentinel's Lamellar Legguards|22753|Silverwing Sentinels (Exalted)
+ALT|Feet|Boots of Avoidance|14549|BoE World Drop
+ALT|Ring|Initiate's Signet of Brilliance|275969|The Watchers (Friendly)
+ALT|Ring|Maiden's Circle|13001|BoE World Drop
+ALT|Ring|Bloodmaster's Ring|275043|Unknown
+ALT|Trinket|Hand of Justice|11815|Blackrock Depths · Emperor Dagran Thaurissan
+ALT|Trinket|Defender's Grip Stabilizer|272440|125 Tarnished Undermine Real
+ALT|Trinket|Jewel of the Guard Captain|270225|Quest
+ALT|Trinket|Cleansed Vilebranch Medallion|270275|Unknown
+ALT|Trinket|Rune of the Guard Captain|19120|Quest
+ALT|1H Weapon|Flurry Axe|871|BoE World Drop
+ALT|1H Weapon|Hand of Edward the Odd|2243|BoE World Drop
+ALT|Off hand|Draconian Deflector|12602|Upper Blackrock Spire · General Drakkisath
+ALT|Off hand|A Bigger Shield|260210|Unknown
+ALT|Libram|Libram of Fervor|23203|World BoE
+ALT|Libram|Steadfast Libram|279247|Enchanting
+STATS|Defense > Stamina > Hit > Expertise > Spell Power > Block Chance > Crit Chance > Block
+@DRUID:resto
+PRE|Head|Living Crown|252561|Leatherworking
+PRE|Neck|Orb Of The Darkmoon|19426|The Darkmoon Faire
+PRE|Shoulder|Wildheart Spaulders|16718|Lower Blackrock Spire · Gizrul the Slavener
+PRE|Cloak|Hide Of The Wild|18510|Leatherworking
+PRE|Chest|Wildheart Vest|16706|Quest
+PRE|Wrist|Dryad's Wrist Bindings|19595|Silverwing Sentinels or Warsong Outriders rep
+PRE|Hands|Theramore Handwraps|271945|Theramore Expeditionary Force
+PRE|Hands|Raider Handwraps|272097|Darkspear Raiders (Exalted)
+PRE|Waist|Elderwild Waistcord|279252|Leatherworking
+PRE|Legs|Ironfeather Leggings|252486|Leatherworking
+PRE|Feet|Mooncloth Boots|15802|Tailoring
+PRE|Ring|Watcher's Signet Of Resolve|275979|The Watchers (Exalted)
+PRE|Ring|Blessed Band Of Light|272407|75 Tarnished Undermine Real
+PRE|Trinket|Serenity Field|272439|125 Tarnished Undermine Real
+PRE|Trinket|Major Recombobulator|18637|Engineering
+PRE|1H Weapon|High Warlord's Battle Mace|23464|PvP
+PRE|Off hand|Premier Grand Marshal's Tome Of Restoration|278157|PvP
+PRE|2H Weapon|Glowing Brightwood Staff|812|BoE
+PRE|Idol|Idol Of Swiftness|279250|Enchanting
+ALT|Head|Mooncloth Circlet|14140|Tailoring
+ALT|Neck|Beads Of Ogre Mojo|22149|Dire Maul · Quest
+ALT|Shoulder|Mooncloth Shoulders|14139|Tailoring
+ALT|Cloak|Drape of Recovery|272413|75 Tarnished Undermine Real
+ALT|Chest|Mooncloth Vest|14138|Tailoring
+ALT|Wrist|Devout Bracers|16697|Stratholme / BoE
+ALT|Hands|Devout Gloves|16692|Stratholme · Archivist Galford
+ALT|Waist|Wisdom of the Timbermaw|19047|Tailoring
+ALT|Legs|Elderwild Pants|279254|Leatherworking
+ALT|Feet|Wildheart Boots|16715|Lower Blackrock Spire · Mother Smolderweb
+ALT|Ring|Ring Of Nature's Cycles|275740|Unknown
+ALT|Ring|Jereman's Bauble|275738|Unknown
+ALT|Trinket|Weakness Analyzer|272438|125 Tarnished Undermine Real
+ALT|Trinket|Uther's Strength|11302|BoE
+ALT|1H Weapon|Hand of Edward the Odd|2243|World Drop / BoE
+ALT|Off hand|Lei Of The Lifegiver|19312|Stormpike/Frostwolf (Exalted)
+ALT|Idol|Idol of Synthesis|272429|50 Tarnished Undermine Real
+STATS|-
+@PRIEST:shadow
+STATS|Hit Chance (to Cap) > Spell Damage > Crit Chance > Intellect > Spirit
+@ROGUE:assassination
+STATS|Weapon Damage, Hit and Expertise, Agility, Critical Strike, Strength, Stamina
+@ROGUE:combat
+STATS|Weapon Damage, Hit and Expertise, Agility, Critical Strike, Strength, Stamina
+@ROGUE:subtlety
+STATS|Weapon Damage, Hit and Expertise, Agility, Critical Strike, Strength, Stamina
+@HUNTER:bm
+STATS|Agility = Intellect > Strength (with Careful Aim) / Agility > Strength > Intellect
+@WARLOCK:aff
+STATS|Hit to 17%, Spell Damage, Shadow Spell Damage, Spell Piercing, Crit, Intellect, Haste, MP5, Spirit
+@WARLOCK:demo
+STATS|Hit to 17%, Spell Damage, Fire/Shadow Spell Damage, Spell Piercing, Crit, Haste, Intellect, MP5, Spirit
+@WARLOCK:destro
+STATS|Hit to 17%, Spell Piercing, Spell Damage, Haste, Fire Spell Damage, Shadow Spell Damage, Crit, Intellect, MP5, Spirit
+@DRUID:guardian
+STATS|Offense: Weapon DPS > Strength > Hit, Expertise, Feral Combat Skill > Crit > Haste. Defense: Stamina, Armor > Agility > Dodge

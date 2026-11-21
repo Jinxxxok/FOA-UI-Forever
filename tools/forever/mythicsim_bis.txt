@@ -1,0 +1,409 @@
+# MythicSim 포에버 공격대 전 BIS (시뮬 · 2026-11-21~22 확인) + wowforever.be (방어 전사 · 신성 사제 · 복원 주술사)
+# @키 출처
+# 칸 | 이름 | 아이템 | 획득처
+@ROGUE:combat MythicSim
+Head | Shadowcraft Cap | 16707 | Dungeon · Darkmaster Gandling, Scholomance
+Neck | Pendant of Celerity | 22340 | Dungeon · Lord Valthalak, Blackrock Spire
+Shoulders | Stormshroud Shoulders | 15058 | Crafted · Leatherworking
+Back | Howler's Furs | 272414 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Stormshroud Armor | 15056 | Crafted · Leatherworking
+Wrists | Darkmantle Bracers | 226830 | Quest · Tier 0.5 upgrade quest
+Hands | Stormshroud Gloves | 21278 | Crafted · Leatherworking
+Waist | Darkmantle Belt | 226832 | Quest · Tier 0.5 upgrade quest
+Legs | Darkmantle Pants | 226827 | Quest · Tier 0.5 upgrade quest
+Feet | Darkmantle Footpads | 226831 | Quest · Tier 0.5 upgrade quest
+Ring 1 | Cutthroat's Signet | 272408 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Ring 2 | Don Julio's Band | 19325 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Trinket 1 | Heart of Wyrmthalak | 22321 | Dungeon · Overlord Wyrmthalak, Blackrock Spire
+Trinket 2 | Adaptive Combat Assistant | 272437 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Main hand | Ironfoe | 11684 | Dungeon · Emperor Dagran Thaurissan, Blackrock Depths
+Off hand | Felstriker | 12590 | Dungeon · Warchief Rend Blackhand, Blackrock Spire
+Ranged | Satyr's Bow | 18323 | Dungeon · Zevrim Thornhoof, Dire Maul
+@ROGUE:assassination MythicSim
+Head | Shadowcraft Cap | 16707 | Dungeon · Darkmaster Gandling, Scholomance
+Neck | Pendant of Celerity | 22340 | Dungeon · Lord Valthalak, Blackrock Spire
+Shoulders | Stormshroud Shoulders | 15058 | Crafted · Leatherworking
+Back | Howler's Furs | 272414 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Stormshroud Armor | 15056 | Crafted · Leatherworking
+Wrists | Darkmantle Bracers | 226830 | Quest · Tier 0.5 upgrade quest
+Hands | Stormshroud Gloves | 21278 | Crafted · Leatherworking
+Waist | Darkmantle Belt | 226832 | Quest · Tier 0.5 upgrade quest
+Legs | Darkmantle Pants | 226827 | Quest · Tier 0.5 upgrade quest
+Feet | Darkmantle Footpads | 226831 | Quest · Tier 0.5 upgrade quest
+Ring 1 | Cutthroat's Signet | 272408 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Ring 2 | Don Julio's Band | 19325 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Trinket 1 | Heart of Wyrmthalak | 22321 | Dungeon · Overlord Wyrmthalak, Blackrock Spire
+Trinket 2 | Hand of Justice | 11815 | Dungeon · Emperor Dagran Thaurissan, Blackrock Depths
+Main hand | Felstriker | 12590 | Dungeon · Warchief Rend Blackhand, Blackrock Spire
+Off hand | Heartseeker | 12783 | Crafted · Blacksmithing
+Ranged | Satyr's Bow | 18323 | Dungeon · Zevrim Thornhoof, Dire Maul
+@ROGUE:subtlety MythicSim
+Head | Shadowcraft Cap | 16707 | Dungeon · Darkmaster Gandling, Scholomance
+Neck | Pendant of Celerity | 22340 | Dungeon · Lord Valthalak, Blackrock Spire
+Shoulders | Stormshroud Shoulders | 15058 | Crafted · Leatherworking
+Back | Howler's Furs | 272414 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Stormshroud Armor | 15056 | Crafted · Leatherworking
+Wrists | Darkmantle Bracers | 226830 | Quest · Tier 0.5 upgrade quest
+Hands | Stormshroud Gloves | 21278 | Crafted · Leatherworking
+Waist | Darkmantle Belt | 226832 | Quest · Tier 0.5 upgrade quest
+Legs | Darkmantle Pants | 226827 | Quest · Tier 0.5 upgrade quest
+Feet | Darkmantle Footpads | 226831 | Quest · Tier 0.5 upgrade quest
+Ring 1 | Cutthroat's Signet | 272408 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Ring 2 | Don Julio's Band | 19325 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Trinket 1 | Heart of Wyrmthalak | 22321 | Dungeon · Overlord Wyrmthalak, Blackrock Spire
+Trinket 2 | Hand of Justice | 11815 | Dungeon · Emperor Dagran Thaurissan, Blackrock Depths
+Main hand | Felstriker | 12590 | Dungeon · Warchief Rend Blackhand, Blackrock Spire
+Off hand | Bonescraper | 13368 | Dungeon · Baron Rivendare, Stratholme
+Ranged | Satyr's Bow | 18323 | Dungeon · Zevrim Thornhoof, Dire Maul
+@WARRIOR:fury MythicSim
+Head | Lionheart Helm | 12640 | Crafted · Blacksmithing
+Neck | Mark of Fordring | 15411 | Quest · In Dreams
+Shoulders | Theramore Epaulets | 271956 | Reputation · Theramore Expeditionary Force (Darkspear Islands)
+Back | Howler's Furs | 272414 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Timbermaw Tunic | 252484 | Crafted · Leatherworking
+Wrists | Battleborn Armbraces | 12936 | Dungeon · Warchief Rend Blackhand, Blackrock Spire
+Hands | Devilsaur Gauntlets | 15063 | Crafted · Leatherworking
+Waist | Valiant's Waistguard | 272403 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Legs | Devilsaur Leggings | 15062 | Crafted · Leatherworking
+Feet | Battleboots of Heroism | 226857 | Quest · Tier 0.5 upgrade quest
+Ring 1 | Cutthroat's Signet | 272408 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Ring 2 | Don Julio's Band | 19325 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Main hand | Ironfoe | 11684 | Dungeon · Emperor Dagran Thaurissan, Blackrock Depths
+Off hand | Bashguuder | 13204 | Dungeon · Ghok Bashguud, Blackrock Spire
+Ranged | Blackcrow | 12651 | Dungeon · Shadow Hunter Vosh'gajin, Blackrock Spire
+@WARRIOR:arms MythicSim
+Head | Lionheart Helm | 12640 | Crafted · Blacksmithing
+Neck | Mark of Fordring | 15411 | Quest · In Dreams
+Shoulders | Truestrike Shoulders | 12927 | Dungeon · Pyroguard Emberseer, Blackrock Spire
+Back | Cape of the Black Baron | 13340 | Dungeon · Baron Rivendare, Stratholme
+Chest | Timbermaw Tunic | 252484 | Crafted · Leatherworking
+Wrists | Forest Stalker's Bracers | 19587 | Reputation · Silverwing Sentinels / Warsong Outriders (Warsong Gulch)
+Hands | Theramore Gauntlets | 271940 | Reputation · Theramore Expeditionary Force (Darkspear Islands)
+Waist | Valiant's Waistguard | 272403 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Legs | Sentinel's Plate Legguards | 22672 | Reputation · Silverwing Sentinels (Warsong Gulch)
+Feet | Battleboots of Heroism | 226857 | Quest · Tier 0.5 upgrade quest
+Ring 1 | Cutthroat's Signet | 272408 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Ring 2 | Don Julio's Band | 19325 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Trinket 1 | Heart of Wyrmthalak | 22321 | Dungeon · Overlord Wyrmthalak, Blackrock Spire
+Trinket 2 | Hand of Justice | 11815 | Dungeon · Emperor Dagran Thaurissan, Blackrock Depths
+Main hand | Warblade of Caer Darrow | 13982 | Quest · The Lich, Ras Frostwhisper
+Ranged | Blackcrow | 12651 | Dungeon · Shadow Hunter Vosh'gajin, Blackrock Spire
+@WARRIOR:prot wowforever.be
+Head | Lionheart Helm | 12640 | Crafted · Blacksmithing
+Neck | Horn of Ve'han | 275736 | Quest · Work Well Done
+Shoulders | Spaulders of Heroism | 22001 | Quest · Anthion's Parting Words
+Back | Shifting Cloak | 18511 | Crafted · Leatherworking
+Chest | Enchanted Thorium Breastplate | 12618 | Crafted · Blacksmithing
+Wrists | Bracers of Heroism | 21996 | Quest · An Earnest Proposition
+Hands | Stronghold Gauntlets | 12639 | Crafted · Blacksmithing
+Waist | Belt of Heroism | 21994 | Quest · Just Compensation
+Legs | Legplates of Heroism | 22000 | Quest · Anthion's Parting Words
+Feet | Boots of Heroism | 21995 | Quest · Anthion's Parting Words
+Ring 1 | Warden's Signet of Vigilance | 275984 | Reputation · The Watchers (Exalted)
+Ring 2 | Don Julio's Band | 19325 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Trinket 1 | Adaptive Combat Assistant | 272437 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Trinket 2 | Stormpike Insignia Rank 6 | 17904 | Reputation · Stormpike Guard (Exalted)
+Main hand | Thrash Blade | 17705 | Quest · Corruption of Earth and Seed
+Off hand | Antique Bulwark | 281637 | Unknown
+Ranged | Fahrad's Reloading Repeater | 22347 | Quest · The Perfect Poison
+@HUNTER:bm MythicSim
+Head | Black Dragonscale Helm | 252605 | Crafted · Leatherworking
+Neck | Pendant of Celerity | 22340 | Dungeon · Lord Valthalak, Blackrock Spire
+Shoulders | Theramore Epaulets | 271956 | Reputation · Theramore Expeditionary Force (Darkspear Islands)
+Back | Howler's Furs | 272414 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Dawn Armor | 252483 | Crafted · Leatherworking
+Wrists | Beaststalker's Bindings | 16681 | Dungeon · Blackrock Spire / Stratholme
+Hands | Handguards of Savagery | 22343 | Dungeon · Lord Valthalak, Blackrock Spire
+Waist | Ranger's Belt | 272397 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Legs | Sentinel's Chain Leggings | 22748 | Reputation · Silverwing Sentinels (Warsong Gulch)
+Feet | Windreaver Greaves | 13967 | Dungeon · Kirtonos the Herald, Scholomance
+Ring 1 | Don Julio's Band | 19325 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Ring 2 | Cutthroat's Signet | 272408 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Trinket 1 | Heart of Wyrmthalak | 22321 | Dungeon · Overlord Wyrmthalak, Blackrock Spire
+Trinket 2 | Blackhand's Breadth | 13965 | Quest · General Drakkisath's Demise / For The Horde!
+Main hand | Barbarous Blade | 18520 | Dungeon · King Gordok, Dire Maul
+Ranged | Blackcrow | 12651 | Dungeon · Shadow Hunter Vosh'gajin, Blackrock Spire
+@HUNTER:mm MythicSim
+Head | Black Dragonscale Helm | 252605 | Crafted · Leatherworking
+Neck | Pendant of Celerity | 22340 | Dungeon · Lord Valthalak, Blackrock Spire
+Shoulders | Theramore Epaulets | 271956 | Reputation · Theramore Expeditionary Force (Darkspear Islands)
+Back | Cape of the Black Baron | 13340 | Dungeon · Baron Rivendare, Stratholme
+Chest | Dawn Armor | 252483 | Crafted · Leatherworking
+Wrists | Beaststalker's Bindings | 16681 | Dungeon · Blackrock Spire / Stratholme
+Hands | Handguards of Savagery | 22343 | Dungeon · Lord Valthalak, Blackrock Spire
+Waist | Ranger's Belt | 272397 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Legs | Beaststalker's Pants | 16678 | Dungeon · Baron Rivendare, Stratholme
+Feet | Windreaver Greaves | 13967 | Dungeon · Kirtonos the Herald, Scholomance
+Ring 1 | Tarnished Elven Ring | 18500 | Dungeon · Tribute, Dire Maul
+Ring 2 | Cutthroat's Signet | 272408 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Trinket 1 | Heart of Wyrmthalak | 22321 | Dungeon · Overlord Wyrmthalak, Blackrock Spire
+Trinket 2 | Counterattack Lodestone | 18537 | Dungeon · Tribute, Dire Maul
+Main hand | Willey's Back Scratcher | 22404 | Dungeon · Cannon Master Willey, Stratholme
+Off hand | Felstriker | 12590 | Dungeon · Warchief Rend Blackhand, Blackrock Spire
+Ranged | Ancient Bone Bow | 18680 | Dungeon · Scholomance
+@HUNTER:sv MythicSim
+Head | Black Dragonscale Helm | 252605 | Crafted · Leatherworking
+Neck | Mark of Fordring | 15411 | Quest · In Dreams
+Shoulders | Theramore Epaulets | 271956 | Reputation · Theramore Expeditionary Force (Darkspear Islands)
+Back | Cape of the Black Baron | 13340 | Dungeon · Baron Rivendare, Stratholme
+Chest | Dawn Armor | 252483 | Crafted · Leatherworking
+Wrists | Forest Stalker's Bracers | 19587 | Reputation · Silverwing Sentinels / Warsong Outriders (Warsong Gulch)
+Hands | Handguards of Savagery | 22343 | Dungeon · Lord Valthalak, Blackrock Spire
+Waist | Ranger's Belt | 272397 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Legs | Sentinel's Chain Leggings | 22748 | Reputation · Silverwing Sentinels (Warsong Gulch)
+Feet | Timmy's Galoshes | 13402 | Dungeon · Timmy the Cruel, Stratholme
+Ring 1 | Don Julio's Band | 19325 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Ring 2 | Cutthroat's Signet | 272408 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Main hand | Arcanite Reaper | 12784 | Crafted · Blacksmithing
+Ranged | Blackcrow | 12651 | Dungeon · Shadow Hunter Vosh'gajin, Blackrock Spire
+@PALADIN:ret MythicSim
+Head | Stalwart Helm | 250599 | Crafted · Blacksmithing
+Neck | Nacreous Shell Necklace | 22403 | Dungeon · Cannon Master Willey, Stratholme
+Shoulders | Soulforge Spaulders | 226969 | Quest · Tier 0.5 upgrade quest
+Back | Arcanoweave Cloak | 272411 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Dawn Armor | 252483 | Crafted · Leatherworking
+Wrists | Soulforge Bracers | 226970 | Quest · Tier 0.5 upgrade quest
+Hands | Soulforge Gauntlets | 226975 | Quest · Tier 0.5 upgrade quest
+Waist | Soulforge Belt | 226971 | Quest · Tier 0.5 upgrade quest
+Legs | Ironfeather Leggings | 252486 | Crafted · Leatherworking
+Feet | Omnicast Boots | 11822 | Dungeon · Golem Lord Argelmach, Blackrock Depths
+Ring 1 | Don Mauricio's Band of Domination | 22433 | Dungeon · Darkmaster Gandling, Scholomance
+Ring 2 | Songstone of Ironforge | 12543 | Quest · The Princess's Surprise
+Trinket 1 | Draconic Infused Emblem | 22268 | Dungeon · General Drakkisath, Blackrock Spire
+Trinket 2 | Adaptive Combat Assistant | 272437 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Main hand | Blade of Hanna | 2801 | World Drop
+Ranged | Libram of Law | 272435 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+@DRUID:balance MythicSim
+Head | Spellweaver's Turban | 22267 | Dungeon · General Drakkisath, Blackrock Spire
+Neck | Nacreous Shell Necklace | 22403 | Dungeon · Cannon Master Willey, Stratholme
+Shoulders | Mantle of the Timbermaw | 19050 | Crafted · Tailoring
+Back | Arcanoweave Cloak | 272411 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Alanna's Embrace | 13314 | Dungeon · Ras Frostwhisper, Scholomance
+Wrists | Dryad's Wrist Bindings | 19595 | Reputation · Silverwing Sentinels / Warsong Outriders (Warsong Gulch)
+Hands | Hands of Power | 13253 | Dungeon · Quartermaster Zigris, Blackrock Spire
+Waist | Belt of the Archmage | 18405 | Crafted · Tailoring
+Legs | Ironfeather Leggings | 252486 | Crafted · Leatherworking
+Feet | Waterspout Boots | 18322 | Dungeon · Hydrospawn, Dire Maul
+Ring 1 | Songstone of Ironforge | 12543 | Quest · The Princess's Surprise
+Ring 2 | Rune Band of Wizardry | 22339 | Dungeon · Lord Valthalak, Blackrock Spire
+Trinket 1 | Draconic Infused Emblem | 22268 | Dungeon · General Drakkisath, Blackrock Spire
+Trinket 2 | Briarwood Reed | 12930 | Dungeon · Jed Runewatcher, Blackrock Spire
+Main hand | Ironbark Staff | 20069 | Reputation · League of Arathor (Arathi Basin)
+Ranged | Swarming Idol | 272430 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+@DRUID:feral MythicSim
+Head | Eye of Rend | 12587 | Dungeon · Warchief Rend Blackhand, Blackrock Spire
+Neck | Amulet of the Darkmoon | 19491 | Darkmoon Faire · 1200 Tickets
+Shoulders | Theramore Pauldrons | 271955 | Reputation · Theramore Expeditionary Force (Darkspear Islands)
+Back | Cape of the Black Baron | 13340 | Dungeon · Baron Rivendare, Stratholme
+Chest | Timbermaw Tunic | 252484 | Crafted · Leatherworking
+Wrists | Forest Stalker's Bracers | 19587 | Reputation · Silverwing Sentinels / Warsong Outriders (Warsong Gulch)
+Hands | Theramore Gloves | 271948 | Reputation · Theramore Expeditionary Force (Darkspear Islands)
+Waist | Shifter's Belt | 272396 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Legs | Warbear Woolies | 15065 | Crafted · Leatherworking
+Feet | Swiftwalker Boots | 12553 | Dungeon · Princess Moira Bronzebeard, Blackrock Depths
+Ring 1 | Cutthroat's Signet | 272408 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Ring 2 | Don Julio's Band | 19325 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Trinket 1 | Heart of Wyrmthalak | 22321 | Dungeon · Overlord Wyrmthalak, Blackrock Spire
+Trinket 2 | Counterattack Lodestone | 18537 | Dungeon · Tribute, Dire Maul
+Main hand | The Unstoppable Force | 19323 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Ranged | Howling Idol | 272427 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+@DRUID:guardian MythicSim
+Head | Mask of the Unforgiven | 13404 | Dungeon · The Unforgiven, Stratholme
+Neck | Beads of Ogre Might | 22150 | Quest · Falrin's Vendetta
+Shoulders | Golden Mantle of the Dawn | 19058 | Crafted · Leatherworking
+Back | Cape of the Black Baron | 13340 | Dungeon · Baron Rivendare, Stratholme
+Chest | Timbermaw Tunic | 252484 | Crafted · Leatherworking
+Wrists | Blackmist Armguards | 12966 | Dungeon · The Beast, Blackrock Spire
+Hands | Shadowcraft Gloves | 16712 | Dungeon · Shadow Hunter Vosh'gajin, Blackrock Spire
+Waist | Shadowcraft Belt | 16713 | Dungeon · Blackrock Spire
+Legs | Warbear Woolies | 15065 | Crafted · Leatherworking
+Feet | Shadowcraft Boots | 16711 | Dungeon · Rattlegore, Scholomance
+Ring 1 | Magma Forged Band | 22255 | Dungeon · Blackrock Depths
+Ring 2 | Don Julio's Band | 19325 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Trinket 1 | Adaptive Combat Assistant | 272437 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Trinket 2 | Heart of Wyrmthalak | 22321 | Dungeon · Overlord Wyrmthalak, Blackrock Spire
+Main hand | The Unstoppable Force | 19323 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Ranged | Enraged Idol | 272428 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+@PRIEST:shadow MythicSim
+Head | Spellweaver's Turban | 22267 | Dungeon · General Drakkisath, Blackrock Spire
+Neck | Nacreous Shell Necklace | 22403 | Dungeon · Cannon Master Willey, Stratholme
+Shoulders | Mantle of the Timbermaw | 19050 | Crafted · Tailoring
+Back | Arcanoweave Cloak | 272411 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Robe of Winter Night | 14136 | Crafted · Tailoring
+Wrists | Dryad's Wrist Bindings | 19595 | Reputation · Silverwing Sentinels / Warsong Outriders (Warsong Gulch)
+Hands | Gloves of Spell Mastery | 14146 | Crafted · Tailoring
+Waist | Belt of the Archmage | 18405 | Crafted · Tailoring
+Legs | Leggings of Torment | 22342 | Dungeon · Lord Valthalak, Blackrock Spire
+Feet | Maleki's Footwraps | 18735 | Dungeon · Maleki the Pallid, Stratholme
+Ring 1 | Don Julio's Band | 19325 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Ring 2 | Don Rodrigo's Band | 21563 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Trinket 1 | Draconic Infused Emblem | 22268 | Dungeon · General Drakkisath, Blackrock Spire
+Trinket 2 | Briarwood Reed | 12930 | Dungeon · Jed Runewatcher, Blackrock Spire
+Main hand | Ironbark Staff | 20069 | Reputation · League of Arathor (Arathi Basin)
+Ranged | Skul's Ghastly Touch | 13396 | Dungeon · Skul, Stratholme
+@PRIEST:holy wowforever.be
+Head | Bad Hat | 260212 | Quest · Azshara
+Neck | Jeweled Amulet of Cainwyn | 1443 | Unknown
+Shoulders | Mooncloth Shoulders | 14139 | Crafted · Tailoring
+Back | Hide of the Wild | 18510 | Crafted · Leatherworking
+Chest | Truefaith Vestments | 14154 | Crafted · Tailoring
+Wrists | Wyrmthalak's Shackles | 13958 | Quest · Blackrock Spire
+Hands | Hands of the Exalted Herald | 12554 | Dungeon · Blackrock Depths
+Waist | Wisdom of the Timbermaw | 19047 | Crafted · Tailoring
+Legs | Padre's Trousers | 18386 | Dungeon · Illyanna Ravenoak, Dire Maul
+Feet | Ogreseer Tower Boots | 13282 | Dungeon · Spirestone Lord Magus, Blackrock Spire
+Ring 1 | Fordring's Seal | 16058 | Quest · In Dreams
+Trinket 1 | Serenity Field | 272439 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Main hand | Gift of the Elven Magi | 13360 | Dungeon · Stratholme
+Off hand | Penelope's Rose | 15805 | Quest · Kirtonos the Herald
+@MAGE:arcane MythicSim
+Head | Spellweaver's Turban | 22267 | Dungeon · General Drakkisath, Blackrock Spire
+Neck | Star of Mystaria | 12103 | Dungeon · Balnazzar, Stratholme
+Shoulders | Mantle of the Timbermaw | 19050 | Crafted · Tailoring
+Back | Arcanoweave Cloak | 272411 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Robe of the Archmage | 14152 | Crafted · Tailoring
+Wrists | Sorcerer's Bindings | 226929 | Quest · Tier 0.5 upgrade quest
+Hands | Sorcerer's Gauntlets | 226930 | Quest · Tier 0.5 upgrade quest
+Waist | Belt of the Archmage | 18405 | Crafted · Tailoring
+Legs | Sorcerer's Leggings | 226933 | Quest · Tier 0.5 upgrade quest
+Feet | Kayser's Boots of Precision | 22231 | Dungeon · War Master Voone, Blackrock Spire
+Ring 1 | Channeler's Ring | 272406 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Ring 2 | Rune Band of Wizardry | 22339 | Dungeon · Lord Valthalak, Blackrock Spire
+Trinket 1 | Draconic Infused Emblem | 22268 | Dungeon · General Drakkisath, Blackrock Spire
+Trinket 2 | Burst of Knowledge | 11832 | Dungeon · Ambassador Flamelash, Blackrock Depths
+Main hand | Ironbark Staff | 20069 | Reputation · League of Arathor (Arathi Basin)
+Ranged | Wand of Arcane Potency | 18338 | Dungeon · Dire Maul
+@MAGE:fire MythicSim
+Head | Spellweaver's Turban | 22267 | Dungeon · General Drakkisath, Blackrock Spire
+Neck | Pendant of Celerity | 22340 | Dungeon · Lord Valthalak, Blackrock Spire
+Shoulders | Mantle of the Timbermaw | 19050 | Crafted · Tailoring
+Back | Arcanoweave Cloak | 272411 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Robe of the Archmage | 14152 | Crafted · Tailoring
+Wrists | Dryad's Wrist Bindings | 19595 | Reputation · Silverwing Sentinels / Warsong Outriders (Warsong Gulch)
+Hands | Gloves of Spell Mastery | 14146 | Crafted · Tailoring
+Waist | Belt of the Archmage | 18405 | Crafted · Tailoring
+Legs | Sorcerer's Leggings | 226933 | Quest · Tier 0.5 upgrade quest
+Feet | Sorcerer's Sandals | 226931 | Quest · Tier 0.5 upgrade quest
+Ring 1 | Rune Band of Wizardry | 22339 | Dungeon · Lord Valthalak, Blackrock Spire
+Ring 2 | Don Rodrigo's Band | 21563 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Trinket 1 | Draconic Infused Emblem | 22268 | Dungeon · General Drakkisath, Blackrock Spire
+Trinket 2 | Smolderweb's Eye | 13213 | Dungeon · Mother Smolderweb, Blackrock Spire
+Main hand | Ironbark Staff | 20069 | Reputation · League of Arathor (Arathi Basin)
+Ranged | Ritssyn's Wand of Bad Mojo | 22408 | Dungeon · Baron Rivendare, Stratholme
+@MAGE:frost MythicSim
+Head | Spellweaver's Turban | 22267 | Dungeon · General Drakkisath, Blackrock Spire
+Neck | Pendant of Celerity | 22340 | Dungeon · Lord Valthalak, Blackrock Spire
+Shoulders | Mantle of the Timbermaw | 19050 | Crafted · Tailoring
+Back | Arcanoweave Cloak | 272411 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Robe of the Archmage | 14152 | Crafted · Tailoring
+Wrists | Dryad's Wrist Bindings | 19595 | Reputation · Silverwing Sentinels / Warsong Outriders (Warsong Gulch)
+Hands | Sorcerer's Gauntlets | 226930 | Quest · Tier 0.5 upgrade quest
+Waist | Ban'thok Sash | 11662 | Dungeon · Ok'thor the Breaker, Blackrock Depths
+Legs | Sorcerer's Leggings | 226933 | Quest · Tier 0.5 upgrade quest
+Feet | Kayser's Boots of Precision | 22231 | Dungeon · War Master Voone, Blackrock Spire
+Ring 1 | Channeler's Ring | 272406 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Ring 2 | Rune Band of Wizardry | 22339 | Dungeon · Lord Valthalak, Blackrock Spire
+Trinket 1 | Draconic Infused Emblem | 22268 | Dungeon · General Drakkisath, Blackrock Spire
+Trinket 2 | Briarwood Reed | 12930 | Dungeon · Jed Runewatcher, Blackrock Spire
+Main hand | Ironbark Staff | 20069 | Reputation · League of Arathor (Arathi Basin)
+Ranged | Bonecreeper Stylus | 13938 | Dungeon · Darkmaster Gandling, Scholomance
+@WARLOCK:aff MythicSim
+Head | Spellweaver's Turban | 22267 | Dungeon · General Drakkisath, Blackrock Spire
+Neck | Dark Advisor's Pendant | 18691 | Dungeon · Vectus, Scholomance
+Shoulders | Mantle of the Timbermaw | 19050 | Crafted · Tailoring
+Back | Arcanoweave Cloak | 272411 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Robe of the Void | 14153 | Crafted · Tailoring
+Wrists | Dryad's Wrist Bindings | 19595 | Reputation · Silverwing Sentinels / Warsong Outriders (Warsong Gulch)
+Hands | Felcloth Gloves | 18407 | Crafted · Tailoring
+Waist | Belt of the Archmage | 18405 | Crafted · Tailoring
+Legs | Leggings of Torment | 22342 | Dungeon · Lord Valthalak, Blackrock Spire
+Feet | Maleki's Footwraps | 18735 | Dungeon · Maleki the Pallid, Stratholme
+Ring 1 | Don Mauricio's Band of Domination | 22433 | Dungeon · Darkmaster Gandling, Scholomance
+Ring 2 | Don Rodrigo's Band | 21563 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Trinket 1 | Draconic Infused Emblem | 22268 | Dungeon · General Drakkisath, Blackrock Spire
+Trinket 2 | Royal Seal of Eldre'Thalas | 18467 | Quest · Harnessing Shadows
+Main hand | Ironbark Staff | 20220 | Reputation · Defilers (Arathi Basin)
+Ranged | Skul's Ghastly Touch | 13396 | Dungeon · Skul, Stratholme
+@WARLOCK:demo MythicSim
+Head | Spellweaver's Turban | 22267 | Dungeon · General Drakkisath, Blackrock Spire
+Neck | Pendant of Celerity | 22340 | Dungeon · Lord Valthalak, Blackrock Spire
+Shoulders | Shroud of the Nathrezim | 18720 | Dungeon · Balnazzar, Stratholme
+Back | Arcanoweave Cloak | 272411 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Robe of the Void | 14153 | Crafted · Tailoring
+Wrists | Dryad's Wrist Bindings | 19595 | Reputation · Silverwing Sentinels / Warsong Outriders (Warsong Gulch)
+Hands | Gloves of Spell Mastery | 14146 | Crafted · Tailoring
+Waist | Ban'thok Sash | 11662 | Dungeon · Ok'thor the Breaker, Blackrock Depths
+Legs | Outrider's Silk Leggings | 22747 | Reputation · Warsong Outriders (Warsong Gulch)
+Feet | Kayser's Boots of Precision | 22231 | Dungeon · War Master Voone, Blackrock Spire
+Ring 1 | Don Rodrigo's Band | 21563 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Ring 2 | Eye of Orgrimmar | 12545 | Quest · The Princess Saved?
+Main hand | Ironbark Staff | 20220 | Reputation · Defilers (Arathi Basin)
+Ranged | Bonecreeper Stylus | 13938 | Dungeon · Darkmaster Gandling, Scholomance
+@WARLOCK:destro MythicSim
+Head | Spellweaver's Turban | 22267 | Dungeon · General Drakkisath, Blackrock Spire
+Neck | Nacreous Shell Necklace | 22403 | Dungeon · Cannon Master Willey, Stratholme
+Shoulders | Shroud of the Nathrezim | 18720 | Dungeon · Balnazzar, Stratholme
+Back | Arcanoweave Cloak | 272411 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Robe of the Void | 14153 | Crafted · Tailoring
+Wrists | Dryad's Wrist Bindings | 19595 | Reputation · Silverwing Sentinels / Warsong Outriders (Warsong Gulch)
+Hands | Gloves of Spell Mastery | 14146 | Crafted · Tailoring
+Waist | Ban'thok Sash | 11662 | Dungeon · Ok'thor the Breaker, Blackrock Depths
+Legs | Sentinel's Silk Leggings | 22752 | Reputation · Silverwing Sentinels (Warsong Gulch)
+Feet | Kayser's Boots of Precision | 22231 | Dungeon · War Master Voone, Blackrock Spire
+Ring 1 | Songstone of Ironforge | 12543 | Quest · The Princess's Surprise
+Ring 2 | Don Rodrigo's Band | 21563 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Trinket 1 | Draconic Infused Emblem | 22268 | Dungeon · General Drakkisath, Blackrock Spire
+Trinket 2 | Royal Seal of Eldre'Thalas | 18467 | Quest · Harnessing Shadows
+Main hand | Ironbark Staff | 20069 | Reputation · League of Arathor (Arathi Basin)
+Ranged | Bonecreeper Stylus | 13938 | Dungeon · Darkmaster Gandling, Scholomance
+@SHAMAN:ele MythicSim
+Head | Blue Dragonscale Helm | 252604 | Crafted · Leatherworking
+Neck | Pendant of Celerity | 22340 | Dungeon · Lord Valthalak, Blackrock Spire
+Shoulders | Mantle of the Timbermaw | 19050 | Crafted · Tailoring
+Back | Arcanoweave Cloak | 272411 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Chest | Alanna's Embrace | 13314 | Dungeon · Ras Frostwhisper, Scholomance
+Wrists | Dryad's Wrist Bindings | 19595 | Reputation · Silverwing Sentinels / Warsong Outriders (Warsong Gulch)
+Hands | Storm Gauntlets | 12632 | Crafted · Blacksmithing
+Waist | Belt of the Archmage | 18405 | Crafted · Tailoring
+Legs | Ironfeather Leggings | 252486 | Crafted · Leatherworking
+Feet | Greaves of Withering Despair | 22240 | Dungeon · High Interrogator Gerstahn, Blackrock Depths
+Ring 1 | Eye of Orgrimmar | 12545 | Quest · The Princess Saved?
+Ring 2 | Rune Band of Wizardry | 22339 | Dungeon · Lord Valthalak, Blackrock Spire
+Trinket 1 | Draconic Infused Emblem | 22268 | Dungeon · General Drakkisath, Blackrock Spire
+Trinket 2 | Royal Seal of Eldre'Thalas | 18471 | Quest · Frost Shock and You
+Main hand | Ironbark Staff | 20220 | Reputation · Defilers (Arathi Basin)
+Ranged | Totem of the Storm | 23199 | World Drop
+@SHAMAN:enh MythicSim
+Head | Black Dragonscale Helm | 252605 | Crafted · Leatherworking
+Neck | Mark of Fordring | 15411 | Quest · In Dreams
+Shoulders | Mantle of the Timbermaw | 19050 | Crafted · Tailoring
+Back | Heliotrope Cloak | 18496 | Dungeon · Guard Mol'dar / Guard Slip'kik, Dire Maul
+Chest | Dawn Armor | 252483 | Crafted · Leatherworking
+Wrists | Blackmist Armguards | 12966 | Dungeon · The Beast, Blackrock Spire
+Hands | Bloodmail Gauntlets | 14615 | Dungeon · Scholomance
+Waist | Belt of the Archmage | 18405 | Crafted · Tailoring
+Legs | Ironfeather Leggings | 252486 | Crafted · Leatherworking
+Feet | Bloodmail Boots | 14616 | Dungeon · Scholomance
+Ring 1 | Don Julio's Band | 19325 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Ring 2 | Channeler's Ring | 272406 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Trinket 1 | Heart of Wyrmthalak | 22321 | Dungeon · Overlord Wyrmthalak, Blackrock Spire
+Trinket 2 | Adaptive Combat Assistant | 272437 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Main hand | The Unstoppable Force | 19323 | Reputation · Stormpike Guard / Frostwolf Clan (Alterac Valley)
+Ranged | Totem of the Storm | 23199 | World Drop
+@SHAMAN:resto wowforever.be
+Head | Blue Dragonscale Helm | 252604 | Crafted · Leatherworking
+Neck | Orb of the Darkmoon | 19426 | Darkmoon Faire · 1200 Tickets
+Shoulders | Mantle of the Timbermaw | 19050 | Crafted · Tailoring
+Back | Master's Cloak | 10249 | World Drop
+Chest | Masterwork Breastplate | 10266 | World Drop
+Wrists | Dryad's Wrist Bindings | 19595 | Reputation · Silverwing Sentinels / Warsong Outriders (Warsong Gulch)
+Hands | Gloves of the Greatfather | 17721 | Crafted · Leatherworking
+Waist | Belt of the Archmage | 18405 | Crafted · Tailoring
+Legs | Ironfeather Leggings | 252486 | Crafted · Leatherworking
+Feet | Earthen Silk Slippers | 254013 | Crafted · Tailoring
+Ring 1 | Warden's Signet of Brilliance | 275982 | Reputation · The Watchers (Exalted)
+Ring 2 | Blessed Band of Light | 272407 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Trinket 1 | Weakness Analyzer | 272438 | Vendor · Pix Xizzix, Stranglethorn Vale (Tarnished Undermine Reals)
+Trinket 2 | Frozen Heart of the Mountain | 249469 | Crafted · Enchanting
+Main hand | Sageclaw | 20070 | Reputation · League of Arathor / Defilers (Arathi Basin)
+Off hand | Master's Rod | 15942 | World Drop
