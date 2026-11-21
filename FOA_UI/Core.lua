@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Ink = {}
 ns.Ink = Ink
 _G.InkUI = Ink
-Ink.version = "0.66.14"
+Ink.version = "0.66.15"
 
 local MEDIA = "Interface\\AddOns\\FOA_UI\\Media\\"
 
@@ -1535,6 +1535,7 @@ local defaults = {
 	bisQuests = true,
 	bisWorld = true,
 	barLock = true,
+	barPaging = false,
 	barMacroName = true,
 	mapScaleUp = false,
 }

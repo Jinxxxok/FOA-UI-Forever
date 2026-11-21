@@ -146,14 +146,76 @@ end
 -------------------------------------------------------------------------------
 -- 바 만들기
 -------------------------------------------------------------------------------
+-- 1번 바가 보여줄 페이지
+--  · 행동 페이지 넘기기(Shift+숫자 · Shift+↑↓ 기본 단축키)는 기본으로 따르지 않는다
+--    전투 중 Shift 기술을 누르다 Shift+2 가 같이 눌리면 1번 바가 빈 2페이지로 넘어가 "스킬이 다 빠진" 것처럼 보였다
+--    (FOA 2 ~ 5번 바가 3 ~ 6페이지를 이미 따로 보여 준다 · 설정 "Shift+숫자 페이지 넘기기"로 켤 수 있음)
+--  · 은신 · 태세 · 형상 바(보너스 페이지)와 넘긴 페이지는 그 페이지에 하나라도 있을 때만 · 다 비어 있으면 1페이지 그대로
+--    (특성을 바꿨더니 은신 바가 비어 있어 은신하자마자 아무것도 못 누르는 일이 없게)
+--  상태 드라이버는 전투 중에 못 바꾸니, 칸이 바뀌면 전투 밖에서 다시 만든다 (M:UpdateMainDriver)
+local function PageHas(p)
+	if not HasAction then return true end
+	for slot = (p - 1) * 12 + 1, p * 12 do
+		if HasAction(slot) then return true end
+	end
+	return false
+end
+M.PageHas = PageHas
+
+local BONUS = { { 5, 11 }, { 1, 7 }, { 2, 8 }, { 3, 9 }, { 4, 10 } }
 local function MainDriver()
 	local s = ""
 	if GetOverrideBarIndex then s = s .. "[overridebar] " .. GetOverrideBarIndex() .. "; " end
 	if GetVehicleBarIndex then s = s .. "[vehicleui][possessbar] " .. GetVehicleBarIndex() .. "; " end
 	if GetTempShapeshiftBarIndex then s = s .. "[shapeshift] " .. GetTempShapeshiftBarIndex() .. "; " end
-	s = s .. "[bar:2] 2; [bar:3] 3; [bar:4] 4; [bar:5] 5; [bar:6] 6; "
-	s = s .. "[bonusbar:5] 11; [bonusbar:1] 7; [bonusbar:2] 8; [bonusbar:3] 9; [bonusbar:4] 10; 1"
-	return s
+	if Ink.db.barPaging then
+		for p = 2, 6 do
+			if PageHas(p) then s = s .. "[bar:" .. p .. "] " .. p .. "; " end
+		end
+	end
+	for _, b in ipairs(BONUS) do
+		-- 5번(본섭 하늘비행 바)은 게임이 탈 때 채워 주는 칸이라 비어 있어도 따른다
+		if b[1] == 5 or PageHas(b[2]) then s = s .. "[bonusbar:" .. b[1] .. "] " .. b[2] .. "; " end
+	end
+	return s .. "1"
+end
+M.MainDriver = MainDriver
+
+function M:UpdateMainDriver()
+	local d = self.list and self.list[1]
+	local h = d and d.main and d.header
+	if not h then return end
+	if InCombatLockdown() then self.pendingDriver = true return end
+	self.pendingDriver = nil
+	local s = MainDriver()
+	if s == self.driverNow then return end
+	self.driverNow = s
+	RegisterStateDriver(h, "page", s)
+end
+
+-- 1번 바 페이지 기록 (원인 추적용 · 저장 파일의 pageLog, 최근 30개)
+--  page = 게임 행동 페이지 · bonus = 은신 · 태세 번호 · show = FOA 1번 바가 실제로 보여 준 페이지 · empty = 그 페이지가 비었나
+function M:LogPage(why)
+	local d = self.list and self.list[1]
+	local h = d and d.main and d.header
+	if not h then return end
+	local page = GetActionBarPage and GetActionBarPage() or 1
+	local bonus = GetBonusBarOffset and GetBonusBarOffset() or 0
+	local show = tonumber(h:GetAttribute("state") or "") or 1
+	local last = self.pageLast
+	if last and last.page == page and last.bonus == bonus and last.show == show then return end
+	local e = { t = date and date("%m-%d %H:%M:%S") or "", why = why, page = page, bonus = bonus, show = show,
+		empty = (not PageHas(show)) and 1 or nil, c = InCombatLockdown() and 1 or nil }
+	self.pageLast = e
+	local L = Ink.cdb.pageLog
+	if type(L) ~= "table" then L = {}; Ink.cdb.pageLog = L end
+	L[#L + 1] = e
+	while #L > 30 do table.remove(L, 1) end
+	-- 행동 페이지를 넘겼는데 FOA 1번 바는 그대로일 때: 한 번만 알려 준다 (헷갈리지 않게)
+	if page ~= 1 and not Ink.db.barPaging and not self.pageHinted then
+		self.pageHinted = true
+		print("|cffFFF468FOA|r 행동 페이지가 " .. page .. "(으)로 넘어갔지만 FOA 1번 바는 그대로 둬요 · Shift+숫자 페이지 넘기기는 설정 → 행동단축바에서 켤 수 있어요")
+	end
 end
 
 local function ButtonConfig(d, i, s)
@@ -231,7 +293,8 @@ function M:BuildBar(d)
 			self:SetAttribute("state", newstate)
 			control:ChildUpdate("state", newstate)
 		]])
-		RegisterStateDriver(h, "page", MainDriver())
+		self.driverNow = MainDriver()
+		RegisterStateDriver(h, "page", self.driverNow)
 	end
 	Ink:Movable(d.key, d.label, h, DEF[d.key].mode, DEF[d.key].x, DEF[d.key].y)
 	Ink.movers[d.key].opts = self:Options(d)
@@ -794,7 +857,29 @@ function M:Init()
 	ev:RegisterEvent("UPDATE_SHAPESHIFT_FORMS")
 	ev:RegisterEvent("PET_BAR_UPDATE")
 	ev:RegisterEvent("PLAYER_REGEN_DISABLED")
+	-- 1번 바 페이지: 칸이 바뀌면(특성 바꾸기 · 끌어다 놓기) 비어 있는 은신 · 태세 바를 다시 판단 · 페이지 기록
+	for _, e in ipairs({ "ACTIONBAR_SLOT_CHANGED", "PLAYER_ENTERING_WORLD", "ACTIVE_TALENT_GROUP_CHANGED",
+		"UPDATE_BONUS_ACTIONBAR", "ACTIONBAR_PAGE_CHANGED", "UPDATE_SHAPESHIFT_FORM" }) do
+		pcall(ev.RegisterEvent, ev, e)
+	end
+	local driverQueued
+	local function QueueDriver(delay)
+		if driverQueued then return end
+		driverQueued = true
+		C_Timer.After(delay or 0.3, function() driverQueued = nil; pcall(M.UpdateMainDriver, M) end)
+	end
 	ev:SetScript("OnEvent", function(_, event)
+		if event == "ACTIONBAR_SLOT_CHANGED" or event == "ACTIVE_TALENT_GROUP_CHANGED" then
+			QueueDriver(0.3)
+			return
+		elseif event == "PLAYER_ENTERING_WORLD" then
+			QueueDriver(2)
+			return
+		elseif event == "UPDATE_BONUS_ACTIONBAR" or event == "ACTIONBAR_PAGE_CHANGED" or event == "UPDATE_SHAPESHIFT_FORM" then
+			-- 상태 드라이버가 먼저 돌도록 한 박자 뒤에 읽는다
+			C_Timer.After(0.25, function() pcall(M.LogPage, M, event == "ACTIONBAR_PAGE_CHANGED" and "page" or "bonus") end)
+			return
+		end
 		if event == "PLAYER_REGEN_DISABLED" then
 			if M.kbOn then M:SetKeybindMode(false, true) end
 		elseif event == "UPDATE_BINDINGS" then
@@ -806,6 +891,7 @@ function M:Init()
 			if M.pendingLayout then M.pendingLayout = nil; M:LayoutAll() end
 			if M.pendingHide then M.pendingHide = nil; M:HideAllBlizz() end
 			if M.lockPending then M:ApplyLock() end
+			if M.pendingDriver then M:UpdateMainDriver() end
 		else
 			M:QueueLayout()
 		end

@@ -409,12 +409,14 @@ function M:BuildRegistry()
 			{ t = "행동단축바", rows = {
 				SW("actionBars", "FOA 행동단축바", "버튼 수 · 줄 · 크기 · 간격은 편집 모드에서", { reload = true, hud = { "bar1", "bar2" } }),
 				SW("barLock", "잠금", "Shift 를 누른 채 끌어야 기술이 빠져요", { hud = { "bar1", "bar2" },
-					apply = function() call("ActionBars", "ApplyLock") end }),
+					apply = function() call("Bars", "ApplyLock") end }),
 				SW("barMacroName", "매크로 이름", "매크로가 든 칸 아래쪽에 매크로 이름 한 줄", { hud = { "bar1", "bar2" },
 					apply = function() call("Blizzard", "RefreshMacroNames") end }),
 				SW("autoPush", "새 주문 자동 배치", "새로 배운 주문을 빈 칸에", { hud = "bar1",
 					apply = function() call("Blizzard", "ApplyAutoPush") end }),
 				SW("specBars", "특성마다 단축바 따로", "주 특성 · 보조 특성을 바꾸면 그 특성 단축바로 · 게임이 직접 바꿔 주면 FOA 는 손대지 않아요", { hud = "bar1" }),
+				SW("barPaging", "Shift+숫자 페이지 넘기기", "끄면 1번 바는 늘 1페이지 (은신 · 태세 바는 그대로) · 켜면 Shift+숫자 · Shift+↑↓ 로 1번 바 페이지가 넘어가요 · 빈 페이지로는 안 넘어가요", { hud = "bar1",
+					apply = function() call("Bars", "UpdateMainDriver") end }),
 			} },
 			{ t = "바로 가기", rows = {
 				{ kind = "action", id = "act:kb", label = "단축키 지정", desc = "칸에 마우스를 올리고 키를 누르면 끝", btn = "단축키 모드",
