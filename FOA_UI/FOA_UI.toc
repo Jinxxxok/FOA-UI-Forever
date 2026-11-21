@@ -3,7 +3,7 @@
 ## Notes: FOA (First of All) 통합 UI
 ## Author: hyeokjiny
 ## X-License: GPL-3.0-or-later
-## Version: 0.66.15
+## Version: 0.66.16
 ## SavedVariables: InkUIDB
 ## SavedVariablesPerCharacter: InkUICharDB
 ## IconTexture: Interface\AddOns\FOA_UI\Media\Textures\Logo
@@ -63,6 +63,7 @@ ForeverCrafts.lua
 ForeverQuestRewards.lua
 ForeverSources.lua
 PvPGear.lua
+PvPPrep.lua
 DungeonMaps.lua
 DungeonSketch.lua
 DungeonRoutes.lua

@@ -158,7 +158,7 @@ local function ScoreSpec()
 end
 
 function M:SetBisView(v)
-	if Ink.cdb then Ink.cdb.bisView = v end
+	if Ink.cdb then Ink.cdb.bisView = v; Ink.cdb.prepView = nil end   -- 준비물 보기는 다시 BIS 보기를 따라간다
 	self.bisMode = "gear"
 	self.dirty = true
 	self:PaintSidebar()
@@ -5803,6 +5803,15 @@ end
 
 local PREP_CONS = { { "flask", "영약" }, { "potion", "물약" }, { "food", "음식" }, { "rune", "증강 룬" }, { "oil", "무기 강화" } }
 
+-- 포에버 준비물 보기
+local PREP_VIEWS = { { "pve", "PvE" }, { "pvpgear", "전장 장비" }, { "pvpcons", "전장 소모품" } }
+local function PrepView()
+	local v = Ink.cdb and Ink.cdb.prepView
+	if v == "pve" or v == "pvpgear" or v == "pvpcons" then return v end
+	return BisView() == "pvp" and "pvpgear" or "pve"
+end
+M.PrepView = PrepView
+
 function M:BuildPrep(p)
 	local f = CreateFrame("Frame", nil, p)
 	f:SetPoint("TOPLEFT", 12, -108)
@@ -5822,6 +5831,8 @@ function M:BuildPrep(p)
 		r.icon:SetPoint("LEFT", 0, 0)
 		r.label = Ink:Text(r, F.sans, 10, C.muted, "LEFT")
 		r.label:SetPoint("LEFT", r.icon, "RIGHT", 8, 6)
+		r.label:SetPoint("RIGHT", -30, 6)   -- 긴 글은 칸 안에서 줄임 (옆 칸으로 넘치지 않게)
+		r.label:SetWordWrap(false)
 		r.name = Ink:Text(r, F.semi, 12, C.text, "LEFT")
 		r.name:SetPoint("LEFT", r.icon, "RIGHT", 8, -6)
 		r.name:SetPoint("RIGHT", -24, -6)
@@ -5863,6 +5874,40 @@ function M:BuildPrep(p)
 	f.hint:SetWidth(BP_W - 40)
 	f.hint:SetWordWrap(true)
 	p.prep = f
+	-- 포에버: 준비물 보기 고르기 (PvE · 전장 장비 · 전장 소모품) · 고른 적 없으면 BIS 보기를 따라간다 (PvP → 전장 장비)
+	if FOREVER and ns.PVP_PREP then
+		local seg = CreateFrame("Frame", nil, p)
+		seg:SetSize(220, 18)
+		seg:SetPoint("TOPRIGHT", p, "TOPRIGHT", -16, -78)
+		seg:Hide()
+		seg.btns = {}
+		local x = 0
+		for i = #PREP_VIEWS, 1, -1 do
+			local v = PREP_VIEWS[i]
+			local b = CreateFrame("Button", nil, seg)
+			b.label = Ink:Text(b, F.semi, 11, C.muted, "CENTER")
+			b.label:SetPoint("CENTER", 0, 1)
+			b.label:SetText(v[2])
+			local w = math.max(34, (b.label:GetStringWidth() or 40) + 12)
+			b:SetSize(w, 18)
+			b:SetPoint("RIGHT", seg, "RIGHT", -x, 0)
+			x = x + w + 2
+			b.line = b:CreateTexture(nil, "OVERLAY")
+			b.line:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+			b.line:SetSize(14, 2)
+			b.line:SetPoint("BOTTOM", 0, -1)
+			b.view = v[1]
+			b:SetScript("OnClick", function(self)
+				if Ink.cdb then Ink.cdb.prepView = self.view end
+				M.prepRetry = 0
+				M:PaintBis()
+			end)
+			b:SetScript("OnEnter", function(self) if not self.on then self.label:SetTextColor(C.soft[1], C.soft[2], C.soft[3]) end end)
+			b:SetScript("OnLeave", function(self) if not self.on then self.label:SetTextColor(C.muted[1], C.muted[2], C.muted[3]) end end)
+			seg.btns[#seg.btns + 1] = b
+		end
+		p.prepSeg = seg
+	end
 end
 
 local function SetLine(r, id, label, name, quality)
@@ -5913,6 +5958,8 @@ end
 
 -- 포에버 준비물: 소모품 · 마법부여 (공략 이름 그대로, 게임 언어로)
 function M:PaintPrepForever(f, fo)
+	f.h1:SetText("소모품")
+	f.h3:SetText("마법부여")
 	f.h2:SetText("")
 	local rows = {}
 	for _, r in ipairs(f.cons) do rows[#rows + 1] = r end
@@ -5952,6 +5999,236 @@ function M:PaintPrepForever(f, fo)
 	f.hint:SetText((st ~= "" and ("능력치: " .. st .. "\n") or "") .. "자료: Method 공략 (포에버 1.60.1)")
 end
 
+-------------------------------------------------------------------------------
+-- 포에버 전장 준비물 (PvPPrep.lua)
+--  전장 장비: 프리미어 PvP 파란 세트 칸마다 "어느 전장 표식 몇 개 + 명예" · 가진 칸은 다음 단계(영웅 강화 인장 · 계급)
+--            망토 · 목걸이 · PvP 장신구 · 내 명예 / 표식 (보유 · 남은 칸에 필요한 수) · 전장 보급관 장신구
+--  전장 소모품: 물약 · 붕대 · 전장 전용 음식 · 기계공학 도구(없으면 포에버 SAF-T · EZ-Thro) · 직업 소모품 · 가방 수량
+-------------------------------------------------------------------------------
+local PVP_SLOT = { [1] = "머리", [3] = "어깨", [5] = "가슴", [10] = "손", [7] = "다리", [8] = "발", [9] = "손목", [6] = "허리" }
+local PVP_BG = { WSG = "전쟁노래", AB = "아라시", AV = "알터랙", DI = "검은창 섬" }
+local PVP_BG_LONG = { WSG = "전쟁노래 협곡", AB = "아라시 분지", AV = "알터랙 계곡", DI = "검은창 섬" }
+local NO_MANA = { ROGUE = true, WARRIOR = true }
+
+local function Comma(n)
+	local s = tostring(math.floor(n or 0))
+	local r
+	repeat s, r = s:gsub("^(%d+)(%d%d%d)", "%1,%2") until r == 0
+	return s
+end
+local function Count(id)
+	local f = (C_Item and C_Item.GetItemCount) or GetItemCount
+	local ok, n = pcall(f, id, true)
+	return ok and tonumber(plain(n) or 0) or 0
+end
+local function Equipped(id)
+	local f = (C_Item and C_Item.IsEquippedItem) or IsEquippedItem
+	if not f then return false end
+	local ok, v = pcall(f, id)
+	return ok and plain(v) and true or false
+end
+-- 기계공학을 배웠나 (기술 목록에서 게임 언어 이름으로)
+local function HasEngineering()
+	local nm = (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(4036)) or (GetSpellInfo and GetSpellInfo(4036))
+	local names = { nm, "기계공학", "Engineering" }
+	local function match(n)
+		for _, x in ipairs(names) do if x and n == x then return true end end
+	end
+	if GetNumSkillLines and GetSkillLineInfo then
+		for i = 1, GetNumSkillLines() do
+			local n, header = GetSkillLineInfo(i)
+			if n and not header and match(n) then return true end
+		end
+	end
+	if GetProfessions and GetProfessionInfo then
+		for _, idx in ipairs({ GetProfessions() }) do
+			if idx and match((GetProfessionInfo(idx))) then return true end
+		end
+	end
+	return false
+end
+-- 레벨별로 번호가 여러 개인 장신구: 내 레벨로 쓸 수 있는 것 중 아이템 레벨이 가장 높은 것
+local function PickVariant(ids)
+	local lvl = UnitLevel("player") or 60
+	local best, bestIl, missing
+	for _, id in ipairs(ids) do
+		local name, _, minLv, il = ItemBasics(id)
+		if not name then
+			missing = true
+			RequestItem(id)
+		elseif (minLv or 0) <= lvl and (il or 0) > (bestIl or -1) then
+			best, bestIl = id, il
+		end
+	end
+	if missing then M.prepMissing = true end
+	return best or ids[#ids]
+end
+local function PvPScoreKey()
+	local k = ViewKey() or (ns.Score and select(2, ns.Score:Spec()))
+	return k and (k .. "#pvp") or nil
+end
+local function PvPScore(id)
+	local sc = ns.Score
+	if not (sc and sc.Score) then return nil end
+	local name, link = ItemBasics(id)
+	if not name then RequestItem(id); M.prepMissing = true; return nil end
+	local ok, v = pcall(sc.Score, sc, link or ("item:" .. id), nil, PvPScoreKey())
+	return ok and tonumber(v) or nil
+end
+-- 직업 세트가 여럿이면(드루이드 · 주술사 · 성기사 · 사제) 지금 특성 PvP 점수로 고른다
+local function PickSet(list)
+	if not list or #list == 0 then return nil end
+	if #list == 1 then return list[1] end
+	local best, bestV
+	for _, set in ipairs(list) do
+		local v, n = 0, 0
+		for _, id in pairs(set.rare) do
+			local x = PvPScore(id)
+			if x then v = v + x; n = n + 1 end
+		end
+		if n > 0 and (not bestV or v > bestV) then best, bestV = set, v end
+	end
+	return best or list[1]
+end
+local function PickBest(ids)
+	local best, bestV
+	for _, id in ipairs(ids) do
+		local v = PvPScore(id)
+		if v and (not bestV or v > bestV) then best, bestV = id, v end
+	end
+	return best or ids[1]
+end
+
+function M:PaintPrepPvP(f, pv)
+	local P = ns.PVP_PREP
+	local fac = (UnitFactionGroup("player") == "Horde") and "H" or "A"
+	local class = select(2, UnitClass("player"))
+	local left = {}
+	for _, r in ipairs(f.cons) do left[#left + 1] = r end
+	for _, r in ipairs(f.gems) do left[#left + 1] = r end
+	local right = f.ench
+	f.h2:SetText("")
+	local bp = self.bisPanel
+	if bp and bp.example then bp.example:SetText(pv == "pvpgear" and "전장 장비 · 포에버 1.60.1 게임 자료 (ATT) · 블리자드 계급 표" or "전장 소모품 · FOA 정리") end
+	local function Mark(r, text, good)
+		r.mark:SetText(text or "")
+		local c = good and C.green or C.muted
+		r.mark:SetTextColor(c[1], c[2], c[3])
+	end
+	if pv == "pvpgear" then
+		f.h1:SetText("프리미어 PvP 세트 · 명예 + 전장 표식")
+		f.h3:SetText("명예 · 표식 · 전장 장신구")
+		local need = { WSG = 0, AB = 0, AV = 0, DI = 0 }
+		local honorNeed = 0
+		local set = PickSet(P.sets[fac] and P.sets[fac][class])
+		local n = 0
+		if set then
+			for _, slot in ipairs(P.slots) do
+				n = n + 1
+				local r = left[n]
+				local rare, epic, c, seal = set.rare[slot], set.epic[slot], P.cost[slot], P.seal[slot]
+				local name = PVP_SLOT[slot] or ""
+				if epic and (Equipped(epic) or Count(epic) > 0) then
+					SetLine(r, epic, name .. " · 영웅 완성")
+					r.check:Show()
+				elseif rare and (Equipped(rare) or Count(rare) > 0) then
+					-- 파란 칸이 있으면 다음 단계: 영웅 강화 인장
+					SetLine(r, epic or rare, string.format("%s · 인장 · 명예 %s", name, Comma(seal[2])))
+					Mark(r, "계급 " .. seal[3])
+					honorNeed = honorNeed + seal[2]
+				elseif rare then
+					SetLine(r, rare, string.format("%s · %s %d · 명예 %s", name, PVP_BG[c[1]], c[2], Comma(c[3])))
+					need[c[1]] = need[c[1]] + c[2]
+					honorNeed = honorNeed + c[3]
+				end
+			end
+		end
+		-- 망토 · 목걸이 · PvP 장신구
+		local extra = {
+			{ PickBest(P.cloak[fac]), "망토", P.cloak.cost, P.cloak.rank },
+			{ P.neck[fac], "목", P.neck.cost, P.neck.rank },
+			{ P.trinket[fac], "PvP 장신구", { nil, 0, P.trinket.honor }, P.trinket.rank },
+		}
+		for _, e in ipairs(extra) do
+			n = n + 1
+			local r = left[n]
+			if r and e[1] then
+				local id, c = e[1], e[3]
+				local have = Equipped(id) or Count(id) > 0
+				local cost = (c[1] and (PVP_BG[c[1]] .. " " .. c[2] .. " · ") or "") .. "명예 " .. Comma(c[3])
+				SetLine(r, id, e[2] .. " · " .. cost)
+				if have then
+					r.check:Show()
+				else
+					Mark(r, "계급 " .. e[4])
+					if c[1] then need[c[1]] = need[c[1]] + c[2] end
+					honorNeed = honorNeed + c[3]
+				end
+			end
+		end
+		-- 오른쪽: 명예 · 표식
+		local rr = right[1]
+		local cur = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo and select(2, pcall(C_CurrencyInfo.GetCurrencyInfo, P.honor))
+		local honor = type(cur) == "table" and tonumber(plain(cur.quantity)) or nil
+		SetLine(rr, nil, "명예 · 남은 칸을 다 사려면", honor and (Comma(honor) .. " / " .. Comma(honorNeed)) or ("필요 " .. Comma(honorNeed)))
+		if type(cur) == "table" and cur.iconFileID then rr.icon:Set(cur.iconFileID, 1, "") end
+		if honor and honor >= honorNeed then rr.check:Show() end
+		local k = 1
+		for _, bg in ipairs({ "WSG", "AB", "AV", "DI" }) do
+			k = k + 1
+			local r = right[k]
+			local id = P.marks[bg]
+			local have = Count(id)
+			SetLine(r, id, PVP_BG_LONG[bg] .. (need[bg] > 0 and (" · 남은 칸에 " .. need[bg] .. "개") or " · 남은 칸 없음"))
+			Mark(r, tostring(have), have >= need[bg])
+		end
+		-- 전장 보급관 장신구 (내 진영 · 내 레벨에 맞는 번호)
+		local first = true
+		for _, t in ipairs(P.bgTrinkets) do
+			if (t[2] == "" or t[2] == fac) and k < #right then
+				k = k + 1
+				local id = PickVariant(t[3])
+				SetLine(right[k], id, (first and "전장 장신구 · " or "") .. PVP_BG_LONG[t[1]] .. " 평판")
+				if Equipped(id) or Count(id) > 0 then right[k].check:Show() end
+				first = false
+			end
+		end
+		f.hint:SetText("파란 조각 + 강화 인장(명예) = 영웅 · 오른쪽 계급 = 필요한 계급 · 무기(계급 14): 한손 · 원거리 검은창 섬 표식 10 + 명예 12,000 · 양손 알터랙 표식 20 + 22,500\n"
+			.. "표식은 이기면 3개 · 지면 1개 · 세트는 지금 특성 PvP 점수로 골랐어요 · 평판템까지 칸별 비교는 PvP 보기에서")
+		return
+	end
+	-- 전장 소모품
+	f.h1:SetText("전장 물약")
+	f.h3:SetText("붕대 · 도구 · 직업")
+	local mana = not NO_MANA[class]
+	local function Want(t)
+		return t == "all" or (t == "mana" and mana) or (t == "melee" and not mana) or t == class
+	end
+	local function Put(r, e)
+		local id = e[1]
+		SetLine(r, id, e[2])
+		local c = Count(id)
+		if c > 0 then Mark(r, "×" .. c, true) end
+	end
+	local n = 0
+	for _, e in ipairs(P.potions) do
+		if Want(e[3]) and n < #left then n = n + 1; Put(left[n], e) end
+	end
+	local k = 0
+	for _, e in ipairs(P.supply) do
+		if k < 3 then k = k + 1; Put(right[k], e) end
+	end
+	local eng = HasEngineering()
+	for _, e in ipairs(eng and P.engi or P.noeng) do
+		if k < 7 then k = k + 1; Put(right[k], e) end
+	end
+	for _, e in ipairs(P.class) do
+		if Want(e[3]) and k < #right then k = k + 1; Put(right[k], e) end
+	end
+	f.hint:SetText("전투 물약(계급 5)은 명예 상인 · 오른쪽 숫자 = 가방에 든 수"
+		.. (eng and "" or "\n기계공학이 없어서 포에버 SAF-T · EZ-Thro 제작품을 보여 줘요 (기계공학 없이 쓴다고 알려졌지만 아직 확인 전)"))
+end
+
 function M:PaintPrep()
 	local p = self.bisPanel
 	local f = p.prep
@@ -5959,8 +6236,24 @@ function M:PaintPrep()
 	if FOREVER then
 		for _, list in ipairs({ f.cons, f.gems, f.ench }) do for _, r in ipairs(list) do r:Hide(); r.spellID = nil end end
 		self.prepMissing = nil
-		if not spec then f.hint:SetText("이 특성은 아직 준비물 자료가 없어요 (공략이 올라오는 대로 추가)."); return end
-		self:PaintPrepForever(f, spec.fo)
+		local pv = PrepView()
+		if p.prepSeg then
+			for _, b in ipairs(p.prepSeg.btns) do
+				local on = b.view == pv
+				b.on = on
+				b.label:SetTextColor(on and C.text[1] or C.muted[1], on and C.text[2] or C.muted[2], on and C.text[3] or C.muted[3])
+				b.line:SetShown(on)
+			end
+		end
+		if pv ~= "pve" and ns.PVP_PREP then
+			self:PaintPrepPvP(f, pv)
+		elseif not spec then
+			f.h1:SetText("소모품"); f.h3:SetText("마법부여")
+			f.hint:SetText("이 특성은 아직 준비물 자료가 없어요 (공략이 올라오는 대로 추가).")
+			return
+		else
+			self:PaintPrepForever(f, spec.fo)
+		end
 		if self.prepMissing and (self.prepRetry or 0) < 12 then
 			self.prepRetry = (self.prepRetry or 0) + 1
 			C_Timer.After(0.6, function() if p:IsShown() and self.bisMode == "prep" then self:PaintPrep() end end)
@@ -6051,6 +6344,8 @@ function M:PaintBis()
 	for _, r in ipairs(p.ranks) do r:SetShown(gearShown) end
 	p.sep:SetShown(gearShown); p.selName:SetShown(gearShown); p.cur:SetShown(gearShown); p.hint:SetShown(gearShown)
 	p.prep:SetShown(not gearShown)
+	if p.prepSeg then p.prepSeg:SetShown(not gearShown) end
+	p.example:SetWidth(gearShown and (BP_W - 32) or (p.prepSeg and (BP_W - 32 - 230) or (BP_W - 32)))
 	if not gearShown then
 		local _, _, _, specName, class = SpecKey()
 		local cr, cg, cb = ns.ClassTint(class)
