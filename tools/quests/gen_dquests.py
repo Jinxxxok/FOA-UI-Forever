@@ -283,4 +283,15 @@ with open(sys.argv[3], "w", encoding="utf-8") as f:
     crumbs = sorted(q for q, rs in all_q.items() if any(b.get("isBreadcrumb") for _, b in rs) and any(q in v for v in [set(r[0] for r in out[i].values()) for i in out]))
     f.write("-- 연결 퀘스트 (다른 NPC 에게 안내만 함 · 선택): 선행 목록에 있어도 안 해도 된다\n")
     f.write("ns.DUNGEON_BREADCRUMB = {%s}\n" % ",".join("[%d]=true" % q for q in crumbs))
+    # 전문기술이 있어야 받는 퀘스트 (퀘스트 자체의 requireSkill · 보상 제조법의 것은 아님): 기술 번호
+    #  164 대장 · 165 가죽 · 171 연금 · 182 약초 · 185 요리 · 186 채광 · 197 재봉 · 202 기계 · 333 마부 · 9788 방어구 제작 전문화 …
+    inq = set(r[0] for i in out for r in out[i].values()) | set(int(x) for x in re.findall(r"\{(\d+),", manual))
+    skill = {}
+    for q, rs in all_q.items():
+        if q not in inq: continue
+        for _, b in rs:
+            v = b.get("requireSkill")
+            if isinstance(v, int) and v > 0: skill[q] = v
+    f.write("-- 전문기술이 있어야 받는 퀘스트 (AllTheThings · 대조용 · 실제 표는 DungeonQuestNotes.lua): [퀘스트] = 기술 번호 (164 대장기술 · 165 가죽세공 · 202 기계공학 · 9788 방어구 제작 …)\n")
+    f.write("ns.DUNGEON_QUEST_SKILL_ATT = {%s}\n" % ",".join("[%d]=%d" % (q, skill[q]) for q in sorted(skill)))
 print(len(out), "instances", n, "quests", stats)

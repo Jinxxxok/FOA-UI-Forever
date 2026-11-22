@@ -3842,10 +3842,11 @@ local DQ_WING = {
 	brd_up = { [3701] = true, [3702] = true, [4003] = true, [4004] = true, [4081] = true, [4082] = true, [4083] = true, [4121] = true, [4122] = true, [4126] = true, [4128] = true, [4133] = true, [4134] = true, [4136] = true, [4182] = true, [4201] = true, [4286] = true, [4295] = true, [4324] = true, [4362] = true, [4363] = true, [6642] = true, [6643] = true, [6644] = true, [6645] = true, [6646] = true, [7201] = true },
 	-- 검은바위 첨탑: 하층 · 상층이 던전 번호 하나(229)를 같이 써서 두 날개에 같은 퀘스트가 떴다 → 목표가 있는 쪽으로
 	--  하층: 할리콘 · 거미알 · 어미 거미 · 우로크 · 오목 · 부운 · 웜타락 · 비주 · 둠리거 상자 · 모샤루 석판 · 승천의 인장 보석
-	--  상층: 렌드 · 드라키사스 · 둥지 알 · 짐승(핀클) · 인간의 유해 · 고랄루크 · 아우비 · 오닉시아 입장 퀘스트
+	--        · 뜨거운 화형(맨 아래층 용암 옆 인간 해골 · AllTheThings)
+	--  상층: 렌드 · 드라키사스 · 둥지 알 · 짐승(핀클) · 고랄루크 · 아우비 · 오닉시아 입장 퀘스트
 	--  두 날개 모두: 승천의 인장(2/2 · 상층 열쇠) · 에이트리그의 지혜(하층 → 상층으로 이어짐)
-	lbrs = { [4788] = true, [5065] = true, [8181] = true, [8182] = true, [4701] = true, [4724] = true, [4729] = true, [4862] = true, [4866] = true, [4867] = true, [4903] = true, [98325] = true, [4941] = true, [4981] = true, [4982] = true, [4983] = true, [5001] = true, [5002] = true, [5081] = true, [5089] = true, [4742] = true, [4743] = true, [4764] = true, [4765] = true, [4766] = true, [4768] = true, [4769] = true },
-	ubrs = { [4743] = true, [4941] = true, [4974] = true, [7761] = true, [5102] = true, [6502] = true, [6566] = true, [6567] = true, [6568] = true, [6569] = true, [6570] = true, [6582] = true, [6583] = true, [6584] = true, [6585] = true, [6601] = true, [6602] = true, [4809] = true, [4907] = true, [4734] = true, [4735] = true, [5047] = true, [5063] = true, [5067] = true, [5068] = true, [5103] = true, [5124] = true, [5126] = true, [5127] = true, [5160] = true, [5161] = true, [5162] = true, [5164] = true, [5166] = true, [5167] = true },
+	lbrs = { [4788] = true, [5065] = true, [8181] = true, [8182] = true, [4701] = true, [4724] = true, [4729] = true, [4862] = true, [4866] = true, [4867] = true, [4903] = true, [98325] = true, [4941] = true, [4981] = true, [4982] = true, [4983] = true, [5001] = true, [5002] = true, [5081] = true, [5089] = true, [4742] = true, [4743] = true, [4764] = true, [4765] = true, [4766] = true, [4768] = true, [4769] = true, [5103] = true, [5124] = true },
+	ubrs = { [4743] = true, [4941] = true, [4974] = true, [7761] = true, [5102] = true, [6502] = true, [6566] = true, [6567] = true, [6568] = true, [6569] = true, [6570] = true, [6582] = true, [6583] = true, [6584] = true, [6585] = true, [6601] = true, [6602] = true, [4809] = true, [4907] = true, [4734] = true, [4735] = true, [5047] = true, [5063] = true, [5067] = true, [5068] = true, [5126] = true, [5127] = true, [5160] = true, [5161] = true, [5162] = true, [5164] = true, [5166] = true, [5167] = true },
 }
 M.DQ_WING = DQ_WING
 local DQ_W = 300
@@ -3985,6 +3986,50 @@ function M.QuestStep(id)
 	return { title = QTitle(id), npc = npc, zone = zone, lvl = lvl }
 end
 
+-- 전문기술 퀘스트 (DungeonQuestNotes.lua 의 DUNGEON_QUEST_SKILL): 내 숙련 · 이름
+--  기술 이름은 그 전문기술을 배우는 주문 이름(게임 언어)으로 기술 목록에서 찾는다 · 못 읽으면 nil (거르지 않음)
+-- (본문 지역 변수가 200개 한도라 표 하나에 모아 둔다)
+local DQS = {
+	spell = { [164] = 2018, [165] = 2108, [171] = 2259, [182] = 2366, [185] = 2550, [186] = 2575, [197] = 3908,
+		[202] = 4036, [333] = 7411, [129] = 3273, [356] = 7620 },
+	ko = { [164] = "대장기술", [165] = "가죽세공", [171] = "연금술", [182] = "약초채집", [185] = "요리", [186] = "채광",
+		[197] = "재봉술", [202] = "기계공학", [333] = "마법부여", [129] = "응급치료", [356] = "낚시" },
+}
+function DQS.Name(line)
+	local sp = DQS.spell[line]
+	local nm = sp and ((C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(sp)) or (GetSpellInfo and GetSpellInfo(sp)))
+	return nm or DQS.ko[line] or ("전문기술 " .. tostring(line))
+end
+function DQS.Rank(line)
+	local names = { DQS.Name(line), DQS.ko[line] }
+	local function match(n)
+		for _, x in ipairs(names) do if x and n == x then return true end end
+	end
+	local looked = false
+	if GetNumSkillLines and GetSkillLineInfo then
+		local cnt = GetNumSkillLines() or 0
+		if cnt > 0 then looked = true end
+		for i = 1, cnt do
+			local n, header, _, rank = GetSkillLineInfo(i)
+			if n and not header and match(n) then return rank or 0 end
+		end
+	end
+	if GetProfessions and GetProfessionInfo then
+		local p = { GetProfessions() }
+		for i = 1, 6 do
+			local idx = p[i]
+			if idx then
+				looked = true
+				local n, _, rank = GetProfessionInfo(idx)
+				if n and match(n) then return rank or 0 end
+			end
+		end
+	end
+	return looked and 0 or nil
+end
+function DQS.Of(id) return ns.DUNGEON_QUEST_SKILL and ns.DUNGEON_QUEST_SKILL[id] end
+M.SkillRank, M.ProfName = DQS.Rank, DQS.Name
+
 -- 내가 받을 수 있는 퀘스트 목록 + 상태 (묶기 전)
 local function Entries(key)
 	local inst = DQ_INST[key or ""]
@@ -4004,7 +4049,14 @@ local function Entries(key)
 	for _, q in ipairs(list) do
 		local okCls = #q[10] == 0
 		if not okCls then for _, c in ipairs(q[10]) do if c == classID then okCls = true break end end end
-		if (q[3] == 0 or q[3] == facN) and okCls and q[12] ~= 1 then
+		-- 전문기술 퀘스트: 그 전문기술을 아예 안 배웠으면 목록에서 뺀다 (직업 퀘스트처럼 · 이미 받았거나 끝냈으면 그대로)
+		local sk = DQS.Of(q[1])
+		local okSkill = true
+		if sk and not QDone(q[1]) and not QInLog(q[1]) then
+			local rank = DQS.Rank(sk[1])
+			if rank == 0 then okSkill = false end
+		end
+		if (q[3] == 0 or q[3] == facN) and okCls and okSkill and q[12] ~= 1 then
 			local e = { q = q, id = q[1], lvl = q[2] }
 			if wing and type(wing[q[1]]) == "table" then e.wingBoss = wing[q[1]] end
 			local miss = 0
@@ -4719,6 +4771,14 @@ function M:QuestTip(r)
 		tt:AddLine("시작: 아이템 (" .. (DropFrom(q) or "던전 몹") .. " 드랍)", 1, 0.82, 0.32)
 	end
 	local note = DQNote(e.id)
+	-- 전문기술 퀘스트: 필요한 숙련 (모자라면 지금 숙련)
+	local sk = DQS.Of(e.id)
+	if sk then
+		local rank = DQS.Rank(sk[1])
+		local short = rank and rank > 0 and rank < sk[2]
+		tt:AddLine("필요: " .. DQS.Name(sk[1]) .. " " .. sk[2] .. (short and ("  |cffFF6B5E(지금 " .. rank .. ")|r") or ""),
+			short and 1 or 0.44, short and 0.42 or 0.83, short and 0.37 or 0.6)
+	end
 	if note and note[2] then Ink.TipLine(tt, note[2], 0.78, 0.8, 0.84) end
 	-- 던전 안에서 시작하는 퀘스트 (좌표가 보고하는 곳이어도: 아이템으로 시작하는 퀘스트)
 	if note and note[1] and note[1] > 0 and (q[4] == 0 or (q[14] or 0) == KIND_TURNIN) then

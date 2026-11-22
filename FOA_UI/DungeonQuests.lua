@@ -589,3 +589,5 @@ ns.DUNGEON_QUESTS = {
 }
 -- 연결 퀘스트 (다른 NPC 에게 안내만 함 · 선택): 선행 목록에 있어도 안 해도 된다
 ns.DUNGEON_BREADCRUMB = {[1198]=true,[2398]=true,[2769]=true,[2861]=true,[2923]=true,[2925]=true,[2927]=true,[2931]=true,[3765]=true,[4128]=true,[4133]=true,[4324]=true,[4769]=true,[4907]=true,[6562]=true,[7492]=true,[7494]=true}
+-- 전문기술이 있어야 받는 퀘스트 (AllTheThings · 대조용 · 실제 표는 DungeonQuestNotes.lua): [퀘스트] = 기술 번호 (164 대장기술 · 165 가죽세공 · 202 기계공학 · 9788 방어구 제작 …)
+ns.DUNGEON_QUEST_SKILL_ATT = {[4083]=186,[5103]=9788,[5124]=9788,[5126]=164,[5127]=9788,[7493]=165,[7497]=165}
