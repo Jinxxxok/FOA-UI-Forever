@@ -407,6 +407,11 @@ function M:Spec()
 		end
 		spec = best
 	end
+	-- 특성을 못 읽으면: 이 특성 묶음에서 고른 특성 가이드 빌드(예: ROGUE:subtlety)를 따른다
+	if not spec and FOREVER and Ink.cdb and type(Ink.cdb.talentBuild) == "string" then
+		local c, k = Ink.cdb.talentBuild:match("^(%u+):(%a+)")
+		if c == class and k and W[class .. ":" .. k] then spec = k end
+	end
 	if not spec and FOREVER and ns.Talents and ns.Talents.GuessSpec then
 		local ok, g = pcall(ns.Talents.GuessSpec, ns.Talents)
 		if ok and g and W[class .. ":" .. g] then spec = g end
@@ -1364,7 +1369,8 @@ end
 
 -- 결과: { pct, new, old, level, empty } 또는 nil (비교할 수 없음)
 --  which: 두 칸 장비를 몇 번째 칸과 비교할지 (툴팁 · Shift). 없으면 알아서 (반지 · 장신구는 약한 쪽)
-function M:Compare(link, which)
+-- spec: "assassination#pve" · "subtlety#pvp" 처럼 주면 그 특성 · 기준으로 (툴팁의 다른 특성 · PvP 비교 줄)
+function M:Compare(link, which, spec)
 	if not link or Ink.db.itemCompare == false or self:Mode() == "off" then return end
 	local loc = select(4, GetItemInfoInstant(link))
 	local slots = loc and SLOTS[loc]
@@ -1378,7 +1384,7 @@ function M:Compare(link, which)
 		r.level = lvl
 		return r
 	end
-	local score = FOREVER and function(l, oh) return self:Score(l, oh) end or function(l) return RetailScore(l) end
+	local score = FOREVER and function(l, oh) return self:Score(l, oh, spec) end or function(l) return RetailScore(l) end
 	-- 착용 중인 것의 점수: 칸이 비었으면 0, 정보가 아직 없으면 nil (예전엔 nil 도 0 으로 쳐서
 	--  무기 정보가 잠깐 밀려난 순간 "착용 대비 +100%" 로 튀었다) · 내 주 능력치가 아닌 장비(본섭 false)는 0
 	local function Of(l, oh)
@@ -1553,6 +1559,8 @@ local function Line(tt, r)
 	end
 	-- 한 줄로 붙여서 (오른쪽 정렬이면 툴팁이 넓을 때 가운데가 크게 빈다)
 	tt:AddLine(txt .. "   " .. sc .. rk .. string.format("|cff5E636B%s|r", right or ""))
+	-- 다른 특성 · PvP(또는 PvE) 기준이면 몇 %인지 한 줄
+	if r.extra then tt:AddLine(r.extra) end
 	-- 두 칸 장비: Shift 로 다른 칸과 비교
 	if r.which == 1 and r.other then
 		tt:AddLine(string.format("|cff8E939BShift|r |cff5E636B누르고 있으면 %s 비교|r", With(r.other)))
@@ -1564,6 +1572,45 @@ function M:HookTooltip()
 	TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tt, data)
 		pcall(M.OnTooltip, M, tt)
 	end)
+end
+
+-- 다른 특성 · 다른 기준 비교 한 줄: "다른 특성  암살 +8% · 전투 -3%    PvP +15%"
+--  같은 칸 · 같은 비교 방식으로 특성 가중치만 바꿔서 (그 특성으로 바꾸면 이 템이 몇 %인지)
+local function PctText(r)
+	if not r then return nil end
+	if r.empty then return "|cff6FD39A빈 칸|r" end
+	local p = math.floor(r.pct + (r.pct >= 0 and 0.5 or -0.5))
+	if p > 0 then return string.format("|cff6FD39A+%d%%|r", p) end
+	if p < 0 then return string.format("|cffD9776B%d%%|r", p) end
+	return "|cff9EA3AB=|r"
+end
+function M:ExtraLine(link, which)
+	if not FOREVER or Ink.db.compareAll == false then return nil end
+	local class, cur = self:Spec()
+	local tabs = class and TABS[class]
+	if not tabs then return nil end
+	local list = {}
+	for _, k in ipairs(tabs) do list[#list + 1] = k end
+	if class == "DRUID" and W["DRUID:guardian"] then list[#list + 1] = "guardian" end
+	local prof = self:Profile()
+	local parts = {}
+	for _, k in ipairs(list) do
+		if k ~= cur and W[class .. ":" .. k] then
+			local r = self:Compare(link, which, k .. "#" .. prof)
+			local t = PctText(r)
+			if t then parts[#parts + 1] = (SPEC_NAME[k] or k) .. " " .. t end
+		end
+	end
+	-- 지금 특성으로 다른 기준: PvE 로 보고 있으면 PvP, PvP 로 보고 있으면 PvE (육성 중이면 PvP)
+	local other = (prof == "pvp") and ((UnitLevel("player") or 60) < 60 and "lvl" or "pve") or "pvp"
+	local ro = self:Compare(link, which, (cur or "") .. "#" .. other)
+	local to = PctText(ro)
+	local txt = ""
+	if #parts > 0 then txt = "|cff5E636B다른 특성|r  " .. table.concat(parts, "|cff5E636B · |r") end
+	if to then
+		txt = txt .. (txt ~= "" and "    " or "") .. "|cff5E636B" .. (other == "pvp" and "PvP" or (other == "lvl" and "육성" or "PvE")) .. "|r " .. to
+	end
+	return txt ~= "" and txt or nil
 end
 
 function M:OnTooltip(tt)
@@ -1594,6 +1641,9 @@ function M:OnTooltip(tt)
 		if r then
 			r.slotRank = FOREVER and ns.GearSlotRank and ns.GearSlotRank(link) or nil
 			if not r.slotRank and last then r.slotRank = last.r.slotRank end
+			local okX, ex = pcall(M.ExtraLine, M, link, which)
+			r.extra = okX and ex or nil
+			if not r.extra and last then r.extra = last.r.extra end
 			lastTip[lkey] = { r = r, sig = sig }
 		elseif last then
 			r = last.r

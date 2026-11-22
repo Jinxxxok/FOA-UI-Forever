@@ -515,6 +515,7 @@ function M:BuildRegistry()
 						if v ~= "off" then Ink.cdb.scoreMode = v end
 						if ns.Score and ns.Score.Invalidate then pcall(ns.Score.Invalidate, ns.Score) end
 					end },
+				SW("compareAll", "다른 특성 · PvP 비교", "툴팁에 한 줄 더: 다른 특성으로 바꾸면 몇 % · PvE 로 보면 PvP(PvP 로 보면 PvE) 기준 몇 %"),
 			} },
 			{ t = "장비 도우미", rows = {
 				SW("gearPopup", "칸 업그레이드 창", "캐릭터 창 장비 칸을 오른쪽 클릭 · 지금 레벨 후보 순위 · 내 특성 추천 마법부여"),

@@ -33,10 +33,23 @@ local function TraitsMode()
 end
 M.TraitsMode = TraitsMode
 
+-- 지금 특성 설정 번호
+--  포에버 이중 특성: 특성 묶음(주 · 보조)마다 설정이 따로다. GetActiveConfigID 는 보조 특성으로 바꿔도
+--  주 특성 설정을 줄 수 있어서(그래서 잠행으로 바꿔도 점수가 전투 기준으로 남았다),
+--  블리자드 포에버 특성 창과 같은 함수(GetCombatConfigIDForSpecGroup)로 지금 묶음의 설정을 먼저 읽는다
 local function ConfigID()
+	local SI = C_SpecializationInfo
+	if SI and SI.GetCombatConfigIDForSpecGroup and SI.GetActiveSpecGroup then
+		local okg, g = pcall(SI.GetActiveSpecGroup)
+		if okg and type(g) == "number" and g >= 1 then
+			local ok, id = pcall(SI.GetCombatConfigIDForSpecGroup, g)
+			if ok and type(id) == "number" and id > 0 then return id end
+		end
+	end
 	local ok, id = pcall(C_ClassTalents.GetActiveConfigID)
 	return ok and id or nil
 end
+M.ConfigID = ConfigID
 
 local function SpellIcon(spellID)
 	if not spellID then return end
