@@ -1319,6 +1319,8 @@ function M:RecipeSrcTooltip(e, prof, tt)
 				if x[3] and x[3] >= 0 then where = string.format("%s %.0f, %.0f", where, x[3], x[4]) end
 				tt:AddDoubleLine((M.BossName({ npc = x[1] }) or "상인") .. " 판매", "", 1, 0.82, 0.32, 1, 1, 1)
 				if where ~= "" then tt:AddLine(where, soft[1], soft[2], soft[3]) end
+				local note = ns.NPC_NOTE and ns.NPC_NOTE[x[1]]
+				if note then Ink.TipLine(tt, note, 0.89, 0.75, 0.48) end
 				any = true
 				break
 			end

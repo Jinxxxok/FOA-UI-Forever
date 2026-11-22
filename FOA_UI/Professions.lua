@@ -280,12 +280,18 @@ local function NpcName(id)
 	local D = Ink.modules.Dungeon
 	if D and D.BossName then return D.BossName({ npc = id, name = nil }) end
 end
+-- 늘 그 자리에 있지 않은 상인 (자료 좌표에 가도 없을 수 있다) · 제조법 상인 줄 · 툴팁에 한 줄 더
+--  펙스밋(하이잘 산 데이건): 정해진 자리 여러 곳 중 한 곳에 40분쯤 나타났다가 2시간쯤 사라지는 상인 · 서버 층마다 따로
+--  (wow-professions.com 포에버 · QuestieDB 포에버 자료에도 자리가 여러 개로 나온다)
+ns.NPC_NOTE = ns.NPC_NOTE or {}
+ns.NPC_NOTE[266901] = "떠돌이 상인 · 데이건 안 여러 자리에 40분쯤 나타났다가 2시간쯤 사라져요 · 서버 층마다 달라요"
 local function VendorText(x)
 	if not x then return end
 	local who = NpcName(x[1]) or "상인"
 	local zone = x[2] > 0 and C_Map.GetMapInfo and (C_Map.GetMapInfo(x[2]) or {}).name or nil
 	local where = zone and string.format("%s %.0f, %.0f", zone, x[3], x[4]) or ""
 	if x[9] == 1 then where = where .. (where ~= "" and " · " or "") .. "수량 한정" end   -- 팔리고 없으면 다시 채워질 때까지 기다려야 한다
+	if ns.NPC_NOTE[x[1]] then where = where .. (where ~= "" and " · " or "") .. ns.NPC_NOTE[x[1]] end
 	local price = ""
 	if x[7] and x[7] > 0 then
 		local iname = C_Item.GetItemNameByID and C_Item.GetItemNameByID(x[7])
