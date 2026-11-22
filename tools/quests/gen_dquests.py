@@ -170,8 +170,11 @@ FIX = {
     # 크롤도크는 이제 그만!(얼라 · 크롤도크 요새): 밖 NPC 가 아니라 던전 안에서 마커스 틸웰을 찾아 호위를 시작
     #  (wowf.io 포에버 퀘스트 자료: "마커스 틸웰을 안전한 곳까지 호위" · AllTheThings 엔 주는 NPC 없음)
     94969: dict(giver=259253, map=0, x=0, y=0, kind=KIND_INSIDE_NPC),
+    # 스트라솔름 · 신념의 메달: 두 자료 모두 반복 퀘스트로 적혀 있지만 아우리우스의 복수의 선행이라 목록에 넣는다
+    #  (반복이면 목록에서 빠져 "던전 밖 선행"으로 보였다) · 필요 레벨은 QuestieDB 포에버 55
+    5122: dict(lvl=55, rep=0), 5125: dict(lvl=55),
 }
-IDX = dict(fac=2, map=3, x=4, y=5, giver=6, pre=7, kind=13, turnin=14)
+IDX = dict(lvl=1, fac=2, map=3, x=4, y=5, giver=6, pre=7, rep=11, kind=13, turnin=14)
 
 
 def apply_fix(r):
