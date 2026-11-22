@@ -387,6 +387,11 @@ function M:BuildRegistry()
 					apply = function() call("Units", "UpdateAll") end }),
 				SW("playerDispel", "내 해제 디버프 색", "내가 풀 수 있는 마법 · 저주 · 질병 · 독이 걸리면 내 체력바를 그 색으로", { hud = "player",
 					apply = function() call("Units", "UpdateAll") end }),
+				SW("targetEnemyBuffs", "적 대상 버프", "적을 잡으면 그 적이 받은 버프도 디버프 줄 아래에 · 마법 버프는 파란 테두리 (정화 · 마법 무효화로 지울 수 있어요)", { hud = "target",
+					apply = function() call("Units", "UpdateAll") end }),
+				{ kind = "seg", key = "targetEnemyDebuffs", label = "적 대상 디버프", desc = "전부 = 파티원이 건 군중 제어 · 약화까지 · 내가 건 것만 = 내 지속 피해 · 제어 위주",
+					opts = { { "all", "전부" }, { "mine", "내가 건 것만" } }, def = "all", hud = "target",
+					apply = function() call("Units", "UpdateAll") end },
 			} },
 			{ t = "파티 · 레이드", rows = {
 				SW("party", "파티 프레임", "FOA 파티 프레임", { reload = true, hud = "party" }),

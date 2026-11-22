@@ -927,6 +927,10 @@ function M:BuildTarget()
 	f.buffs = ns.AuraBox(f, 18, 12, { groups = { { key = "buff", filter = "HELPFUL" } }, dispel = false })
 	f.buffs:SetPoint("TOPLEFT", f, "TOPLEFT", T_COL, -82)
 	f.buffs:Hide()
+	-- 적을 잡으면 그 적의 버프 (디버프 줄 아래 · 마법 버프는 종류 색 테두리 = 정화 · 마법 무효화로 지울 수 있는 것)
+	f.ebuffs = ns.AuraBox(f, 18, 12, { groups = { { key = "buff", filter = "HELPFUL" } }, dispel = true })
+	f.ebuffs:SetPoint("TOPLEFT", f, "TOPLEFT", T_COL, -112)
+	f.ebuffs:Hide()
 	self:BuildPortrait(f, "right")
 	self.target = f
 end
@@ -1396,28 +1400,35 @@ function M:UpdateUnit(f)
 	if f.cast then CastUpdate(f.cast, f.unit) end
 end
 
--- 디버프만 표시. 테두리는 디버프 종류(마법/저주/질병/독) 색.
--- 적 대상은 내가 건 디버프만, 아군 대상은 전부.
+-- 디버프 · 버프 표시. 디버프 테두리는 종류(마법/저주/질병/독) 색.
+--  대상: 아군 = 버프 줄 + 디버프 전부 · 적 = 디버프(설정: 전부 / 내가 건 것만) + 그 아래 적 버프 줄(설정)
+--  주시 대상: 적이면 내가 건 디버프만 (작은 칸이라 군중 제어 남은 시간 위주)
 function M:UpdateDebuffs(f, force)
 	local u = f.unit
 	local box = f.auras
 	local exists = UnitExists(u)
 	local enemy = plain(UnitCanAttack("player", u))
+	local isTarget = f == self.target
 	if #box.groups > 1 then
-		box:SetGroup(enemy and "mine" or "all")
+		local mineOnly = enemy and (not isTarget or Ink.db.targetEnemyDebuffs == "mine")
+		box:SetGroup(mineOnly and "mine" or "all")
 	end
 	box:SetUnit(exists and u or "none", force)
 	if f.buffs then
 		local friendly = exists and not enemy
-		if friendly ~= f.buffMode then
-			f.buffMode = friendly
+		local foe = exists and enemy and f.ebuffs and Ink.db.targetEnemyBuffs ~= false
+		local mode = friendly and "friend" or (foe and "foe" or "none")
+		if mode ~= f.buffMode then
+			f.buffMode = mode
 			pcall(function()
 				f.buffs:SetShown(friendly)
-				-- 아군: 버프 줄 아래로 디버프를 내린다
+				if f.ebuffs then f.ebuffs:SetShown(foe and true or false) end
+				-- 아군: 버프 줄 아래로 디버프를 내린다 · 적: 디버프는 그대로, 적 버프는 그 아래
 				box:SetPoint("TOPLEFT", f, "TOPLEFT", T_COL, friendly and -116 or -82)
 			end)
 		end
 		f.buffs:SetUnit(friendly and u or "none", force)
+		if f.ebuffs then f.ebuffs:SetUnit(foe and u or "none", force) end
 	end
 end
 
@@ -1725,7 +1736,7 @@ do
 		t = 0
 		if M.testing or not M.target then return end
 		for _, f in ipairs({ M.player, M.target, M.focus }) do
-			if f and f.auras and (not f.auras:IsLive() or (f.buffs and not f.buffs:IsLive())) and UnitExists(f.unit) then M:UpdateDebuffs(f) end
+			if f and f.auras and (not f.auras:IsLive() or (f.buffs and not f.buffs:IsLive()) or (f.ebuffs and not f.ebuffs:IsLive())) and UnitExists(f.unit) then M:UpdateDebuffs(f) end
 		end
 	end)
 end
