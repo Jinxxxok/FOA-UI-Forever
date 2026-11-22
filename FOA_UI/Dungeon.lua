@@ -1320,7 +1320,10 @@ function M:RecipeSrcTooltip(e, prof, tt)
 				tt:AddDoubleLine((M.BossName({ npc = x[1] }) or "상인") .. " 판매", "", 1, 0.82, 0.32, 1, 1, 1)
 				if where ~= "" then tt:AddLine(where, soft[1], soft[2], soft[3]) end
 				local note = ns.NPC_NOTE and ns.NPC_NOTE[x[1]]
-				if note then Ink.TipLine(tt, note, 0.89, 0.75, 0.48) end
+				if note then
+					Ink.TipLine(tt, note.tag .. " · " .. note.text, 0.89, 0.75, 0.48)
+					if note.spots then Ink.TipLine(tt, note.spots, soft[1], soft[2], soft[3]) end
+				end
 				any = true
 				break
 			end
@@ -1399,9 +1402,13 @@ function M:CraftTooltip(it, tt)
 		if not rname and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, r.item) end
 		Ink.TipLine(tt, "제조법: " .. (rname or "상인 판매 제조법") .. (r.req and r.req > 0 and ("  ·  " .. prof .. " " .. r.req .. " 필요") or ""), 0.96, 0.95, 0.9)
 		if x and P.VendorText then
-			local who, where, cost = P.VendorText(x)
+			local who, where, cost, note = P.VendorText(x)
 			tt:AddDoubleLine(who or "상인", cost or "", 1, 0.82, 0.32, 1, 1, 1)
 			if where and where ~= "" then tt:AddLine(where, 0.7, 0.72, 0.75) end
+			if note then
+				Ink.TipLine(tt, note.text, 0.89, 0.75, 0.48)
+				if note.spots then Ink.TipLine(tt, note.spots, 0.7, 0.72, 0.75) end
+			end
 			tt:AddLine("클릭: 제조법 상인 위치를 지도에", 0.56, 0.58, 0.61)
 		elseif r.list and #r.list > 0 then
 			tt:AddLine("내 진영에서 파는 상인이 없어요", 0.7, 0.72, 0.75)

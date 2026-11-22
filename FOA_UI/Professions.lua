@@ -281,17 +281,24 @@ local function NpcName(id)
 	if D and D.BossName then return D.BossName({ npc = id, name = nil }) end
 end
 -- 늘 그 자리에 있지 않은 상인 (자료 좌표에 가도 없을 수 있다) · 제조법 상인 줄 · 툴팁에 한 줄 더
---  펙스밋(하이잘 산 데이건): 정해진 자리 여러 곳 중 한 곳에 40분쯤 나타났다가 2시간쯤 사라지는 상인 · 서버 층마다 따로
---  (wow-professions.com 포에버 · QuestieDB 포에버 자료에도 자리가 여러 개로 나온다)
+--  tag = 줄에 붙는 짧은 말 · text = 툴팁 설명 · spots = 툴팁에 나오는 자리 목록
+--  펙스밋(하이잘 산): 지도 여러 곳 중 한 곳에 40분쯤 나타났다가 2시간쯤 사라지는 희귀 등급 상인 · 서버 층마다 따로
+--  자리: QuestieDB 포에버(와우헤드 기록 9곳 · 거의 같은 2쌍을 합쳐 7곳 · wow-professions.com 의 7곳과 같은 수)
+--  6곳은 데이건 둘레 (ATT 탐험 지점 54, 37) · 1곳은 남쪽 멀리 (ATT 탐험 Felblood Scar 46, 77 근처)
 ns.NPC_NOTE = ns.NPC_NOTE or {}
-ns.NPC_NOTE[266901] = "떠돌이 상인 · 데이건 안 여러 자리에 40분쯤 나타났다가 2시간쯤 사라져요 · 서버 층마다 달라요"
+ns.NPC_NOTE[266901] = {
+	tag = "떠돌이 상인",
+	text = "아래 7자리 중 한 곳에 40분쯤 나타났다가 2시간쯤 사라져요 · 서버 층마다 달라요 · 위 좌표는 그중 한 곳",
+	spots = "나오는 자리 (하이잘 산): 59,42 · 59,34 · 48,34 · 49,40 · 56,44 · 60,49 · 남쪽 멀리 47,81",
+}
 local function VendorText(x)
 	if not x then return end
 	local who = NpcName(x[1]) or "상인"
 	local zone = x[2] > 0 and C_Map.GetMapInfo and (C_Map.GetMapInfo(x[2]) or {}).name or nil
 	local where = zone and string.format("%s %.0f, %.0f", zone, x[3], x[4]) or ""
 	if x[9] == 1 then where = where .. (where ~= "" and " · " or "") .. "수량 한정" end   -- 팔리고 없으면 다시 채워질 때까지 기다려야 한다
-	if ns.NPC_NOTE[x[1]] then where = where .. (where ~= "" and " · " or "") .. ns.NPC_NOTE[x[1]] end
+	local note = ns.NPC_NOTE[x[1]]
+	if note then where = where .. (where ~= "" and " · " or "") .. note.tag end
 	local price = ""
 	if x[7] and x[7] > 0 then
 		local iname = C_Item.GetItemNameByID and C_Item.GetItemNameByID(x[7])
@@ -300,7 +307,7 @@ local function VendorText(x)
 	elseif x[6] and x[6] > 0 then
 		price = Money(x[6])
 	end
-	return who, where, price
+	return who, where, price, note
 end
 local function Waypoint(x)
 	if not (x and x[2] and x[2] > 0) then return end
@@ -502,6 +509,13 @@ local function TipKV(l, r, lc, rc) return { l = l, r = r, lc = lc, rc = rc } end
 local function TipT(t, c) return { t = t, c = c } end
 local function TipHint(t) return { hint = t } end
 local function TipGap() return { gap = true } end
+-- 떠돌이 상인 설명 · 나오는 자리 (VendorText 넷째 값)
+local function NoteTips(tip, note)
+	if not note then return tip end
+	tip[#tip + 1] = TipT(note.text, TIP_GOLD)
+	if note.spots then tip[#tip + 1] = TipT(note.spots, TIP_MUTED) end
+	return tip
+end
 local function Short(max, ...)   -- 앞 마디부터 이어 붙이다 넘치면 거기서 멈춘다 (목록 줄이 … 으로 잘리지 않게)
 	local out
 	for i = 1, select("#", ...) do
@@ -1369,10 +1383,12 @@ function M:Paint()
 		c.src:SetText(kr and "|cff6FD39A배움|r" or ((vx or rt) and "" or ("배우는 곳  " .. (cur[6] or ""))))
 		if vx then
 			c.vend.icon:SetTexture(Ink.icon("NpcVendor"))
-			local who, where, price = VendorText(vx)
+			local who, where, price, note = VendorText(vx)
 			c.vend.x = vx
 			c.vend.item = VendorIndex(name)[cur[3]].item
-			c.vend.tip = { cur[3], TipH("파는 상인"), TipKV(who, price ~= "" and price or " ", TIP_WHITE, TIP_GOLD), TipKV(" ", where, TIP_SOFT, TIP_MUTED), TipHint("누르면 지도에 상인 위치") }
+			local tip = NoteTips({ cur[3], TipH("파는 상인"), TipKV(who, price ~= "" and price or " ", TIP_WHITE, TIP_GOLD), TipKV(" ", where, TIP_SOFT, TIP_MUTED) }, note)
+			tip[#tip + 1] = TipHint("누르면 지도에 상인 위치")
+			c.vend.tip = tip
 			c.vend.t:SetText(who .. (price ~= "" and ("  ·  |cffFFD15F" .. price .. "|r") or ""))
 			c.vend.s:SetText(where .. "  ·  누르면 지도에 표시")
 			c.vend:Show()
@@ -1903,10 +1919,11 @@ function M:PaintList(p, name, prof, skill, max, route, rkey, known, byName, curI
 				if kr then
 					tip[#tip + 1] = TipH("이미 배운 제조법")
 				elseif vx then
-					local who, where, price = VendorText(vx)
+					local who, where, price, note = VendorText(vx)
 					tip[#tip + 1] = TipH("파는 상인")
 					tip[#tip + 1] = TipKV(who, price ~= "" and price or " ", TIP_WHITE, TIP_GOLD)
 					tip[#tip + 1] = TipKV(" ", where, TIP_SOFT, TIP_MUTED)
+					NoteTips(tip, note)
 					tip[#tip + 1] = TipHint("누르면 지도에 상인 위치")
 				elseif rt then
 					tip[#tip + 1] = TipH("가르치는 훈련사")
@@ -1947,12 +1964,13 @@ function M:PaintList(p, name, prof, skill, max, route, rkey, known, byName, curI
 			head("상인에게 사는 제조법", "누르면 지도")
 			for i = 1, math.min(6, #list) do
 				local e = list[i]
-				local who, where, price = VendorText(e.x)
+				local who, where, price, note = VendorText(e.x)
 				local icon = CraftIcon(e.v.spell) or ItemIcon(e.v.item) or 134939
 				local req = e.v.req or 0
-				row(icon, e.craft, Short(20, who, where), price ~= "" and price or ("숙련도 " .. req), req <= skill and GREEN or nil,
-					{ e.craft, TipKV("필요 숙련도", req, TIP_SOFT, req <= skill and TIP_GREEN or TIP_WHITE), TipH("파는 상인"),
-						TipKV(who, price ~= "" and price or " ", TIP_WHITE, TIP_GOLD), TipKV(" ", where, TIP_SOFT, TIP_MUTED), TipHint("누르면 지도에 상인 위치") }, req > skill)
+				local tip = NoteTips({ e.craft, TipKV("필요 숙련도", req, TIP_SOFT, req <= skill and TIP_GREEN or TIP_WHITE), TipH("파는 상인"),
+					TipKV(who, price ~= "" and price or " ", TIP_WHITE, TIP_GOLD), TipKV(" ", where, TIP_SOFT, TIP_MUTED) }, note)
+				tip[#tip + 1] = TipHint("누르면 지도에 상인 위치")
+				row(icon, e.craft, Short(20, who, where), price ~= "" and price or ("숙련도 " .. req), req <= skill and GREEN or nil, tip, req > skill)
 				p.rows[nr].vendor = e.x
 				p.rows[nr].item = e.v.item   -- 제조법 툴팁: 만들어지는 아이템까지 같이 나온다
 			end
