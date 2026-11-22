@@ -40,6 +40,17 @@ local function HideBlizzard(plate, unit)
 	if uf.AurasFrame then pcall(KillMouse, uf.AurasFrame) end
 	-- 징표: FOA 아이콘을 쓰고(이름 왼쪽), 값을 못 읽는 경우에만 블리자드 것을 대신 보인다 (UpdateInfo)
 	if plate.ink then plate.ink.blizzRT = uf.RaidTargetFrame end
+	-- 전장 · 투기장(진행 중인 PvP 경기)에서는 상대 플레이어 직업이 비밀 값이라 FOA 가 직업색을 못 고른다.
+	--  숨겨 둔 블리자드 이름표는 직업색으로 체력바를 칠하므로(이름표 설정 "직업 색상" · nameplateShowClassColor),
+	--  그 색이 바뀔 때마다 FOA 체력바로 그대로 옮긴다 (값은 읽지 않고 넘기기만 · 비밀 값이어도 됨)
+	local hb = uf.healthBar
+	if hb and not hookedUF[hb] and hb.SetStatusBarColor then
+		hookedUF[hb] = true
+		hooksecurefunc(hb, "SetStatusBarColor", function(_, r, g, b)
+			local f = plate.ink
+			if f and f.secretClass and f.hp then pcall(f.hp.SetStatusBarColor, f.hp, r, g, b) end
+		end)
+	end
 	if not hookedUF[uf] then
 		hookedUF[uf] = true
 		local busy
@@ -341,6 +352,38 @@ local function ReactionColor(u)
 	end
 	return C.red[1], C.red[2], C.red[3]
 end
+
+-- 직업을 못 읽는 플레이어(전장 · 투기장의 상대 등)의 직업색
+--  1) 비밀 값 직업을 그대로 C 함수(C_ClassColor)에 넘겨 색을 받아 본다
+--  2) 안 되면 숨겨 둔 블리자드 이름표가 칠해 둔 체력바 색 (블리자드 코드는 비밀 값을 읽을 수 있다)
+--  돌려준 r, g, b 는 비밀 값일 수 있어서 비교하지 않고 SetStatusBarColor 에만 넘긴다
+local issecret = _G.issecretvalue or function() return false end
+local function ClassUnreadable(u)
+	local ok, _, cls = pcall(UnitClass, u)
+	if not ok then return true end
+	return issecret(cls) or cls == nil
+end
+local function SecretClassColor(u, plate)
+	if C_ClassColor and C_ClassColor.GetClassColor then
+		local ok, col = pcall(function()
+			local _, cls = UnitClass(u)
+			return C_ClassColor.GetClassColor(cls)
+		end)
+		if ok and type(col) == "table" and col.GetRGB then
+			local ok2, r, g, b = pcall(col.GetRGB, col)
+			if ok2 then return true, r, g, b, "classcolor" end
+		end
+	end
+	local uf = plate and plate.UnitFrame
+	if type(uf) ~= "table" or uf:IsForbidden() then return false end
+	local hb = uf.healthBar
+	if type(hb) == "table" and hb.GetStatusBarColor then
+		local ok, r, g, b = pcall(hb.GetStatusBarColor, hb)
+		if ok then return true, r, g, b, "blizzard" end
+	end
+	return false
+end
+M.SecretClassColor = SecretClassColor
 
 function M:UpdateHealth(f)
 	local u = f.unit
@@ -941,8 +984,30 @@ function M:UpdateInfo(f)
 			f.lvl:Hide()
 		end
 	end
-	local r, g, b = ReactionColor(u)
-	f.hp:SetStatusBarColor(r, g, b)
+	f.secretClass = nil
+	if plain(UnitIsPlayer(u)) and ClassUnreadable(u) then
+		-- 직업이 비밀 값: 블리자드가 고른 직업색을 옮겨 쓴다 (못 받으면 적대 빨강 · 흰색으로 다 같아 보이지 않게)
+		f.secretClass = true
+		local got, r, g, b, via = SecretClassColor(u, f:GetParent())
+		local applied = got and pcall(f.hp.SetStatusBarColor, f.hp, r, g, b)
+		if not applied then
+			local hostile = plain(UnitCanAttack("player", u))
+			local c = (hostile == false) and C.green or C.red
+			f.hp:SetStatusBarColor(c[1], c[2], c[3])
+		end
+		-- 진단: 어떤 길로 색을 얻었는지 (저장 파일 plateClassDiag · 같은 결과는 한 번만)
+		local key = (applied and via or "none")
+		if M.classDiagLast ~= key and Ink.db then
+			M.classDiagLast = key
+			Ink.db.plateClassDiag = Ink.db.plateClassDiag or {}
+			local d = Ink.db.plateClassDiag
+			d[#d + 1] = (date and date("%m-%d %H:%M:%S") or "") .. " " .. key
+			while #d > 10 do table.remove(d, 1) end
+		end
+	else
+		local r, g, b = ReactionColor(u)
+		f.hp:SetStatusBarColor(r, g, b)
+	end
 	local cls = plain(UnitClassification(u))
 	if f.friendly then cls = nil end
 	if cls == "elite" or cls == "worldboss" or cls == "rareelite" then
@@ -1267,6 +1332,11 @@ function M:OnAdded(unit)
 	-- 첫 프레임에 공격 가능 여부가 틀리게 나올 수 있어 한 번 더 확인
 	C_Timer.After(0.1, function()
 		if plates[unit] ~= f or f.object then return end
+		-- 직업이 비밀 값인 플레이어: 블리자드 이름표가 직업색을 칠한 뒤 한 번 더 옮긴다
+		if f.secretClass then
+			local got, r, g, b = SecretClassColor(unit, plate)
+			if got then pcall(f.hp.SetStatusBarColor, f.hp, r, g, b) end
+		end
 		local fr = IsFriendly(unit)
 		if fr ~= f.friendly then
 			local okD, errD = pcall(M.Draw, M, f, unit)
@@ -1342,6 +1412,8 @@ local NAME_CVARS = {
 	-- 던전 안처럼 FOA가 못 꾸미는 아군 플레이어 이름표는 체력바 없이 이름만 (12.x 새 설정)
 	nameplateShowOnlyNameForFriendlyPlayerUnits = "1",
 	nameplateUseClassColorForFriendlyPlayerUnitNames = "1",
+	-- 적 플레이어 체력바 직업색: 전장에서 직업이 비밀 값일 때 FOA 가 이 색을 옮겨 쓴다
+	nameplateShowClassColor = "1",
 }
 
 local function GetCV(k)
