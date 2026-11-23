@@ -40,7 +40,10 @@ function M.Active()
 	if not FOREVER or Ink.db.lockboxes == false or not ns.LOCKBOXES then return false end
 	local _, cls = UnitClass("player")
 	if cls ~= "ROGUE" then return false end
-	if (M.MySkill() or 0) > 0 then return true end
+	local r = M.MySkill() or 0
+	-- 300(포에버 최고)을 찍으면 연습 사물함은 더 오르지 않으니 지도 · 미니맵 · 이름표 표시를 끈다
+	if r >= 300 then return false end
+	if r > 0 then return true end
 	return IsPlayerSpell and IsPlayerSpell(PICK_LOCK) or false
 end
 
