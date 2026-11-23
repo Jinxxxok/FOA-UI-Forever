@@ -1969,20 +1969,25 @@ local function LevelColor(lo, hi)
 	return C.muted, "낮음"
 end
 
+-- 이 보스를 잡았으면 앞 보스도 잡은 것 (앞 보스가 죽어야 나오는 보스 · 같이 싸우는 보스)
+--  스니드(643)는 스니드의 벌목기(642)가 부서져야 튀어나온다 · 벌목기는 전투 단위가 따로 없고 바로 이어져서 놓치기 쉽다
+--  대족장 렌드 블랙핸드(10429)는 기스(10339)를 타고 나와 같이 싸운다 · 기스는 전투 이름이 따로 없어 놓치기 쉽다
+local KILL_IMPLIES = { [643] = { 642 }, [10429] = { 10339 } }
+
 -- 처치 기록 (캐릭터별 · 던전마다 · 마지막 처치 후 90분이 지나 다시 들어가면 새로 시작)
+--  읽을 때도 KILL_IMPLIES 를 채운다 (예전에 기록된 렌드 처치 → 기스도 처치로)
 local function KillSet(key)
 	local cdb = Ink.cdb
 	if not (cdb and key) then return {} end
 	cdb.dKills = cdb.dKills or {}
 	local k = cdb.dKills[key]
 	if not k then k = { t = 0 }; cdb.dKills[key] = k end
+	for n, list in pairs(KILL_IMPLIES) do
+		if k[n] then for _, m in ipairs(list) do k[m] = true end end
+	end
 	return k
 end
 M.KillSet = KillSet
-
--- 이 보스를 잡았으면 앞 보스도 잡은 것 (앞 보스가 죽어야 나오는 보스)
---  스니드(643)는 스니드의 벌목기(642)가 부서져야 튀어나온다 · 벌목기는 전투 단위가 따로 없고 바로 이어져서 놓치기 쉽다
-local KILL_IMPLIES = { [643] = { 642 } }
 
 -------------------------------------------------------------------------------
 -- 지도 없는 던전의 지나간 길 기록 (포에버 신규 던전: 크롤도크 보루 · 가라앉은 도시 …)
@@ -2652,6 +2657,9 @@ function M:BossTooltip(owner, bi)
 	GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
 	GameTooltip:AddLine((b.rare and (b.kind == 3 and "" or ((b.kind or 1) >= 2 and "선택 · " or "희귀 · ")) or (b.order and (b.order .. ". ") or "")) .. BossName(b), 1, 1, 1)
 	if b.kind == 3 then GameTooltip:AddLine("보스가 아닌 던전 몹 아무에게서나 나와요", 0.7, 0.72, 0.75) end
+	-- 소환 · 곁방 · 같이 싸우는 보스 안내 (DungeonQuestNotes.lua)
+	local bnote = b.npc and ns.DUNGEON_BOSS_NOTES and ns.DUNGEON_BOSS_NOTES[b.npc]
+	if bnote then Ink.TipLine(GameTooltip, bnote, 0.89, 0.75, 0.48) end
 	if b.killed then GameTooltip:AddLine("처치함", DOWN_C[1], DOWN_C[2], DOWN_C[3]) end
 	GameTooltip:AddDoubleLine("전리품", nAll .. "개", 0.7, 0.72, 0.75, 1, 1, 1)
 	GameTooltip:AddDoubleLine("내 직업", nCls .. "개", 0.7, 0.72, 0.75, 1, 1, 1)
@@ -2886,17 +2894,17 @@ function M:PaintForeverTop(f, data)
 	f.entr:SetShown((ep and not self.boardOn) and true or false)
 	-- 처치 표시
 	local k = KillSet(self.showing)
-	local nMain, nDown = 0, 0
+	local nMain, nDown, nRare, nOpt = 0, 0, 0, 0
 	for _, b in ipairs(data and data.bosses or {}) do
 		b.killed = b.npc and k[b.npc] or false
 		if not b.rare then
 			nMain = nMain + 1
 			b.order = nMain
 			if b.killed then nDown = nDown + 1 end
-		end
+		elseif b.kind == 2 then nOpt = nOpt + 1
+		elseif b.kind ~= 3 then nRare = nRare + 1 end
 	end
-	local nRare = data and (#data.bosses - nMain) or 0
-	local txt = "보스 " .. nMain .. (nRare > 0 and ("  ·  희귀 " .. nRare) or "")
+	local txt = "보스 " .. nMain .. (nRare > 0 and ("  ·  희귀 " .. nRare) or "") .. (nOpt > 0 and ("  ·  선택 " .. nOpt) or "")
 	if nDown > 0 then txt = txt .. "  ·  |cff6FD39A처치 " .. nDown .. "/" .. nMain .. "|r" end
 	f.meta.text:SetText(txt)
 	local hidden = Ink.db.dRouteHide
@@ -3755,9 +3763,9 @@ function M:PaintBoard(data)
 	local d = data.d or FLoot(self.showing)
 	b.tag:SetText(d and d.raid and "RAID" or "DUNGEON")
 	b.name:SetText(d and d.ko or data.name or "")
-	local nMain, nDown, nRare, nextB = 0, 0, 0, nil
+	local nMain, nDown, nRare, nOpt, nextB = 0, 0, 0, 0, nil
 	for _, x in ipairs(data.bosses) do
-		if x.rare then if x.kind ~= 3 then nRare = nRare + 1 end else
+		if x.rare then if x.kind == 2 then nOpt = nOpt + 1 elseif x.kind ~= 3 then nRare = nRare + 1 end else
 			nMain = nMain + 1
 			if x.killed then nDown = nDown + 1 elseif not nextB then nextB = x end
 		end
@@ -3766,7 +3774,7 @@ function M:PaintBoard(data)
 	-- 날개를 아직 추측 중이면 표시 (보스를 보면 자동으로 바뀐다)
 	local guess = d and d.group and self.showing == self.hereKey and self.hereSure == false
 	b.sub:SetText(string.format("|cff%02x%02x%02x권장 %d–%d 레벨|r   ·   보스 %d%s%s", math.floor(col[1] * 255), math.floor(col[2] * 255), math.floor(col[3] * 255),
-		d and d.lo or 0, d and d.hi or 0, nMain, nRare > 0 and ("   ·   희귀 " .. nRare) or "",
+		d and d.lo or 0, d and d.hi or 0, nMain, (nRare > 0 and ("   ·   희귀 " .. nRare) or "") .. (nOpt > 0 and ("   ·   선택 " .. nOpt) or ""),
 		guess and "   ·   |cffFFB347날개 추측 중 · 보스를 보면 자동으로 · 오른쪽 이름 옆 ▼ 로 고르기|r" or ""))
 	b.prog:SetMinMaxValues(0, math.max(1, nMain))
 	b.prog:SetValue(nDown)
@@ -5518,21 +5526,39 @@ function M:OnBossKilled(name, encID)
 	local key = self.hereKey or self:MatchInstance()
 	name = plain(name)
 	if not key or type(name) ~= "string" then return end
-	local data = self:Scan(key, true)
 	local n = NormName(name)
-	local best
-	for _, b in ipairs(data and data.bosses or {}) do
-		if b.npc then
-			for _, cand in ipairs({ BossName(b), b.name, b.en }) do
-				local c = NormName(cand)
-				if c and n then
-					if c == n then return self:MarkKill(key, b.npc) end
-					if #c >= 2 and #n >= 2 and (n:find(c, 1, true) or c:find(n, 1, true)) then best = best or b end
+	-- 지금 날개 먼저, 못 맞추면 같은 던전의 다른 날개 (검은바위 첨탑 하층 ↔ 상층 등: 날개를 잘못 짐작하고 있었을 때)
+	local keys = { key }
+	local cur = FLoot(key)
+	for _, d in ipairs(cur and cur.group and ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
+		if d.key ~= key and d.group == cur.group and not d.soon then keys[#keys + 1] = d.key end
+	end
+	local exact, best
+	for _, kk in ipairs(keys) do
+		local data = self:Scan(kk, true)
+		for _, b in ipairs(data and data.bosses or {}) do
+			if b.npc and not exact then
+				for _, cand in ipairs({ BossName(b), b.name, b.en }) do
+					local c = NormName(cand)
+					if c and n then
+						if c == n then exact = { kk, b.npc } break end
+						if #c >= 2 and #n >= 2 and (n:find(c, 1, true) or c:find(n, 1, true)) then best = best or { kk, b.npc } end
+					end
 				end
 			end
 		end
+		if exact or best then break end
 	end
-	if best then return self:MarkKill(key, best.npc) end
+	local hit = exact or best
+	if hit then
+		if hit[1] ~= key then
+			-- 다른 날개 보스였다 → 이번 방문은 그 날개로 (확실)
+			self.wingSeen, self.wingVisit = hit[1], self.visit
+			self.hereKey, self.hereSure = hit[1], true
+			pcall(M.RememberWingSpot, M, hit[1])
+		end
+		return self:MarkKill(hit[1], hit[2])
+	end
 	-- 못 맞춘 전투 이름은 기록 (/foa log 로 보고 보스 이름을 맞춘다)
 	Ink.db.encLog = Ink.db.encLog or {}
 	local log = Ink.db.encLog
@@ -5546,8 +5572,14 @@ function M:CheckLoot()
 	if not (key and GetNumLootItems and GetLootSourceInfo) then return end
 	local d = FLoot(key)
 	if not d then return end
+	-- 보스 → 날개 (지금 날개 먼저 · 같은 던전의 다른 날개 보스도: 날개를 잘못 짐작하고 있었을 때)
 	local boss = {}
-	for _, b in ipairs(d.bosses or {}) do if b[3] and b[3] > 0 then boss[b[3]] = true end end
+	for _, b in ipairs(d.bosses or {}) do if b[3] and b[3] > 0 then boss[b[3]] = key end end
+	for _, o in ipairs(d.group and ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
+		if o.key ~= key and o.group == d.group and not o.soon then
+			for _, b in ipairs(o.bosses or {}) do if b[3] and b[3] > 0 and not boss[b[3]] then boss[b[3]] = o.key end end
+		end
+	end
 	for i = 1, (GetNumLootItems() or 0) do
 		local src = { GetLootSourceInfo(i) }
 		for j = 1, #src, 2 do
@@ -5555,6 +5587,11 @@ function M:CheckLoot()
 			if type(guid) == "string" then
 				local npc = tonumber((select(6, strsplit("-", guid))))
 				if npc and boss[npc] then
+					if boss[npc] ~= key then
+						key = boss[npc]
+						self.wingSeen, self.wingVisit = key, self.visit
+						self.hereKey, self.hereSure = key, true
+					end
 					self:MarkKill(key, npc)
 					-- 보스가 떨군 장비를 기억 (자료에 전리품이 비었거나 모자란 새 던전 보스를 채운다)
 					local link = GetLootSlotLink and GetLootSlotLink(i)
@@ -5577,7 +5614,7 @@ function M:CheckLoot()
 end
 
 -- 지금 던전의 보스인가 (보스 알림: 블리자드 보스 정보가 없는 옛 던전에서 보스 시전을 알아보려고)
---  희귀몹 · 상자는 빼고 진짜 보스만. 전투 중 GUID 가 비공개면 모른다(false)
+--  희귀몹 · 일반 몹은 빼고 진짜 보스만 (소환 · 곁방 선택 보스는 넣는다). 전투 중 GUID 가 비공개면 모른다(false)
 function M:IsHereBoss(unit)
 	local key = self.hereKey
 	if not key then return false end
@@ -5588,7 +5625,7 @@ function M:IsHereBoss(unit)
 	if not npc then return false end
 	local d = FLoot(key)
 	for _, b in ipairs(d and d.bosses or {}) do
-		if b[3] == npc and (b[4] or 0) == 0 then return true end
+		if b[3] == npc and ((b[4] or 0) == 0 or b[4] == 2) then return true end
 	end
 	return false
 end

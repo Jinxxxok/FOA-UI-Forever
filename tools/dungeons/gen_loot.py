@@ -56,6 +56,10 @@ D = [
   [9816, 10264, 10899, 10339, 10429, 10430, 16042, 10363], [10509]),
  ("onyxia", "오닉시아의 둥지", "Onyxia's Lair", 60, 60, None, None, 249, [(760, 0)], [10184], []),
 ]
+# 선택 보스 (종류 2): 소환해야 나오는 보스 · 길에서 벗어난 곁방 보스 → 경로 대신 "희귀 · 선택" 칩으로
+#  부름의 화로(던전 세트 2 퀘스트)로 불러내는 보스: 발타라크 · 코르모크 · 소도스 · 모르 그레이후프 · 이살리엔 (AllTheThings 포에버 설명)
+#  화염고리 솔라카르: 태초의 불꽃을 누르고 용 무리 8번을 막아야 나옴 · 고랄루크 앤빌크랙: 곁방 (대장기술 퀘스트 "악마의 룬" 대상)
+OPT = {16042, 16118, 16102, 16080, 16097, 10264, 10899}
 SOON = [  # 개방 예정 (wowf.io)
  ("alcaz", "알카즈 감옥", "Alcaz Prison", 48, 53),
  ("blackmaw", "검은아귀 요새", "Blackmaw Hold", 55, 60),
@@ -143,7 +147,7 @@ for (key, ko, en, lo, hi, grp, wing, iid, srcs, order, rares) in D:
         if not b:
             problems.append((key, "missing npc", n)); continue
         if n not in KO: problems.append((key, "no ko", n))
-        rows.append((n, KO.get(n, b["en"] or "?"), b["en"] or "", b["items"], 1 if n in rares else 0))
+        rows.append((n, KO.get(n, b["en"] or "?"), b["en"] or "", b["items"], 2 if n in OPT else (1 if n in rares else 0)))
     for n, b in bosses.items():
         problems.append((key, "unplaced", n, b["en"]))
     e = (meta and meta.get("entr")) or ENTR.get(key)
@@ -166,7 +170,7 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
     f.write("-- FOA UI · 포에버 던전 보스별 전리품 (자동 생성 · tools/dungeons/gen_loot.py)\n")
     f.write("-- 보스 · 아이템: AllTheThings (MIT License) db/Camelot · https://github.com/ATTWoWAddon/AllTheThings\n")
     f.write("-- 던전 · 보스 한글 이름 · 권장 레벨 · 진행 순서: wowf.io 던전 안내\n")
-    f.write("-- 보스 = { 한글 이름, { 아이템 }, NPC 번호, 희귀/선택(1), 영문 이름 }\n")
+    f.write("-- 보스 = { 한글 이름, { 아이템 }, NPC 번호, 종류(0 보스 · 1 희귀 · 2 선택: 소환 · 곁방 보스), 영문 이름 }\n")
     f.write("local _, ns = ...\nns.FOREVER_LOOT = {\n\tsrc = \"AllTheThings · wowf.io\",\n\tlist = {\n")
     f.write("\n".join(out))
     f.write("\n\t},\n}\n")
