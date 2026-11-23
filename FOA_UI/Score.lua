@@ -1613,6 +1613,33 @@ function M:ExtraLine(link, which)
 	return txt ~= "" and txt or nil
 end
 
+-- 세트 장비: 지금 특성 BIS 가 같은 세트 여러 부위를 같이 낀 기준이면 한 줄 (포에버)
+--  점수는 아이템 하나의 능력치만 보고 세트 효과는 넣지 않는다 → 폭풍안개 갑옷처럼 세트로 BIS 가 된 장비는
+--  하나만 보면 점수가 낮게 나온다 (MythicSim 전투 도적: 폭풍안개 어깨 · 가슴 · 장갑 3세트)
+local SET_SLOT = { [1] = "머리", [2] = "목", [3] = "어깨", [5] = "가슴", [6] = "허리", [7] = "다리", [8] = "발", [9] = "손목",
+	[10] = "손", [11] = "반지", [12] = "반지", [13] = "장신구", [14] = "장신구", [15] = "등", [16] = "주장비", [17] = "보조장비", [18] = "원거리" }
+function M:SetNote(link)
+	if not (FOREVER and ns.BIS_FOREVER and C_Item and C_Item.GetItemInfo) then return end
+	local id = tonumber(link:match("item:(%d+)"))
+	local setID = id and select(16, C_Item.GetItemInfo(id))
+	if type(setID) ~= "number" or setID == 0 then return end
+	local class, cur = self:Spec()
+	local spec = class and cur and ns.BIS_FOREVER.specs[class .. ":" .. cur]
+	if not (spec and spec.g) then return end
+	local slots = {}
+	for inv, bid in pairs(spec.g) do
+		local s2 = select(16, C_Item.GetItemInfo(bid))
+		if s2 == nil and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, bid) end
+		if s2 == setID then slots[#slots + 1] = inv end
+	end
+	if #slots < 2 then return end
+	table.sort(slots)
+	local names = {}
+	for _, inv in ipairs(slots) do names[#names + 1] = SET_SLOT[inv] or tostring(inv) end
+	return string.format("|cffE3C07A세트|r |cffDCE0E6BIS는 이 세트 %d부위(%s)를 같이 낀 기준|r |cff8E939B· 점수엔 세트 효과가 빠져 있어서 하나만 보면 낮게 나와요|r",
+		#slots, table.concat(names, "·"))
+end
+
 function M:OnTooltip(tt)
 	do
 		if Ink.db.itemCompare == false or not tt.AddLine or not tt.GetItem then return end
@@ -1649,6 +1676,10 @@ function M:OnTooltip(tt)
 			r = last.r
 		end
 		if r then Line(tt, r) end
+		if r then
+			local okS, note = pcall(M.SetNote, M, link)
+			if okS and note then tt:AddLine(note, 1, 1, 1, true) end
+		end
 		-- 아직 안 배운 무기 종류: 무기 전문가에게 배우면 쓸 수 있다
 		if ReadTooltip(link).skill then
 			tt:AddLine("|cffE3C07A무기 전문가에게 배우면 쓸 수 있어요|r |cff8E939B· P(주문책) 옆 목록에서 위치|r")
