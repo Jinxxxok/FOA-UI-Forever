@@ -1350,11 +1350,14 @@ function M:Paint()
 				mats[#mats + 1] = { m[1], math.ceil(m[2] * left / math.max(1, cur[4])), Count(m[1]), ItemByName(m[1]), m[3] }
 			end
 		end
-		local cost, priced = 0, 0
+		local cost, priced, vendUsed = 0, 0, false
 		for i, m in ipairs(c.mats) do
 			local d = mats[i]
 			if d then
 				local enough = d[3] >= d[2]
+				-- 상인이 파는 재료면 개당 값을 붙인다 (VendorMats.lua)
+				local vp = ns.VendorPrice and ns.VendorPrice(d[4] or d[1])
+				if d[5] == "상인" and vp then d[5] = "상인 " .. Money(vp) end
 				m.n:SetText(d[1] .. (d[5] and d[5] ~= "" and ("  |cff5E636B" .. d[5] .. "|r") or ""))
 				m.v:SetText((enough and "|cff6FD39A" or "") .. d[3] .. "|r / " .. d[2])
 				m.item = d[4]
@@ -1362,6 +1365,7 @@ function M:Paint()
 					d[5] and d[5] ~= "" and TipKV("구하는 곳", d[5], TIP_SOFT, TIP_SOFT) or "" }
 				m:Show()
 				local pr = Price(d[1], d[4])
+				if vp and (not pr or vp < pr) then pr = vp; vendUsed = true end
 				if pr and d[2] > d[3] then cost = cost + pr * (d[2] - d[3]); priced = priced + 1 end
 			else
 				m:Hide()
@@ -1371,7 +1375,7 @@ function M:Paint()
 		local y = 66 + nm * 15 + 4
 		c.cost:ClearAllPoints()
 		c.cost:SetPoint("TOPLEFT", 12, -y)
-		c.cost:SetText(priced > 0 and ("모자란 재료 " .. Money(cost) .. " |cff5E636B(경매장)|r") or "")
+		c.cost:SetText(priced > 0 and ("모자란 재료 " .. Money(cost) .. (vendUsed and " |cff5E636B(경매장 · 상인)|r" or " |cff5E636B(경매장)|r")) or "")
 		c.src:ClearAllPoints()
 		c.src:SetPoint("TOPRIGHT", -12, -y)
 		-- 훈련사가 가르치는 제조법이면 "교관" 대신 실제 훈련사 (가까운 곳)
@@ -1505,6 +1509,9 @@ local PICK_SRC = { v = "상인", t = "훈련사", d = "드랍", w = "무작위 �
 local Q_HEX = { [1] = "FFFFFF", [2] = "1EFF00", [3] = "0070DD", [4] = "A335EE", [5] = "FF8000" }
 local function UnitCost(id)
 	local p = Price(nil, id)
+	-- 상인이 파는 재료: 상인 값이 더 싸면 그 값 (VendorMats.lua · 상인 창에서 본 값 또는 클래식 가격)
+	local v = ns.VendorPrice and ns.VendorPrice(id)
+	if v and (not p or v < p) then return v, false end
 	if p then return p, false end
 	if (ns.PROF_VENDOR_REAGENT or {})[id] and C_Item.GetItemInfo then
 		local sell = select(11, C_Item.GetItemInfo(id))
