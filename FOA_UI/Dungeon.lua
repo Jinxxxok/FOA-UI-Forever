@@ -5837,12 +5837,15 @@ function M:BuildBisPanel()
 	-- 보기 전환 (위 오른쪽): 장비 — 육성 · PvE · PvP │ 준비물
 	p.modes = {}
 	-- 본섭은 보기 전환이 없다 (장비 · 준비물만)
-	local TABS_BIS = FOREVER and { { "gear", "육성", "lvl" }, { "gear", "PvE", "pve" }, { "gear", "PvP", "pvp" }, { "prep", "준비물" } }
+	-- 포에버: 0.5티 (던전 세트 2 연계 퀘스트 가이드 · T05Guide.lua) 는 준비물 앞
+	local TABS_BIS = FOREVER and { { "gear", "육성", "lvl" }, { "gear", "PvE", "pve" }, { "gear", "PvP", "pvp" }, { "t05", "0.5티" }, { "prep", "준비물" } }
 		or { { "gear", "장비" }, { "prep", "준비물" } }
+	local firstOther
 	for i, m in ipairs(TABS_BIS) do
+		if m[1] ~= "gear" and not firstOther then firstOther = i end
 		local b = CreateFrame("Button", nil, p)
 		b:SetSize(52, 24)
-		b:SetPoint("TOPRIGHT", p, "TOPRIGHT", -16 - (#TABS_BIS - i) * 54 - ((FOREVER and i < #TABS_BIS) and 9 or 0), -48)
+		b:SetPoint("TOPRIGHT", p, "TOPRIGHT", -16 - (#TABS_BIS - i) * 54 - ((FOREVER and m[1] == "gear") and 9 or 0), -48)
 		b.label = Ink:Text(b, F.semi, 12, C.muted, "CENTER")
 		b.label:SetPoint("CENTER", 0, 1)
 		b.label:SetText(m[2])
@@ -5862,7 +5865,7 @@ function M:BuildBisPanel()
 	p.modeSep = p:CreateTexture(nil, "ARTWORK")
 	p.modeSep:SetColorTexture(1, 1, 1, 0.1)
 	p.modeSep:SetSize(1, 12)
-	p.modeSep:SetPoint("RIGHT", p.modes[#TABS_BIS], "LEFT", -5, 1)
+	p.modeSep:SetPoint("RIGHT", p.modes[firstOther or #TABS_BIS], "LEFT", -5, 1)
 	p.modeSep:SetShown(FOREVER and true or false)
 	self:BuildPrep(p)
 	p:SetScript("OnShow", function() M:PaintBis() end)
@@ -6438,20 +6441,35 @@ function M:PaintBis()
 	self:BuildRanks()
 	local mode = self.bisMode or "gear"
 	local view = BisView()
+	if mode == "t05" and (UnitLevel("player") or 0) < 58 then mode = "gear"; self.bisMode = "gear" end
 	for _, b in ipairs(p.modes) do
-		b:SetShown(not (b.view == "lvl" and MaxLevel()))   -- 만렙: 육성 칸 숨김
+		-- 만렙: 육성 칸 숨김 · 0.5티는 58레벨부터 (강화 퀘스트 최소 레벨)
+		b:SetShown(not (b.view == "lvl" and MaxLevel()) and not (b.mode == "t05" and ((UnitLevel("player") or 0) < 58 or not ns.T05)))
 		local on = (b.view and mode == "gear" and b.view == view) or (not b.view and mode == b.mode)
 		b.on = on
 		b.label:SetTextColor(on and C.text[1] or C.muted[1], on and C.text[2] or C.muted[2], on and C.text[3] or C.muted[3])
 		b.line:SetShown(on)
 	end
 	local gearShown = mode == "gear"
+	local t05 = mode == "t05"
 	for _, b in ipairs(p.slots) do b:SetShown(gearShown) end
 	for _, r in ipairs(p.ranks) do r:SetShown(gearShown) end
 	p.sep:SetShown(gearShown); p.selName:SetShown(gearShown); p.cur:SetShown(gearShown); p.hint:SetShown(gearShown)
-	p.prep:SetShown(not gearShown)
-	if p.prepSeg then p.prepSeg:SetShown(not gearShown) end
-	p.example:SetWidth(gearShown and (BP_W - 32) or (p.prepSeg and (BP_W - 32 - 230) or (BP_W - 32)))
+	p.prep:SetShown(not gearShown and not t05)
+	if p.prepSeg then p.prepSeg:SetShown(not gearShown and not t05) end
+	p.example:SetWidth((gearShown or t05) and (BP_W - 32) or (p.prepSeg and (BP_W - 32 - 230) or (BP_W - 32)))
+	local T05 = Ink.modules.T05
+	if T05 and T05.Show then pcall(T05.Show, T05, p, t05) end
+	if t05 then
+		local _, _, _, specName, class = SpecKey()
+		local cr, cg, cb = ns.ClassTint(class)
+		p.spec:SetText((UnitClass("player") or "") .. " · " .. (specName or ""))
+		p.spec:SetTextColor(cr, cg, cb)
+		p.pills:Refresh()
+		return
+	end
+	-- 0.5티 보기에서 바꿔 쓴 머리말(큰 숫자 · 옆 글)을 장비 보기 값으로 되돌린다
+	if p.sumGear then p.sumN:SetText(p.sumGear[1]); p.sumL:SetText(p.sumGear[2]) end
 	if not gearShown then
 		local _, _, _, specName, class = SpecKey()
 		local cr, cg, cb = ns.ClassTint(class)
@@ -6512,6 +6530,7 @@ function M:PaintBis()
 		b.label:SetTextColor(sel and a[1] or C.text[1], sel and a[2] or C.text[2], sel and a[3] or C.text[3])
 	end
 	p.sumN:SetText(wornBis .. " / " .. #INV)
+	p.sumGear = { p.sumN:GetText(), p.sumL:GetText() }
 	-- 고른 부위
 	local sb = p.slots[self.bisSel]
 	p.selName:SetText(sb.name)

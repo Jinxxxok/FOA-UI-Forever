@@ -61,6 +61,7 @@ FOA UI 는 **GNU General Public License v3.0 (또는 그 이후 버전)** 으로
 - 스카이본 지맥 · 정기의 합일점 자리: [Skyborne Leyline & Convergence Marker](https://www.curseforge.com/wow/addons/sllcm) v1.3.0 · tr0tsky (MIT License · `FOA_UI/LICENSE-SLLCM.txt`)
 - 던전 한글 이름 · 권장 레벨 · 보스 순서, 직업 기술 레벨, 전문기술 빠른 레벨링 경로, 특성 레벨업 순서: [wowf.io](https://wowf.io/ko)
 - 퀘스트 선행 · 택일 · 연결 퀘스트 · 조건(숙련도 · 평판 · 레벨) · 보고 NPC 와 자리: [QuestieDB](https://github.com/Questie/QuestieDB) 포에버 합본 자료 (GPL-3.0 · 포에버 실제 플레이 기록으로 확인한 선행 관계 포함 · `FOA_UI/LICENSE-QuestieDB.txt` · 만드는 방법은 `tools/quests/questie_export.py` → `tools/quests/gen_quests.py`)
+- 0.5티(던전 세트 2) 가이드: 단계 · 내야 하는 장비 · 재료 · 보상은 AllTheThings 포에버 0.5 세트 자료, 퀘스트 한글 이름 · 목표 · NPC 자리는 QuestieDB 포에버 합본 (만드는 방법은 `tools/forever/gen_t05.py`)
 - 상인에게 살 수 있는 제작 재료(파는 상인 · 자리 · 한글 이름): QuestieDB 포에버 합본 · 구입 가격 · 수량 한정: [cMaNGOS classic-db](https://github.com/cmangos/classic-db) (GPL-3.0 · 클래식 1.12 기준, 게임 안에서 상인 창을 열면 실제 가격으로 바꿔 기억 · 만드는 방법은 `tools/professions/gen_vendormats.py`)
 - 포에버에서 바뀐 지도 경계(스톰윈드 · 동부 역병지대 · 멀고어 · 붉은마루 산맥) 변환식: QuestieDB 자료와 대조해 확인 (`tools/maps/forever_frame_fixes.json`)
 - 아이콘: [Lucide](https://lucide.dev) (ISC License · `FOA_UI/Media/Icons/LICENSE-lucide.txt`)
