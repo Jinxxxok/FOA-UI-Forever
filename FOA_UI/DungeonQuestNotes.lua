@@ -85,6 +85,8 @@ ns.DUNGEON_QUEST_NOTES = {
 	[7484] = { 11486, "서쪽 도서관의 학자 리드로스에게서 시작" },
 	[7485] = { 11486, "서쪽 도서관의 학자 리드로스에게서 시작" },
 	[7463] = { 11486, "서쪽 도서관의 학자 리드로스에게서 시작" },
+	--  정화의 성물함: 받은 뒤 실리더스 남풍 마을 폐허의 먼지 쌓인 성물함 (QuestieDB 포에버 물체 179565 · 실리더스 지도 그대로)
+	[5527] = { 0, "받은 뒤: 실리더스 남풍 마을 폐허(북쪽 언덕 위 건물 안)의 먼지 쌓인 성물함 63.2, 55.4 · 라빈에게 가져가면 「악령덩굴 조각」" },
 	[7498] = { 11486, "혈투의 전장 보스가 떨어뜨리는 직업 책으로 시작 · 서쪽 도서관의 학자에게 가져가기" },
 	[7499] = { 11486, "혈투의 전장 보스가 떨어뜨리는 직업 책으로 시작 · 서쪽 도서관의 학자에게 가져가기" },
 	[7500] = { 11486, "혈투의 전장 보스가 떨어뜨리는 직업 책으로 시작 · 서쪽 도서관의 학자에게 가져가기" },
@@ -158,6 +160,16 @@ ns.DUNGEON_QUEST_PRE = {
 	[92422] = { 99156 },
 	[95216] = { 451 },
 }
+-- 던전에 한 번 들어가 봐야 주는 퀘스트 (퀘스트 자료엔 선행이 없고 게임 서버 조건이라 AllTheThings · QuestieDB 에 안 나온다)
+--  [퀘스트] = { 던전 번호(GetInstanceInfo 8번째 · ForeverLoot inst), "던전 이름", "안내" }
+--  들어간 기록: Ink.cdb.dEnter[던전 번호] (0.66.31부터) · 그 전 기록은 처치 기록(dKills)과 귀속 정보로 대신 확인
+ns.DUNGEON_QUEST_ENTER = {
+	-- 정화의 성물함 (라빈 사투르나 · 달의 숲): 혈투의 전장에 한 번이라도 들어가 본 캐릭터에게만 준다
+	--  warcraft.wiki.gg A Reliquary of Purity "must have entered Dire Maul at least once" · Wowhead 클래식 댓글
+	--  · 라빈 대화 선택지 "Have you ever heard of a place called Dire Maul?" (cMaNGOS · AzerothCore gossip 5102)
+	[5527] = { 429, "혈투의 전장", "혈투의 전장(동 · 서 · 북 어디든)에 한 번 들어갔다 나온 뒤 라빈에게 말 걸기 · 대화에 혈투의 전장 이야기가 있으면 먼저 골라 보세요" },
+}
+
 for _, list in pairs(ns.DUNGEON_QUESTS or {}) do
 	for _, q in ipairs(list) do
 		local add = ns.DUNGEON_QUEST_PRE[q[1]]

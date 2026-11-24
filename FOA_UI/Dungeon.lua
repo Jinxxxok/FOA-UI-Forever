@@ -4048,6 +4048,53 @@ end
 function DQS.Of(id) return ns.DUNGEON_QUEST_SKILL and ns.DUNGEON_QUEST_SKILL[id] end
 M.SkillRank, M.ProfName = DQS.Rank, DQS.Name
 
+-- 던전에 한 번 들어가 봐야 주는 퀘스트 (DungeonQuestNotes.lua 의 DUNGEON_QUEST_ENTER · 예: 정화의 성물함 = 혈투의 전장)
+--  들어간 기록은 캐릭터별 Ink.cdb.dEnter[던전 번호] · 기록을 시작하기 전에 들어간 건 처치 기록 · 지금 귀속으로 대신 본다
+function DQS.NoteEnter()
+	local cdb = Ink.cdb
+	if not (cdb and IsInInstance and IsInInstance()) then return end
+	local iid = plain(select(8, GetInstanceInfo()))
+	if type(iid) ~= "number" or iid <= 0 then return end
+	cdb.dEnter = cdb.dEnter or {}
+	cdb.dEnter[iid] = time()
+end
+function DQS.Entered(inst)
+	local cdb = Ink.cdb
+	if cdb and cdb.dEnter and cdb.dEnter[inst] then return true end
+	for _, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
+		if d.inst == inst then
+			local k = cdb and cdb.dKills and cdb.dKills[d.key]
+			if k and (k.t or 0) > 0 then return true end
+		end
+	end
+	if GetNumSavedInstances and GetSavedInstanceInfo then
+		for i = 1, (GetNumSavedInstances() or 0) do
+			local r = { pcall(GetSavedInstanceInfo, i) }
+			if r[1] and plain(r[15]) == inst then return true end   -- 14번째: 던전 번호
+		end
+	end
+	return false
+end
+-- 아직 안 풀린 입장 조건 (이미 끝냈거나 받은 퀘스트는 없음)
+function DQS.Gate(id)
+	local g = ns.DUNGEON_QUEST_ENTER and ns.DUNGEON_QUEST_ENTER[id]
+	if not g or QDone(id) or QInLog(id) or DQS.Entered(g[1]) then return end
+	return g
+end
+-- 툴팁 줄: 필요 조건 · 안내
+function DQS.GateTip(tt, id)
+	local g = ns.DUNGEON_QUEST_ENTER and ns.DUNGEON_QUEST_ENTER[id]
+	if not g or QDone(id) or QInLog(id) then return end
+	local ok = DQS.Entered(g[1])
+	tt:AddLine("필요: " .. g[2] .. "에 한 번 들어가 보기" .. (ok and "  |cff6FD39A(들어가 봄)|r" or "  |cffFF6B5E(아직 안 들어감)|r"),
+		ok and 0.44 or 1, ok and 0.83 or 0.42, ok and 0.6 or 0.37)
+	Ink.TipLine(tt, g[3], 0.78, 0.8, 0.84)
+	if not ok then
+		Ink.TipLine(tt, "들어간 기록 · 처치 기록 · 귀속으로 확인해요 · 예전에 들어가 본 적이 있다면 이미 받을 수 있을지도 몰라요", 0.56, 0.58, 0.61)
+	end
+end
+M.DQGate = DQS.Gate
+
 -- 내가 받을 수 있는 퀘스트 목록 + 상태 (묶기 전)
 local function Entries(key)
 	local inst = DQ_INST[key or ""]
@@ -4080,6 +4127,9 @@ local function Entries(key)
 			local miss = 0
 			-- 연결 퀘스트(선택)는 선행으로 세지 않는다
 			for _, p in ipairs((PreOf(q[1]))) do if not QDone(p) and not IsCrumb(p) then miss = miss + 1 end end
+			-- 던전 입장 조건 (선행 하나로 센다)
+			e.gate = DQS.Gate(q[1])
+			if e.gate then miss = miss + 1 end
 			local crumb = IsCrumb(q[1])
 			if QDone(q[1]) then e.state, e.order = "done", 5
 			elseif QInLog(q[1]) then e.state, e.order = "log", 1
@@ -4239,6 +4289,7 @@ local function StepState(st, lvl)
 	for _, p in ipairs((PreOf(st.id))) do
 		if not QDone(p) and not IsCrumb(p) then return "pre" end
 	end
+	if DQS.Gate(st.id) then return "pre" end
 	local need
 	if st.e then need = st.e.q[2] else
 		local _, dq, qr = PreOf(st.id)
@@ -4583,6 +4634,8 @@ local function StepSub(st)
 	end
 	if st.opt then t = (t ~= "" and (t .. "  ·  ") or "") .. "연결 퀘스트 (선택)" end
 	if st.side then t = (t ~= "" and (t .. "  ·  ") or "") .. "갈래 (꼭 안 해도 됨)" end
+	local g = DQS.Gate(st.id)
+	if g then t = g[2] .. " 입장 필요" .. (t ~= "" and ("  ·  " .. t) or "") end
 	return t
 end
 M.StepSub = StepSub
@@ -4727,6 +4780,7 @@ function M:StepTip(r)
 	if s2.lvl and s2.lvl > 0 then tt:AddLine(s2.lvl .. "레벨부터", 0.7, 0.72, 0.75) end
 	if s2.npc or s2.zone then Ink.TipLine(tt, "시작: " .. (s2.npc or "") .. ((s2.npc and s2.zone) and "  ·  " or "") .. (s2.zone or ""), 1, 0.82, 0.32) end
 	if Ink.TimerTipLine then Ink.TimerTipLine(tt, st.id) end
+	DQS.GateTip(tt, st.id)
 	tt:AddLine(" ")
 	tt:AddLine(st.state == "done" and "끝냄" or (st.state == "log" and "진행 중" or "던전 밖 선행 퀘스트"), 0.56, 0.58, 0.61)
 	tt:AddLine("클릭: 시작 위치를 지도에", 0.56, 0.58, 0.61)
@@ -4750,6 +4804,8 @@ function M:ChainTip(r)
 		mark = mark .. "  "
 		local tag = st.dung and "  |cffFFD15F던전|r" or ""
 		if st.side then tag = tag .. "  |cff8E939B갈래|r" elseif st.opt then tag = tag .. "  |cff8E939B선택|r" end
+		local gate = DQS.Gate(st.id)
+		if gate then tag = tag .. "  |cffFF6B5E" .. gate[2] .. " 입장 필요|r" end
 		local dim = st.state == "done" or st.side
 		tt:AddLine(mark .. (QTitle(st.id) or ("#" .. st.id)) .. tag, dim and 0.6 or 0.92, dim and 0.62 or 0.92, dim and 0.65 or 0.9)
 	end
@@ -4797,6 +4853,7 @@ function M:QuestTip(r)
 		tt:AddLine("필요: " .. DQS.Name(sk[1]) .. " " .. sk[2] .. (short and ("  |cffFF6B5E(지금 " .. rank .. ")|r") or ""),
 			short and 1 or 0.44, short and 0.42 or 0.83, short and 0.37 or 0.6)
 	end
+	DQS.GateTip(tt, e.id)
 	if note and note[2] then Ink.TipLine(tt, note[2], 0.78, 0.8, 0.84) end
 	-- 던전 안에서 시작하는 퀘스트 (좌표가 보고하는 곳이어도: 아이템으로 시작하는 퀘스트)
 	if note and note[1] and note[1] > 0 and (q[4] == 0 or (q[14] or 0) == KIND_TURNIN) then
@@ -5044,7 +5101,9 @@ function M:PaintStep(r, st, first, last, prevDone)
 		end
 	elseif st.current then
 		if st.state == "soon" then r.pill:Set((st.need or "") .. "레벨부터", C.orange, 0, 0.55)
-		elseif st.state == "pre" then r.pill:Set("선행 필요", C.muted, 0, 0.3)
+		elseif st.state == "pre" then
+			if DQS.Gate(st.id) then r.pill:Set("입장 먼저", C.orange, 0, 0.5)
+			else r.pill:Set("선행 필요", C.muted, 0, 0.3) end
 		else r.pill:Set("받기", C.green, 0.16, 0.5) end
 	elseif st.side then r.pill:Set("갈래", C.muted, 0, 0.3)
 	elseif st.opt then r.pill:Set("선택", C.muted, 0, 0.3)
@@ -5198,6 +5257,10 @@ function M:PaintQuests()
 				end
 			end
 		end
+		-- 던전 입장 조건: 남은 선행 퀘스트가 없으면 그것부터
+		if e.gate and e.state == "pre" and (e.miss or 0) <= 1 then
+			sub = e.gate[2] .. "에 먼저 들어가 보기  ·  " .. ((giver or zone) and ((giver or "") .. ((giver and zone) and " · " or "") .. (zone or "")) or "")
+		end
 		if e.crumb and e.nextQ then
 			-- 연결 퀘스트: 어느 던전 퀘스트로 안내하는지
 			local nt = QTitle(e.nextQ)
@@ -5234,7 +5297,10 @@ function M:PaintQuests()
 		elseif e.state == "ok" then edge = 0.55
 		elseif e.state == "done" then stText, icon, fill = "완료", "Check", 0.08; col = C.green
 		elseif e.state == "soon" then stText = q[2] .. "레벨부터"
-		elseif e.state == "pre" then stText = "선행 " .. e.miss .. "개 남음" end
+		elseif e.state == "pre" then
+			if e.gate and e.miss <= 1 then stText, col = "입장 먼저", C.orange
+			else stText = "선행 " .. e.miss .. "개 남음" end
+		end
 		r.state:SetText(stText)
 		r.state:SetTextColor(col[1], col[2], col[3], e.state == "done" and 0.75 or 1)
 		r.chip.bg:SetVertexColor(col[1], col[2], col[3], fill)
@@ -6796,7 +6862,7 @@ function M:Init()
 		w:SetScript("OnEvent", function(_, event, a1, a2, _, _, a5)
 			if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
 				if event == "PLAYER_ENTERING_WORLD" then M.visit = (M.visit or 0) + 1; M.wingSeen = nil; M.enterTries = 0 end
-				C_Timer.After(1, function() pcall(M.OnForeverEnter, M) end)
+				C_Timer.After(1, function() pcall(DQS.NoteEnter); pcall(M.OnForeverEnter, M) end)
 			elseif event == "ENCOUNTER_END" then
 				if plain(a5) == 1 then pcall(M.OnBossKilled, M, a2, a1) end
 			elseif event == "BOSS_KILL" then
