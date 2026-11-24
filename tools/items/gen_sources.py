@@ -5,7 +5,7 @@
   - 장착 부위가 있는 고급(초록) 이상 장비만, 출처 종류: 월드 드랍 · 몹 드랍 · 희귀 몹/발견 · 상인 · 평판 · 던전 일반 몹/희귀 드랍
   - 보스 · 퀘스트 · 제작 출처는 기존 자료(ForeverLoot · ForeverQuestRewards · ForeverCrafts)가 맡는다
  wowf_src_names.txt : 이름 사전 (줄 번호 = 0부터)
- wowf_src_rows.txt  : "아이템:요구레벨:출처,출처;..."  출처 = 종류(w m r v p t x) + 진영(0 공통 1 호드 2 얼라) + 값(이름 번호 / 던전 키)
+ wowf_src_rows.txt  : "아이템:요구레벨:출처,출처;..."  출처 = 종류(w m r v p t x · u 언더마인 상인은 아래 UNDERMINE 표) + 진영(0 공통 1 호드 2 얼라) + 값(이름 번호 / 던전 키)
                       "+v3" = 상인 3곳 더 · "+m2" = 몹 2종 더
 사용: python3 -I gen_sources.py <출력.lua>
 """
@@ -17,6 +17,14 @@ rows = open(os.path.join(here, "wowf_src_rows.txt"), encoding="utf-8").read().st
 ZONE = {"행동대장 채찍송곳니": "돌발톱 산맥", "이안 스위프트리버": "불모의 땅", "사자왕 후마르": "불모의 땅",
         "껑충발 타크": "불모의 땅", "번개갈기": "불모의 땅", "Dro'zem the Blasphemous": "붉은마루 산맥",
         "칼날심장": "버섯구름 봉우리", "Nightveiled Rotheap": "저습지", "Lordaeron Captain": "로데론의 폐허"}
+# 언더마인 상인 (포에버 1.60.1 신규 · wowf.io 수집 2026-11-10 뒤에 나와서 위 자료엔 없다): 빛바랜 언더마인 주화로 사는 장비
+#  픽스 시직스 <언더마인 무역상> · 가시덤불 골짜기 무법항 28.5, 75.8 · 모두 60레벨
+#  자료: AllTheThings (MIT) .contrib/.db/forever/expansion features/undermine trader.lua (2026-11-24 확인)
+UNDERMINE = {272393: 100, 272394: 100, 272395: 100, 272396: 100, 272397: 100, 272398: 100, 272399: 100,
+             272401: 100, 272402: 100, 272403: 100, 272404: 100, 272405: 100, 272410: 100,
+             272406: 75, 272407: 75, 272408: 75, 272409: 75, 272411: 75, 272413: 75, 272414: 75, 272415: 75,
+             272427: 50, 272428: 50, 272429: 50, 272430: 50, 272431: 50, 272432: 50, 272433: 50, 272434: 50,
+             272435: 50, 272436: 50, 272437: 125, 272438: 125, 272439: 125, 272440: 125}
 def q(s): return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 with open(sys.argv[1], "w", encoding="utf-8") as f:
     f.write("-- FOA UI · 장비 얻는 곳: 월드 드랍 · 필드 몹 · 필드 희귀몹 · 상인 · 평판 · 던전 일반 몹 (자동 생성 · tools/items/gen_sources.py)\n")
@@ -30,6 +38,8 @@ with open(sys.argv[1], "w", encoding="utf-8") as f:
         f.write("\t[%s] = %s,\n" % (q(k), q(v)))
     f.write("}\n")
     f.write("local RAW = %s\n\n" % q(rows))
+    f.write("-- 언더마인 상인 (포에버 1.60.1 신규 · 픽스 시직스 · 무법항): [아이템] = 빛바랜 언더마인 주화 개수 · 자료: AllTheThings (MIT)\n")
+    f.write("local UNDERMINE = { %s }\n\n" % ", ".join("[%d] = %d" % (k, v) for k, v in sorted(UNDERMINE.items())))
     f.write('''-- [아이템] = { rl = 요구 레벨, src = { { 종류, 진영, 값 }, ... }, more = { v = n, m = n } }
 local S = {}
 for row in RAW:gmatch("[^;]+") do
@@ -48,6 +58,12 @@ for row in RAW:gmatch("[^;]+") do
 		end
 		S[tonumber(id)] = e
 	end
+end
+-- 언더마인 상인 장비 (종류 "u" · 값 = 주화 개수)
+for id, cost in pairs(UNDERMINE) do
+	local e = S[id] or { rl = 60, src = {}, more = {} }
+	S[id] = e
+	table.insert(e.src, { "u", 0, cost })
 end
 ns.FOREVER_SOURCES = S
 
@@ -115,6 +131,8 @@ function ns.ItemSourceText(id)
 			parts[#parts + 1] = "상인 · " .. table.concat(l, ", ") .. (e.more.v and (" 외 " .. e.more.v .. "곳") or "")
 		elseif k == "p" then
 			parts[#parts + 1] = "평판 보상 · " .. (l[1]:gsub(" 평판 · ", " · "))
+		elseif k == "u" then
+			parts[#parts + 1] = "언더마인 상인 · 픽스 시직스 (무법항 28.5, 75.8) · 빛바랜 언더마인 주화 " .. l[1] .. "개"
 		elseif k == "t" or k == "x" then
 			-- 날개가 여러 개인 던전은 한 번만: "붉은십자군 수도원 묘지 · 도서관"
 			local ds, grp = {}, {}
