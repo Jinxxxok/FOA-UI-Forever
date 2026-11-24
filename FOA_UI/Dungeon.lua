@@ -133,6 +133,7 @@ local function ViewKey()
 	local v = ViewSpecID()
 	return type(v) == "string" and v ~= "" and v or nil
 end
+M.ViewKey = ViewKey   -- 0.5티 가이드(T05Guide.lua): 보상 묶음을 이 특성 BIS 로 고른다
 
 -- BIS 판 보기: 육성(지금 레벨 최고템) · PvE(공략 BIS) · PvP(명예 · 계급 장비 + PvP 점수)
 --  고른 적이 없으면 만렙 전 = 육성, 만렙 = PvE · 만렙이면 육성 칸 자체가 없다 (예전에 육성을 골라 뒀어도 PvE)
@@ -6049,6 +6050,7 @@ local SLOT_KO = { Head = "머리", Neck = "목", Shoulder = "어깨", Back = "�
 	Legs = "다리", Feet = "발", ["Main Hand"] = "주장비", ["Off Hand"] = "보조장비", Ranged = "원거리" }
 local STAT_KO = {
 	{ "Offense:", "공격:" }, { "Defense:", "방어:" },
+	{ "Hit to (%d+%%)", "적중(%1까지)" }, { "Fire/Shadow", "화염 · 암흑" }, { "Block Chance > Crit Chance > Block$", "Block Chance > Crit Chance > 방패 막기 수치" },
 	{ "Shadow Spell Damage", "암흑 주문력" }, { "Fire Spell Damage", "화염 주문력" },
 	{ "Weapon Damage", "무기 공격력" }, { "Weapon DPS", "무기 초당 공격력" }, { "Healing Power", "치유량" }, { "Spell Damage", "주문 공격력" },
 	{ "Spell Piercing", "주문 관통" },
@@ -6105,7 +6107,7 @@ function M:PaintPrepForever(f, fo)
 	end
 	if e == 0 then SetLine(f.ench[1], nil, "마법부여", "자료 준비 중") end
 	local st = KoStats(fo.stats)
-	f.hint:SetText((st ~= "" and ("능력치: " .. st .. "\n") or "") .. "자료: Method 공략 (포에버 1.60.1)")
+	f.hint:SetText((st ~= "" and ("능력치: " .. st .. "\n") or "") .. "자료: " .. (fo.psrc or "Method 포에버 공략 (1.60.1)"))
 end
 
 -------------------------------------------------------------------------------

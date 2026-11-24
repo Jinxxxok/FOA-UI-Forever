@@ -17,6 +17,14 @@ local LOC_NOTE = {
 	[16033] = "검은바위 산 · 검은바위 첨탑 입구 바로 앞 (유령 · 4차원 유령 탐색기로 보여요)",
 	[16016] = "동부 역병지대 · 스트라솔름 입구 앞 (유령 · 4차원 유령 탐색기로 보여요)",
 }
+-- 단계 안내 (공략 · 알려진 문제)
+local QUEST_NOTE = {
+	[8922] = "진지한 제안을 끝내면 델리아나에게 다시 말을 걸어 받아요. 안 보이면 재접속해 보세요. 시즌 오브 디스커버리에서 이 퀘스트가 안 뜨던 문제가 핫픽스로 고쳐진 적이 있어서, 그래도 없으면 GM 문의를 해 주세요",
+	[8923] = "진지한 제안을 끝내면 모크바르에게 다시 말을 걸어 받아요. 안 보이면 재접속해 보세요. 시즌 오브 디스커버리에서 이 퀘스트가 안 뜨던 문제가 핫픽스로 고쳐진 적이 있어서, 그래도 없으면 GM 문의를 해 주세요",
+	[8945] = "스트라솔름 정비용 입구 · 남작 리븐데어를 45분 안에 (들어가면 시간이 시작돼요)",
+	[9015] = "검은바위 나락 투기장에서 도전의 깃발을 꽂으면 텔드렌 무리가 나와요",
+	[8995] = "검은바위 첨탑 상층에서 부름의 화로로 군주 발타라크를 불러내 처치",
+}
 local QCOL = { [0] = { 0.62, 0.62, 0.62 }, { 1, 1, 1 }, { 0.12, 1, 0 }, { 0, 0.44, 0.87 }, { 0.64, 0.21, 0.93 }, { 1, 0.5, 0 } }
 
 local function D() return ns.T05 end
@@ -92,11 +100,13 @@ function M:Steps()
 		if st.up then
 			local u = cd[st.up]
 			if u then
+				-- 포에버 번호(SoD식 84xxx)와 옛 클래식 번호 둘 다 본다 (어느 쪽으로 끝냈든 끝낸 걸로)
 				local q = fac == 1 and u.H or u.A
+				local q0 = fac == 1 and u.H0 or u.A0
 				local items = {}
 				for _, c in ipairs((fac == 1 and u.costH or u.costA) or {}) do items[#items + 1] = c end
-				out[#out + 1] = { q = q, npc = fac == 1 and u.nH or u.nA, e = fac == 1 and u.eH or u.eA, items = items, gold = u.gold,
-					up = st.up, reward = u.reward }
+				out[#out + 1] = { q = q, q0 = (q0 and q0 ~= q) and q0 or nil, npc = fac == 1 and u.nH or u.nA, e = fac == 1 and u.eH or u.eA,
+					items = items, gold = u.gold, up = st.up, reward = u.reward }
 			end
 		else
 			local v = Pick(st)
@@ -104,14 +114,40 @@ function M:Steps()
 		end
 	end
 	for _, s in ipairs(out) do
-		local t = d.quest[s.q]
+		local t = d.quest[s.q] or (s.q0 and d.quest[s.q0])
 		s.title = t and t[1] or ("퀘스트 #" .. s.q)
 		s.obj = t and t[2] or ""
-		s.done = Done(s.q)
-		s.log = InLog(s.q)
-		s.ready = s.log and Ready(s.q)
+		s.done = Done(s.q) or (s.q0 and Done(s.q0)) or false
+		local lq = InLog(s.q) and s.q or ((s.q0 and InLog(s.q0)) and s.q0 or nil)
+		s.log = lq ~= nil
+		s.ready = lq and Ready(lq) or false
+		s.note = QUEST_NOTE[s.q]
 	end
 	return out
+end
+
+-- 보상 묶음 고르기: 지금 보고 있는 특성 BIS 에 든 묶음 (없으면 첫 묶음)
+function M:Block(cd)
+	local D2 = Ink.modules.Dungeon
+	local key = D2 and D2.ViewKey and D2.ViewKey()
+	if not key and ns.Score and ns.Score.Spec then local _, k = ns.Score:Spec(); key = k end
+	local spec = key and ns.BIS_FOREVER and ns.BIS_FOREVER.specs[MyClass() .. ":" .. key]
+	if not spec then return 1 end
+	local want = {}
+	for _, id in pairs(spec.g or {}) do want[id] = true end
+	for _, a in ipairs(spec.alt or {}) do if a[2] then want[a[2]] = true end end
+	local cnt, best, bn = {}, 1, 0
+	for u = 1, 4 do
+		for b, ids in ipairs(cd[u] and cd[u].reward or {}) do
+			for _, id in ipairs(ids) do
+				if want[id] then
+					cnt[b] = (cnt[b] or 0) + 1
+					if cnt[b] > bn then best, bn = b, cnt[b] end
+				end
+			end
+		end
+	end
+	return best
 end
 
 -- 지금 할 일 = 처음으로 안 끝낸 단계
@@ -304,6 +340,7 @@ local function Row(f, i)
 			if en then GameTooltip:AddDoubleLine("보고", en .. " · " .. et, 0.7, 0.72, 0.75, 1, 1, 1) end
 		end
 		if s.obj ~= "" then Ink.TipLine(GameTooltip, s.obj, 0.7, 0.72, 0.75) end
+		if s.note then Ink.TipLine(GameTooltip, s.note, 0.89, 0.75, 0.48) end
 		for _, it in ipairs(s.items or {}) do
 			local h = Have(it[1])
 			GameTooltip:AddDoubleLine("  " .. ItemName(it[1]), h .. " / " .. it[2], 0.85, 0.85, 0.85, h >= it[2] and 0.44 or 1, h >= it[2] and 0.83 or 1, h >= it[2] and 0.6 or 1)
@@ -378,7 +415,9 @@ function M:Paint()
 	if self.curI ~= curI then self.userScrolled = nil end   -- 단계가 바뀌면 목록을 다시 지금 단계로
 	self.curI = curI
 	-- 세트 이름: 첫 보상 이름 앞 낱말 (검은장막 팔보호구 → 검은장막)
-	local first = cd[1] and cd[1].reward[1]
+	self.block = self:Block(cd)
+	local rb = cd[1] and cd[1].reward and (cd[1].reward[self.block] or cd[1].reward[1])
+	local first = (rb and rb[1]) or (cd[1] and cd[1].old and cd[1].old[1])
 	-- (검은장막의 팔보호구 → 검은장막 · 무용의 → 무용)
 	local setName = first and (ItemName(first):match("^(%S+)") or ""):gsub("의$", "") or "0.5티"
 	if setName == "" then setName = "0.5티" end
@@ -401,11 +440,14 @@ function M:Paint()
 		c.check:SetVertexColor(C.green[1], C.green[2], C.green[3])
 		c.check:SetShown(done and true or false)
 		for k = 1, 3 do
-			local id = s and s.reward and s.reward[k]
+			local blocks = s and s.reward or {}
+			local ids = blocks[self.block] or blocks[1] or {}
+			local id = ids[k]
 			local ic = c.icons[k]
 			if id then
 				ic:SetItem(id, not done)
-				ic.extra = done and "받음" or ("이 단계에서 받는 장비 · " .. UP_LABEL[u] .. " 강화")
+				ic.extra = (done and "받음" or ("이 단계에서 받는 장비 · " .. UP_LABEL[u] .. " 강화"))
+					.. (#blocks > 1 and string.format("\n특성마다 다른 묶음 중에서 골라 받아요 (%d가지) · 지금 특성 BIS 기준 묶음을 보여 줘요", #blocks) or "")
 				ic:Show()
 			else
 				ic:Hide()
@@ -441,7 +483,9 @@ function M:Paint()
 		local gname, txt, wp = Where(nid)
 		now.where.t:SetText(gname and ((cur.ready and cur.e and "보고: " or "") .. gname .. "  ·  " .. txt .. (wp and "  |cff5E636B(누르면 지도)|r" or "")) or "")
 		now.where.x = wp
-		now.obj:SetText(cur.obj ~= "" and cur.obj or "퀘스트 내용은 받은 뒤 퀘스트 목록에서 확인해 주세요")
+		local objT = cur.obj ~= "" and cur.obj or "퀘스트 내용은 받은 뒤 퀘스트 목록에서 확인해 주세요"
+		if cur.note and not cur.log then objT = objT .. "\n|cffE3C07A" .. cur.note .. "|r" end
+		now.obj:SetText(objT)
 		-- 재료 칩: 2열
 		local k = 0
 		local objH = math.min(42, (now.obj:GetStringHeight() or 12))

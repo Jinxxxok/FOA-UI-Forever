@@ -48,10 +48,17 @@ if os.path.exists(ms):
             specs[cur]['pre'].append((SLOT2.get(slot, slot), int(q[2]), q[3]))
 for line in open(src_dir + '/cons.txt', encoding='utf-8'):
     line = line.strip()
-    if not line: continue
+    if not line or line.startswith('#'): continue
     if line.startswith('@'):
         keys = line[1:].split()
         for k in keys: specs.setdefault(k, {'pre': [], 'alt': [], 'stats': '', 'E': [], 'C': []})
+        continue
+    # R| 준비물 출처 글 · T| 능력치 순서 (한국어 · 비어 있는 전문화를 채운다)
+    if line.startswith('R|'):
+        for k in keys: specs[k]['psrc'] = line[2:]
+        continue
+    if line.startswith('T|'):
+        for k in keys: specs[k]['stats'] = line[2:]
         continue
     kind, slot, ref = line.split('|')
     t, n = ref.split('=')
@@ -102,10 +109,12 @@ def tokenize(s):
     return ''.join(out)
 L = ['-- FOA UI · 포에버 BIS · 준비물 (자동 생성 · tools/forever/gen_bis.py)',
      '-- 출처: MythicSim 포에버 시뮬 BIS (2026-11-22 · 공격대 전) · wowforever.be (방어 전사 · 신성 사제 · 복원 주술사)',
-     '--       Method WoW Forever 공략 (2026-11-04 · 신성 · 보호 성기사 · 회복 드루이드 · 마부 · 소모품)',
+     '--       Method WoW Forever 공략 (2026-11-04 · 신성 · 보호 성기사 · 회복 드루이드 · 마부 · 소모품 / 11-24 전사 준비물)',
+     '--       Wowhead 포에버 공략 (2026-11 · 마법사 · 징벌 성기사 · 조화 드루이드 · 정기 주술사 준비물 · 능력치 순서)',
+     '--       공략에 60 추천이 아직 없는 전문화(고양 · 복원 주술사 · 신성 사제 · 야성)는 같은 역할 공략 기준 (psrc 에 적음)',
      '--  아이템 번호는 각 사이트의 와우헤드 포에버 링크 · 포에버 아이템 자료(QuestieDB · ATT)와 이름 대조함',
      '--  획득처의 {n:번호|영어} NPC · {q:…} 퀘스트 · {f:…} 평판 = 게임에서 그 언어 이름으로 (번호: QuestieDB GPL-3.0 포에버 합본 · ATT 평판 목록)',
-     '-- from = 이 전문화 장비 목록 출처 · g = BIS { [칸] = 아이템 } · alt = 대체 { 칸, 아이템 } (공략 순서) · src = 획득처 · en = 마부 · co = 소모품',
+     '-- from = 이 전문화 장비 목록 출처 · g = BIS { [칸] = 아이템 } · alt = 대체 { 칸, 아이템 } (공략 순서) · src = 획득처 · en = 마부 · co = 소모품 · psrc = 준비물 출처(없으면 Method)',
      'local _, ns = ...', 'ns.BIS_FOREVER = {', '\tsrc = "Method 공략",', '\tspecs = {']
 for key in sorted(specs):
     d = specs[key]
@@ -131,7 +140,8 @@ for key in sorted(specs):
     en = ', '.join(f'{{ "{esc(s)}", "{t}", {n} }}' for s, t, n in d['E'])
     co = ', '.join(f'{{ "{esc(s)}", {n} }}' for s, t, n in d['C'])
     fr = d.get('from') or ('Method 공략' if g else '')
-    L.append(f'\t\t["{key}"] = {{ from = "{esc(fr)}", stats = "{esc(d["stats"])}", g = {{ {gs} }}, alt = {{ {als} }}, src = {{ {ss} }}, en = {{ {en} }}, co = {{ {co} }} }},')
+    ps = f', psrc = "{esc(d["psrc"])}"' if d.get('psrc') else ''
+    L.append(f'\t\t["{key}"] = {{ from = "{esc(fr)}", stats = "{esc(d["stats"])}"{ps}, g = {{ {gs} }}, alt = {{ {als} }}, src = {{ {ss} }}, en = {{ {en} }}, co = {{ {co} }} }},')
 L += ['\t},', '}', '']
 open(out, 'w', encoding='utf-8').write('\n'.join(L))
 print(len(specs), 'specs')

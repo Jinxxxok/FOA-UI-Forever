@@ -180,6 +180,64 @@ for block in root:
         for e in block["groups"] or []:
             SHARED.extend(variants(e))
 
+# ── 포에버 실제 강화 퀘스트: 시즌 오브 디스커버리식 84147~84210 (델리아나 230319 · 모크바르 230317) ──
+#  ATT 포에버 자료는 옛 클래식 번호(8905~9013)라 그대로 쓰면 끝낸 퀘스트를 못 알아본다.
+#  QuestieDB 포에버 기록(traces)에 델리아나 230319 가 84147~84154 를 주고받는 게 남아 있다 · 직업은 QuestieDB SoD 보정 파일
+SOD_RANGE = {(1, 2): range(84147, 84155), (1, 1): range(84155, 84163), (2, 2): range(84163, 84171), (2, 1): range(84171, 84179),
+             (3, 2): range(84179, 84187), (3, 1): range(84187, 84195), (4, 2): range(84195, 84203), (4, 1): range(84203, 84211)}
+sod_src = open(os.path.join(QDB, "src", "corrections", "Sod", "sodQuestFixes.lua"), encoding="utf-8").read()
+SOD_CLS = {}
+# 블록마다 (다음 항목으로 넘어가 읽지 않게) · 블록에 직업이 없으면(84150 등) QuestieDB 합본의 직업 비트
+for m in re.finditer(r"\[(84[12]\d\d)\] = \{[^\n]*\n(.*?)\n        \},", sod_src, re.S):
+    c = re.search(r"requiredClasses\] = classIDs\.(\w+)", m.group(2))
+    if c:
+        SOD_CLS[int(m.group(1))] = c.group(1)
+BIT = {1: "WARRIOR", 2: "PALADIN", 4: "HUNTER", 8: "ROGUE", 16: "PRIEST", 64: "SHAMAN", 128: "MAGE", 256: "WARLOCK", 1024: "DRUID"}
+for qid in range(84147, 84211):
+    r = Q.get(qid)
+    if qid not in SOD_CLS and r and r[6] in BIT:
+        SOD_CLS[qid] = BIT[r[6]]
+SOD = {}
+for (u, fac), rng in SOD_RANGE.items():
+    for qid in rng:
+        c = SOD_CLS.get(qid)
+        if c:   # QuestieDB 합본에 빠진 번호(84207 등)도 SoD 보정 파일에 직업이 있으면 쓴다
+            SOD[(c, u, fac)] = qid
+print("SoD 강화 퀘스트", len(SOD))
+
+# 보상: 포에버는 특성별로 고르는 새 0.5티 (226xxx) · 직업마다 묶음 1~4개 (8부위씩) · 맨 끝 이름 없는 묶음(Wrists · Waist …)은 안 줌
+ITEMDB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(ATT))), ".config", "exports", "ItemDB.lua")
+TOKEN = {"DRUID": "Feralheart", "HUNTER": "Beastmaster", "MAGE": "Sorcerer", "PALADIN": "Soulforge", "PRIEST": "Virtuous",
+         "ROGUE": "Darkmantle", "SHAMAN": "Five Thunders", "WARLOCK": "Deathmist", "WARRIOR": "Heroism"}
+GENERIC = {"Wrists", "Waist", "Shoulders", "Legs", "Helm", "Gloves", "Boots", "Chest"}
+UP_SLOTS = {1: [9], 2: [6, 10], 3: [8, 7, 3], 4: [1, 5]}
+idb = open(ITEMDB, encoding="utf-8").read()
+SETITEMS = {c: [] for c in TOKEN}
+for m in re.finditer(r'^\[(\d+)\]=\{([^\n]*)\}', idb, re.M):
+    iid = int(m.group(1))
+    if not (226700 <= iid <= 227100):
+        continue
+    nm = re.search(r'name="([^"]*)"', m.group(2))
+    it = re.search(r'inventoryType=(\d+)', m.group(2))
+    if not (nm and it):
+        continue
+    for c, tok in TOKEN.items():
+        if tok in nm.group(1):
+            inv = int(it.group(1))
+            SETITEMS[c].append((iid, 5 if inv == 20 else inv, nm.group(1)))
+BLOCKS = {}
+for c, lst in SETITEMS.items():
+    lst.sort()
+    blocks = [lst[i:i + 8] for i in range(0, len(lst), 8)]
+    keep = []
+    for b in blocks:
+        words = {w for _, _, n in b for w in n.replace("of The Five Thunders", "").replace("of Heroism", "").split() if w in GENERIC}
+        if len(words) >= 6:
+            continue   # 이름 없는 묶음
+        keep.append({inv: iid for iid, inv, _ in b})
+    BLOCKS[c] = keep
+print("보상 묶음", {c: len(b) for c, b in BLOCKS.items()})
+
 # 공통 줄: 영어 이름 → 변형들
 by_name = {}
 for qid, fac, node in SHARED:
@@ -217,8 +275,12 @@ def ender_of(qid):
     lst = (fin[0] if isinstance(fin, list) else (fin or {}).get(1)) if fin else None
     e = lst[0] if lst else None
     if e:
+        e = FOREVER_NPC.get(int(e), int(e))
         npc(e)
     return int(e) if e else 0
+
+
+FOREVER_NPC = {16013: 230319, 16012: 230317}   # 포에버에서 실제로 퀘스트를 주고받는 델리아나 · 모크바르 (QuestieDB 기록)
 
 
 def giver_of(qid, node):
@@ -229,6 +291,7 @@ def giver_of(qid, node):
         lst = (st[0] if isinstance(st, list) else (st or {}).get(1)) if st else None
         g = lst[0] if lst else None
     if g:
+        g = FOREVER_NPC.get(int(g), int(g))
         npc(g)
     return int(g) if g else 0
 
@@ -309,9 +372,23 @@ for c in CLASSES:
             c = pick(d["cost"], fac) or {}
             return ", ".join("{ %d, %d }" % (k, v) for k, v in c.items())
         enders = {fac: ender_of(qid) for fac, qid in d["q"].items()}
-        rows.append("\t\t\t[%d] = { A = %s, H = %s, nA = %d, nH = %d, eA = %d, eH = %d, costA = { %s }, costH = { %s }, gold = %d, reward = { %s } },\n" % (
-            u, pick(d["q"], 2) or 0, pick(d["q"], 1) or 0, pick(givers, 2) or 0, pick(givers, 1) or 0, pick(enders, 2) or 0, pick(enders, 1) or 0,
-            costs(2), costs(1), d["gold"], ", ".join(map(str, d["reward"]))))
+        # 포에버 번호: SoD 84xxx (얼라 주술사 · 호드 성기사는 ATT 의 97xxx 그대로)
+        qA0, qH0 = pick(d["q"], 2) or 0, pick(d["q"], 1) or 0
+        qA = SOD.get((c, u, 2), qA0) if qA0 < 90000 else qA0
+        qH = SOD.get((c, u, 1), qH0) if qH0 < 90000 else qH0
+        for fq, oq in ((qA, qA0), (qH, qH0)):
+            if fq != oq:
+                QTXT[fq] = QTXT.get(oq) or ko_quest(oq)   # 같은 직업 · 진영의 옛 퀘스트 한글 제목 · 목표
+        # 주는 NPC: 델리아나 230319 · 모크바르 230317 / 안시온의 작별 인사는 안시온이 주고 델리아나 · 모크바르에게 보고
+        nA, nH = (16016, 16016) if u == 3 else (230319, 230317)
+        eA, eH = 230319, 230317
+        for x in (nA, nH, eA, eH):
+            npc(x)
+        rw = []
+        for b in BLOCKS.get(c, []):
+            rw.append("{ " + ", ".join(str(b[inv]) for inv in UP_SLOTS[u] if inv in b) + " }")
+        rows.append("\t\t\t[%d] = { A = %d, H = %d, A0 = %d, H0 = %d, nA = %d, nH = %d, eA = %d, eH = %d, costA = { %s }, costH = { %s }, gold = %d, reward = { %s }, old = { %s } },\n" % (
+            u, qA, qH, qA0, qH0, nA, nH, eA, eH, costs(2), costs(1), d["gold"], ", ".join(rw), ", ".join(map(str, d["reward"]))))
     cls_out.append("\t\t%s = {\n%s\t\t},\n" % (c, "".join(rows)))
 
 # 아이템 한글 이름 (게임이 아직 모를 때 대신)
@@ -326,10 +403,11 @@ for _, _, node in SHARED:
 
 with open(OUT, "w", encoding="utf-8") as f:
     f.write("-- FOA UI · 던전 세트 2 (0.5티) 연계 퀘스트 (자동 생성 · tools/forever/gen_t05.py)\n")
-    f.write("-- 자료: AllTheThings (MIT) 포에버 0.5 세트 (단계 · 내야 하는 장비 · 재료 · 보상)\n")
+    f.write("-- 자료: AllTheThings (MIT) 포에버 0.5 세트 (단계 · 내야 하는 장비 · 재료) · 포에버 아이템 표(226xxx 특성별 보상)\n")
+    f.write("--       강화 퀘스트 번호 = QuestieDB 포에버 기록의 SoD식 84147~84210 (델리아나 230319 · 모크바르 230317)\n")
     f.write("--       QuestieDB (GPL-3.0) 포에버 합본 (퀘스트 한글 이름 · 목표 · 주는 NPC · 자리)\n")
     f.write("-- chain = 순서대로 · { up = n } 은 직업별 강화 단계 · 한 칸에 여러 개면 진영(fac 1 호드 · 2 얼라이언스 · 0 둘 다) / 직업(cls)으로 고른다\n")
-    f.write("-- class[직업][단계] = { A/H 퀘스트, nA/nH 주는 NPC, costA/costH = { {0티 장비 · 재료, 개수} }, gold(동), reward = { 0.5티 장비 } }\n")
+    f.write("-- class[직업][단계] = { A/H 포에버 퀘스트(SoD식 84xxx · 97xxx), A0/H0 옛 클래식 번호, nA/nH 주는 NPC, eA/eH 보고 NPC,\n--   costA/costH = { {0티 장비 · 재료, 개수} }, gold(동), reward = { {특성 묶음 1 장비}, {묶음 2} … } (포에버 226xxx · 골라 받음), old = 옛 0.5티 }\n")
     f.write("local _, ns = ...\nlocal b = select(4, GetBuildInfo()) or 0\nif not (b >= 16001 and b < 20000) then return end\n")
     f.write("ns.T05 = {\n\tchain = {\n")
     f.write("".join(steps))

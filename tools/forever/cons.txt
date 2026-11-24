@@ -82,7 +82,7 @@ E|Ranged|item=18283
 E|Back|spell=1219587
 E|Chest|spell=20025
 E|Wrist|spell=1248599
-E|Hands|spell=1248599
+E|Hands|spell=25080
 E|Feet|spell=20023
 E|Neck|spell=1249059
 C|Flask|item=274274
@@ -149,3 +149,230 @@ C|Other|item=9088
 C|Food|item=21023
 C|Food|item=12217
 C|Weapon|item=12643
+
+# ── 2026-11-24 추가: Method 공략에 없던 전문화 ──
+#  R| = 이 전문화 준비물 출처 (화면 아래 글) · T| = 능력치 순서 (한국어, 공략 원문 순서)
+@WARRIOR:arms WARRIOR:fury
+R|Method 포에버 공략 (무기 · 분노 전사)
+E|Main Hand|spell=20034
+E|Head|item=11645
+E|Neck|spell=1249019
+E|Back|spell=1219587
+E|Chest|spell=20025
+E|Wrist|spell=20010
+E|Hands|spell=1248640
+E|Legs|item=11645
+E|Feet|spell=13890
+C|Flask|item=274275
+C|Potion|item=13442
+C|Food|item=13934
+C|Weapon|item=12643
+C|Weapon|item=12404
+@WARRIOR:prot
+R|Method 포에버 공략 (방어 전사)
+E|Main Hand|spell=20034
+E|Head|item=11642
+E|Neck|spell=1249059
+E|Back|spell=1219587
+E|Chest|spell=20025
+E|Wrist|spell=20011
+E|Hands|spell=25080
+E|Legs|item=11642
+E|Feet|spell=13890
+C|Flask|item=274275
+C|Potion|item=13455
+C|Food|item=250068
+C|Weapon|item=12643
+C|Weapon|item=12404
+@MAGE:arcane
+R|Wowhead 포에버 공략 (비전 마법사 · 11/23)
+E|Main Hand|spell=22749
+E|Head|item=18330
+E|Neck|spell=1249057
+E|Chest|item=252487
+E|Wrist|spell=1220624
+E|Hands|spell=13948
+E|Legs|item=18330
+E|Feet|spell=1328948
+C|Flask|item=13512
+C|Elixir|item=13454
+C|Elixir|item=250341
+C|Potion|item=250937
+C|Potion|item=13444
+C|Food|item=13935
+C|Weapon|item=20749
+C|Other|item=277502
+@MAGE:fire
+R|Wowhead 포에버 공략 (화염 마법사 · 11/17 · 손목은 비전 공략 11/23 기준)
+E|Main Hand|spell=22749
+E|Head|item=18330
+E|Neck|spell=1249057
+E|Chest|item=252487
+E|Wrist|spell=1220624
+E|Hands|spell=25078
+E|Legs|item=18330
+E|Feet|spell=1328948
+C|Flask|item=13512
+C|Elixir|item=13454
+C|Elixir|item=250341
+C|Potion|item=250937
+C|Potion|item=13444
+C|Food|item=13935
+C|Weapon|item=20749
+C|Other|item=277500
+@MAGE:frost
+R|Wowhead 포에버 공략 (냉기 마법사 · 10/29 · 손목은 비전 공략 11/23 기준)
+E|Main Hand|spell=22749
+E|Head|item=18330
+E|Neck|spell=1249057
+E|Chest|item=252487
+E|Wrist|spell=1220624
+E|Hands|spell=25074
+E|Legs|item=18330
+E|Feet|spell=1328948
+C|Flask|item=13512
+C|Elixir|item=13454
+C|Elixir|item=250341
+C|Potion|item=250937
+C|Potion|item=13444
+C|Food|item=13935
+C|Weapon|item=20749
+C|Other|item=277499
+@PALADIN:ret
+R|Wowhead 포에버 공략 (징벌 성기사 · 11/23)
+E|Main Hand|spell=20034
+E|Head|item=18329
+E|Neck|spell=1249057
+E|Back|spell=1219587
+E|Chest|spell=20025
+E|Wrist|spell=1220624
+E|Hands|spell=1213622
+E|Legs|item=18329
+E|Feet|spell=20023
+C|Elixir|item=13454
+C|Elixir|item=9206
+C|Potion|item=250937
+C|Potion|item=13444
+C|Food|item=12217
+C|Weapon|item=3829
+@DRUID:balance
+R|Wowhead 포에버 공략 (조화 드루이드 · 10/29)
+E|Main Hand|spell=1219580
+E|Head|item=18330
+E|Neck|spell=1249057
+E|Chest|item=252487
+E|Wrist|spell=1220624
+E|Hands|spell=1213626
+E|Legs|item=18330
+E|Feet|item=252487
+C|Flask|item=13512
+C|Elixir|item=13454
+C|Elixir|item=250343
+C|Elixir|item=250341
+C|Potion|item=250937
+C|Potion|item=13444
+C|Food|item=13935
+C|Weapon|item=20749
+C|Other|item=20520
+@SHAMAN:ele
+R|Wowhead 포에버 공략 (정기 주술사 · 레벨업 추천 중 60 장비용 · 무기는 주문력)
+E|Main Hand|spell=22749
+E|Head|item=18330
+E|Neck|spell=1249057
+E|Back|spell=25084
+E|Chest|item=252487
+E|Wrist|spell=1220624
+E|Hands|spell=1248645
+E|Legs|item=18330
+E|Feet|item=252487
+C|Flask|item=13512
+C|Elixir|item=13454
+C|Elixir|item=250343
+C|Potion|item=250937
+C|Potion|item=13444
+C|Food|item=13935
+C|Weapon|item=20749
+@SHAMAN:enh
+R|포에버 공략에 60 추천이 아직 없어 근접 공략(Method 전사) 기준 + Wowhead 고양 추천 소모품
+E|Main Hand|spell=20034
+E|Head|item=11645
+E|Neck|spell=1249019
+E|Back|spell=1219587
+E|Chest|spell=20025
+E|Wrist|spell=20010
+E|Hands|spell=1248640
+E|Legs|item=11645
+E|Feet|spell=13890
+C|Flask|item=274275
+C|Elixir|item=250351
+C|Potion|item=13444
+C|Food|item=13935
+C|Weapon|item=18262
+@SHAMAN:resto PRIEST:holy
+R|포에버 공략에 60 추천이 아직 없어 치유 공략(Method 회복 드루이드 · 신성 성기사) 기준
+E|Main Hand|spell=1248636
+E|Head|item=19790
+E|Neck|spell=1249058
+E|Shoulder|item=18182
+E|Back|spell=20014
+E|Chest|spell=20028
+E|Wrist|spell=23802
+E|Hands|spell=25079
+E|Legs|item=19790
+E|Feet|spell=20024
+C|Flask|item=13511
+C|Elixir|item=250333
+C|Elixir|item=13447
+C|Potion|item=13444
+C|Potion|item=250949
+C|Potion|item=18253
+C|Food|item=249869
+C|Weapon|item=20748
+@DRUID:feral
+R|포에버 공략에 60 추천이 아직 없어 민첩 근접 공략(Method 도적) 기준 · 양손 무기
+E|Main Hand|spell=27837
+E|Head|item=18251
+E|Neck|spell=1249059
+E|Back|spell=1219587
+E|Chest|spell=20025
+E|Wrist|spell=1248599
+E|Hands|spell=25080
+E|Legs|item=18251
+E|Feet|spell=13890
+C|Flask|item=274273
+C|Elixir|item=13452
+C|Potion|item=250943
+C|Food|item=13928
+# ── 능력치 순서 (공략에 있는데 자료에 비어 있던 전문화) ──
+@MAGE:arcane
+T|적중(17%까지) > 주문 공격력 > 치명타 > 주문 관통 > 가속 > 지능 > 정신력 > 체력
+@MAGE:fire
+T|적중(17%까지) > 주문 공격력(화염) > 치명타 > 주문 관통 > 가속 > 지능 > 정신력 > 체력
+@MAGE:frost
+T|적중(11~12%까지 · 특성 5~6%) > 치명타 > 주문 공격력(냉기 · 비전) > 지능 > 정신력 > 체력
+@SHAMAN:ele
+T|주문 관통 > 가속 > 적중(17%까지) > 주문 공격력 > 치명타 > 자연 · 화염 공격력 > 지능 > 정신력 > 체력
+@SHAMAN:enh
+T|적중(8% 이상) > 숙련(6.5%까지) > 치명타 > 힘 > 지능 > 주문 관통 > 가속 > 민첩 > 주문 공격력 > 전투력
+@SHAMAN:resto
+T|치유량 > 치명타 > 가속 > 지능 > 정신력 > 5초당 마나
+@DRUID:balance
+T|적중(17%까지) > 주문 공격력 > 주문 관통 > 치명타 > 가속 > 지능 > 정신력 > 체력
+@DRUID:feral
+T|치명타 > 적중(8%까지) > 숙련(6.5%까지) > 가속 > 무기 초당 공격력 > 민첩 = 힘 > 전투력
+@DRUID:resto
+T|치유량 > 치명타 > 가속 > 정신력 > 지능 > 5초당 마나 > 체력
+@HUNTER:mm
+T|적중(8%까지) > 치명타 > 가속 > 민첩 > 지능 > 원거리 전투력 > 정신력 > 체력
+@HUNTER:sv
+T|적중 > 치명타 > 가속 > 민첩 > 힘 > 전투력 > 지능 > 정신력 > 체력
+@PALADIN:ret
+T|무기 숙련 > 무기 초당 공격력 · 속도 > 적중(9%) > 숙련(6.5%) > 주문 공격력 > 지능 > 힘 · 전투력 > 민첩 · 치명타
+@PRIEST:holy
+T|치유량 > 지능 > 5초당 마나 > 정신력 > 치명타 > 체력
+@WARRIOR:arms
+T|적중(8%까지) > 숙련(6.5%까지) > 치명타 > 힘 > 민첩 > 가속
+@WARRIOR:fury
+T|무기 숙련(305까지) > 적중(9%까지) > 치명타 > 힘 > 민첩 > 체력
+@WARRIOR:prot
+T|숙련(6.5%) > 체력 > 적중(8%) > 숙련(14%) > 치명타 > 방어도 > 민첩 > 방패 막기 수치 > 전투력 · 힘
