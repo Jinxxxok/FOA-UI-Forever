@@ -19,11 +19,11 @@ M.BIS_DATA = BIS_DATA
 
 local SLOT_NAME = {
 	[0] = "머리", [1] = "목", [2] = "어깨", [3] = "등", [4] = "가슴", [5] = "손목", [6] = "손", [7] = "허리",
-	[8] = "다리", [9] = "발", [10] = "주장비", [11] = "보조장비", [12] = "반지", [13] = "장신구",
+	[8] = "다리", [9] = "발", [10] = "주장비", [11] = "보조장비", [12] = "반지", [13] = "장신구", [14] = "원거리",
 }
 local SLOT_GLYPH = {
 	[0] = "머", [1] = "목", [2] = "어", [3] = "등", [4] = "가", [5] = "손", [6] = "손", [7] = "허",
-	[8] = "다", [9] = "발", [10] = "주", [11] = "보", [12] = "반", [13] = "장",
+	[8] = "다", [9] = "발", [10] = "주", [11] = "보", [12] = "반", [13] = "장", [14] = "원",
 }
 -- 캐릭터 창 칸 → 던전 도감 부위
 local INV = {
@@ -40,6 +40,25 @@ local QCOL = {
 
 local FOREVER = (function() local b = select(4, GetBuildInfo()) or 0 return b >= 16001 and b < 20000 end)()
 M.forever = FOREVER
+-- 포에버는 캐릭터 창에 원거리 칸(18번)이 있다: 활 · 총 · 석궁 · 투척 무기 · 마법봉 · 성물(성서 · 우상 · 토템)
+--  직업마다 이름이 다르다 (도적 · 전사 · 사냥꾼 = 원거리 · 마법사 · 사제 · 흑마법사 = 마법봉 · 성기사 · 드루이드 · 주술사 = 성물)
+if FOREVER then
+	INV[#INV + 1] = { 18, 14, "원거리" }
+	INV_NAME[18] = "원거리"
+end
+M.RELIC_CLASS = { [7] = "PALADIN", [8] = "DRUID", [9] = "SHAMAN" }   -- 방어구 종류 7 성서 · 8 우상 · 9 토템
+M.RELIC_OK = { PALADIN = true, DRUID = true, SHAMAN = true }
+M.WAND_CLS = { MAGE = true, PRIEST = true, WARLOCK = true }
+function M.RangedName()
+	local _, cls = UnitClass("player")
+	if M.RELIC_OK[cls] then return "성물" end
+	if M.WAND_CLS[cls] then return "마법봉" end
+	return "원거리"
+end
+-- 성물인가 (주문마다 효과가 달라서 FOA 점수로 순위를 매기지 않는다 · 공략 BIS 만)
+function M.IsRelic(id)
+	return id and select(4, C_Item.GetItemInfoInstant(id)) == "INVTYPE_RELIC"
+end
 local FLoot, ForeverScan -- 포에버 던전 자료 (아래에서 정의)
 
 local function Available()
@@ -332,6 +351,7 @@ end
 -- 캐릭터 창 칸 번호 → 던전 도감 부위
 local INV2EJ = { [1] = 0, [2] = 1, [3] = 2, [15] = 3, [5] = 4, [9] = 5, [10] = 6, [6] = 7, [7] = 8, [8] = 9,
 	[11] = 12, [12] = 12, [13] = 13, [14] = 13, [16] = 10, [17] = 11 }
+if FOREVER then INV2EJ[18] = 14 end
 M.INV2EJ = INV2EJ
 
 local SECONDARY = { "ITEM_MOD_CRIT_RATING_SHORT", "ITEM_MOD_HASTE_RATING_SHORT", "ITEM_MOD_MASTERY_RATING_SHORT", "ITEM_MOD_VERSATILITY" }
@@ -563,6 +583,9 @@ local EQUIP_EJ = {
 	INVTYPE_WEAPON = 10, INVTYPE_WEAPONMAINHAND = 10, INVTYPE_2HWEAPON = 10, INVTYPE_WEAPONOFFHAND = 11,
 	INVTYPE_SHIELD = 11, INVTYPE_HOLDABLE = 11, INVTYPE_FINGER = 12, INVTYPE_TRINKET = 13,
 }
+if FOREVER then
+	EQUIP_EJ.INVTYPE_RANGED, EQUIP_EJ.INVTYPE_RANGEDRIGHT, EQUIP_EJ.INVTYPE_THROWN, EQUIP_EJ.INVTYPE_RELIC = 14, 14, 14, 14
+end
 FLoot = function(key)
 	for i, d in ipairs(ns.FOREVER_LOOT and ns.FOREVER_LOOT.list or {}) do
 		if d.key == key then return d, i end
@@ -779,7 +802,7 @@ function M:BuildRanksForever()
 			end
 			local cand, seen = {}, {}
 			for _, it in ipairs(list) do
-				if not self.ranks[it.id] and not seen[it.id] then
+				if not self.ranks[it.id] and not seen[it.id] and not (slot == 14 and M.IsRelic(it.id)) then
 					seen[it.id] = true
 					local l = "item:" .. it.id
 					local v = sc:Score(l, slot == 11 and dual or nil, FOREVER and ScoreSpec() or nil)
@@ -1220,6 +1243,11 @@ local function ForMyClass(it)
 	local ok = true
 	if classID == 4 and loc ~= "INVTYPE_CLOAK" and subID and subID >= 1 and subID <= 4 then
 		ok = (ARMOR_OK[cls] or {})[subID] and true or false
+	end
+	-- 성물: 성서 = 성기사 · 우상 = 드루이드 · 토템 = 주술사 (종류를 모르는 성물은 세 직업 모두 · 게임 툴팁으로 한 번 더 거른다)
+	if loc == "INVTYPE_RELIC" then
+		local need = M.RELIC_CLASS[subID or -1]
+		if need then ok = need == cls else ok = M.RELIC_OK[cls] and true or false end
 	end
 	-- 무기: 내 직업이 아예 못 배우는 종류(도적의 지팡이 · 양손 도끼 등)는 정보를 받기 전에 뺀다
 	if ok and classID == 2 and subID and ns.WEAPON_OK and ns.WEAPON_OK[cls] and not ns.WEAPON_OK[cls][subID] then
@@ -1882,7 +1910,7 @@ function M:BuildLevelRanks(pool, lvl)
 	local function Rank(list, off)
 		local out, seen = {}, {}
 		for _, it in ipairs(list) do
-			if not seen[it.id] then
+			if not seen[it.id] and not M.IsRelic(it.id) then
 				seen[it.id] = true
 				local name, link, minLv, ilvl = ItemBasics(it.id)
 				if not name then
@@ -5751,7 +5779,7 @@ function M:HookTooltip()
 		tt:AddLine(" ")
 		tt:AddLine("|cffFFF468—|r  |cff8E939BFOA · " .. (UnitClass("player") or "") .. " " .. (specName or "") .. (M.isExample and " · 예시 순위" or "") .. "|r")
 		-- "최고  허리 1위" · "허리 2위" (예전: "다음 1  허리 2순위")
-		local slotRank = (SLOT_NAME[r.slot] or "") .. " " .. (r.rank + 1) .. "위"
+		local slotRank = ((r.slot == 14 and M.RangedName()) or SLOT_NAME[r.slot] or "") .. " " .. (r.rank + 1) .. "위"
 		tt:AddDoubleLine(r.rank == 0 and ("|cffFFF468" .. RankText(r) .. "|r  " .. slotRank .. (r.foaTop and "  |cff8E939B· FOA 계산|r" or ""))
 			or ("|cffFFF468" .. slotRank .. "|r"), " ", 1, 1, 1)
 		Ink.TipLine(tt, "|cff9EA3AB획득|r  " .. (M:SourceText(r.it) or ""), 1, 1, 1)
@@ -6578,7 +6606,7 @@ function M:PaintBis()
 		local tex = GetInventoryItemTexture("player", b.inv)
 		local q = GetInventoryItemQuality("player", b.inv)
 		b.icon:Set(tex, q or 0, SLOT_GLYPH[b.ej])
-		b.label:SetText(b.name)
+		b.label:SetText(b.inv == 18 and M.RangedName() or b.name)
 		local r = id and self.ranks[id]
 		local list = bySlot[b.ej]
 		local a = C.accent
@@ -6601,7 +6629,7 @@ function M:PaintBis()
 	p.sumGear = { p.sumN:GetText(), p.sumL:GetText() }
 	-- 고른 부위
 	local sb = p.slots[self.bisSel]
-	p.selName:SetText(sb.name)
+	p.selName:SetText(sb.inv == 18 and M.RangedName() or sb.name)
 	local curID = GetInventoryItemID("player", sb.inv)
 	local curLink = GetInventoryItemLink("player", sb.inv)
 	local curR = curID and self.ranks[curID]
@@ -6674,7 +6702,12 @@ function M:PaintBis()
 		row.itemID, row.link, row.it = nil, nil, nil
 		row.badge:Hide(); row.rank:Hide(); row.state:SetText("")
 		row.icon:Set(nil, 0, "")
-		if pvpView then
+		local _, myCls = UnitClass("player")
+		if sb.inv == 18 and M.RELIC_OK[myCls] then
+			row.name:SetText("성물은 FOA 점수로 순위를 매기지 않아요")
+			row.name:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
+			row.src:SetText("주문마다 효과가 달라서 · PvE 보기의 공략 BIS를 참고하세요")
+		elseif pvpView then
 			row.name:SetText(self.levelPending and "아이템 정보를 받아 오는 중…" or "이 부위는 PvP 후보가 없어요")
 			row.name:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
 			row.src:SetText("명예 · 계급 장비 · 던전 · 제작 · 퀘스트 · 평판에서 골라요")
