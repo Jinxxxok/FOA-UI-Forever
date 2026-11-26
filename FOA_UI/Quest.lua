@@ -12,6 +12,33 @@ local MAX_OPEN = 6
 -- 한 번에 보이는 퀘스트 수 (설정 → 지도 · 퀘스트 → 한 번에 보이는 수, 3~10)
 local function MaxQuests() return math.max(3, math.min(10, tonumber(Ink.db and Ink.db.questMax) or 6)) end
 
+-- 목록이 내려갈 수 있는 높이: 바로 아래에 있는 FOA 창(미터기 · 위협 등, 편집 모드로 옮길 수 있는 것)의
+--  윗변까지 · 아래에 아무것도 없으면 화면 아래 여백까지 → 그 안에 들어가는 퀘스트만 보이고 나머지는 휠로
+--  (예전엔 퀘스트 개수로만 잘라서 목표 줄이 많으면 미터기 위로 흘러넘쳤다)
+local TRANSIENT = { gearToast = true, combatAlert = true, bossWarn = true, talk = true, loot = true, tooltip = true, durability = true }
+local function RoomBelow(f)
+	local top, l, r = f:GetTop(), f:GetLeft(), f:GetRight()
+	if not (top and l and r) then return nil end
+	local s = f:GetEffectiveScale()
+	top, l, r = top * s, l * s, r * s
+	local floor = 16 * s
+	for key, m in pairs(Ink.movers or {}) do
+		local o = m.frame
+		-- 빈 자리 표시(툴팁 · 전리품 알림 자리 등 Ink:Anchor)와 잠깐 뜨는 알림은 빼고 실제 창만
+		if key ~= "quest" and not TRANSIENT[key] and o and o ~= f and not o.inkAnchor and o.IsShown and o:IsShown() and (o:GetAlpha() or 1) > 0.05 then
+			local ot, ol, orr = o:GetTop(), o:GetLeft(), o:GetRight()
+			if ot and ol and orr then
+				local os = o:GetEffectiveScale()
+				ot, ol, orr = ot * os, ol * os, orr * os
+				-- 목록과 가로로 겹치고 목록 머리보다 아래에서 시작하는 창
+				if ot < top - 60 * s and orr > l + 12 * s and ol < r - 12 * s then floor = math.max(floor, ot + 12 * s) end
+			end
+		end
+	end
+	return (top - floor) / s
+end
+M.RoomBelow = RoomBelow
+
 local function CleanObjective(text)
 	if not text then return "" end
 	local t = text
@@ -853,15 +880,21 @@ function M:Update()
 	local shown = 0
 	local total = #quests
 	local MAX_QUESTS = MaxQuests()
-	local offset = math.max(0, math.min(self.offset or 0, total - MAX_QUESTS))
+	-- 칸 높이: 전투 밖에서만 새로 잰다 (전투 중엔 퀘스트 아이템 보안 단추를 숨기거나 옮길 수 없어서 지난 개수 그대로)
+	local room = (not combat) and RoomBelow(f) or nil
+	local fitCap = combat and self.fitCap or nil
+	-- 끝까지 넘길 수 있게: 마지막으로 칸에 들어간 개수 기준 (칸 높이로 잘린 만큼 더 내려갈 수 있다)
+	local offset = math.max(0, math.min(self.offset or 0, total - math.max(1, math.min(MAX_QUESTS, self.fitCap or MAX_QUESTS))))
 	if combat then offset = self.shownOffset or offset end
 	self.offset, self.shownOffset = offset, offset
 	for qi, id in ipairs(quests) do
 		if qi > offset + MAX_QUESTS then break end
+		if fitCap and qi > offset + fitCap then break end
 		if qi > offset then
 		local idx = qi - offset
 		shown = idx
 		local r = Row(idx)
+		local yStart, nhStart = y, nh
 		local g = group[id]
 		local newG = (g ~= lastG)
 		if newG then
@@ -1061,10 +1094,19 @@ function M:Update()
 		r:SetHeight(-oy)
 		r:Show()
 		y = y + oy - 10
+		-- 칸을 넘치면(아래 "더 있음" 한 줄 자리까지) 이 퀘스트는 빼고 여기서 멈춘다 · 첫 퀘스트는 항상
+		if room and idx > 1 and -y + 16 > room then
+			r:Hide()
+			r.item:Hide()
+			for hi = nhStart + 1, nh do if f.zheads and f.zheads[hi] then f.zheads[hi]:Hide() end end
+			nh, y, shown = nhStart, yStart, idx - 1
+			break
+		end
 		end
 	end
+	if not combat then self.fitCap = shown end
 	-- 위 · 아래에 더 있으면 안내
-	local above, below = offset, math.max(0, total - offset - MAX_QUESTS)
+	local above, below = offset, math.max(0, total - offset - shown)
 	if above > 0 or below > 0 then
 		f.more:ClearAllPoints()
 		f.more:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y + 4)
