@@ -3,7 +3,7 @@
 ## Notes: FOA (First of All) 통합 UI
 ## Author: hyeokjiny
 ## X-License: GPL-3.0-or-later
-## Version: 0.66.38
+## Version: 0.66.39
 ## SavedVariables: InkUIDB
 ## SavedVariablesPerCharacter: InkUICharDB
 ## IconTexture: Interface\AddOns\FOA_UI\Media\Textures\Logo
@@ -74,6 +74,7 @@ DungeonQuestNotes.lua
 Dungeon.lua
 T05Data.lua
 T05Guide.lua
+Wardrobe.lua
 GearAdvisor.lua
 FlightDB.lua
 Map.lua

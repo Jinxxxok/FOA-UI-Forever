@@ -2488,6 +2488,9 @@ SlashCmdList.INKUI = function(msg)
 		if ns.Stars then ns.Stars.ESlash((msg:gsub("^%S+%s*", ""))) end
 	elseif msg:match("^별자리") or msg:match("^stars") then
 		if ns.Stars then ns.Stars.Slash((msg:gsub("^%S+%s*", ""))) end
+	elseif msg == "외형" or msg == "옷장" or msg == "wardrobe" then
+		local W = Ink.modules.Wardrobe
+		if W and W.forever then W:Toggle() else print("|cffFFF468FOA|r 외형 도감은 포에버 전용이에요") end
 	elseif msg == "cast" or msg == "시전" then
 		local U = Ink.modules.Units
 		if U and U.CastDiag then U:CastDiag() end

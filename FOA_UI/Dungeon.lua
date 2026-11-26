@@ -3119,6 +3119,14 @@ local function Head(body, i)
 	return h
 end
 
+-- Ctrl+클릭(게임의 '입어 보기' 키) = FOA 외형 도감에서 그 아이템 (Wardrobe.lua)
+function M.DressUpClick(id)
+	local down = (IsModifiedClick and IsModifiedClick("DRESSUP")) or (IsControlKeyDown and IsControlKeyDown())
+	local W = Ink.modules.Wardrobe
+	if not (down and id and W and W.OpenItem and W.forever) then return false end
+	W:OpenItem(id)
+	return true
+end
 local function Row(body)
 	local r = CreateFrame("Button", nil, body)
 	r:SetSize(SB_W - 16, ROW_H)
@@ -3150,6 +3158,7 @@ local function Row(body)
 		GameTooltip:Hide()
 	end)
 	r:SetScript("OnClick", function(self)
+		if self.itemID and M.DressUpClick(self.itemID) then return end
 		if self.link and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink then ChatEdit_InsertLink(self.link) end
 	end)
 	return r
@@ -5947,6 +5956,28 @@ function M:BuildBisPanel()
 	p.cur = Ink:Text(p, F.sans, 10, C.muted, "LEFT")
 	p.cur:SetPoint("TOPLEFT", p.selName, "BOTTOMLEFT", 0, -4)
 	p.cur:SetWidth(BP_W - 204)
+	-- 외형 도감 (Wardrobe.lua · 포에버): 고른 부위의 BIS 외형을 바로
+	p.ward = CreateFrame("Button", nil, p)
+	p.ward:SetSize(78, 20)
+	p.ward:SetPoint("TOPRIGHT", p, "TOPRIGHT", -16, -112)
+	p.ward.label = Ink:Text(p.ward, F.semi, 11, C.accent, "RIGHT")
+	p.ward.label:SetPoint("RIGHT", 0, 0)
+	p.ward.label:SetText("외형 보기 ›")
+	p.ward:SetScript("OnClick", function()
+		local W = Ink.modules.Wardrobe
+		if not W then return end
+		if M.bisWardID then W:OpenItem(M.bisWardID) else W:Open() end
+	end)
+	p.ward:SetScript("OnEnter", function(self)
+		self.label:SetTextColor(C.text[1], C.text[2], C.text[3])
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:AddLine("외형 도감", 1, 1, 1)
+		GameTooltip:AddLine("이 부위 장비들이 어떻게 생겼는지 · 어디서 나오는지 · 입어 보기", 0.75, 0.77, 0.8, true)
+		GameTooltip:AddLine("아이템 칸 Ctrl+클릭도 같은 창으로 열려요", 0.55, 0.58, 0.62, true)
+		GameTooltip:Show()
+	end)
+	p.ward:SetScript("OnLeave", function(self) self.label:SetTextColor(C.accent[1], C.accent[2], C.accent[3]); GameTooltip:Hide() end)
+	p.ward:Hide()
 	p.ranks = {}
 	for i = 1, 5 do
 		local r = CreateFrame("Button", nil, p)
@@ -5985,6 +6016,7 @@ function M:BuildBisPanel()
 		r:SetScript("OnMouseWheel", function(_, delta) M:ScrollBisRanks(delta) end)
 		-- 제작템: 클릭하면 제조법 상인 위치를 지도에
 		r:SetScript("OnMouseUp", function(self)
+			if self.itemID and M.DressUpClick(self.itemID) then return end
 			local it = self.it
 			-- 퀘스트 보상: 퀘스트 주는 곳을 지도에
 			if it and it.quest and it.qmap and it.qmap > 0 then
@@ -6739,6 +6771,10 @@ function M:PaintBis()
 	p.cur:SetText("지금: " .. (curLink or "비어 있음") .. (curR and ("  (" .. RankText(curR) .. ")") or "") .. (other and "  ·  다른 전문화 보는 중" or "") .. mhNote)
 	local list = bySlot[sb.ej] or {}
 	local a = C.accent
+	-- 외형 보기: 이 부위 1위(BIS) 아이템 · 보이지 않는 칸(목 · 반지 · 장신구 · 성물)은 숨김
+	local WD = Ink.modules.Wardrobe
+	self.bisWardID = list[1] and list[1].it and list[1].it.id or curID
+	if p.ward then p.ward:SetShown(FOREVER and WD and WD.CanShow and WD.CanShow(self.bisWardID) and true or false) end
 	local nRows = #p.ranks
 	local maxOff = math.max(0, #list - nRows)
 	self.bisOff = math.max(0, math.min(self.bisOff or 0, maxOff))
