@@ -600,6 +600,22 @@ function M:BuildRegistry()
 		end
 	end
 
+	-- 도적만: 주장비 단검 고집 (잠행 · 암살 · 과다출혈 빌드면 자동으로 안 함)
+	if select(2, UnitClass("player")) == "ROGUE" then
+		for _, g in ipairs(G.dungeon or {}) do
+			if g.t == "아이템 비교" then
+				table.insert(g.rows, { kind = "seg", key = "mhDagger", label = "도적 주장비 단검",
+					desc = "잠행 · 암살 BIS · 비교에서 주장비를 단검으로 (뒤치기 · 매복) · 자동 = 과다출혈을 배웠거나 특성 가이드에서 과다출혈 빌드를 고르면 무기 종류 상관없음",
+					opts = { { "auto", "자동" }, { "on", "항상 단검" }, { "off", "상관없음" } }, def = "auto",
+					apply = function()
+						if ns.Score and ns.Score.Invalidate then pcall(ns.Score.Invalidate, ns.Score) end
+						local D = mod("Dungeon")
+						if D then D.dirty = true; pcall(D.PaintBis, D) end
+					end })
+			end
+		end
+	end
+
 	self.groups = G
 	self.entries, self.byId = {}, {}
 	for _, c in ipairs(CATS) do

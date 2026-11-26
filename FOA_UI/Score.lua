@@ -959,14 +959,71 @@ end
 -- 주장비 무기 종류: 잠행은 매복 · 뒤치기가 주장비 단검이어야 써져서 단검이 아니면 크게 깎고,
 --  암살도 뒤치기 위주라 단검을 먼저 (깎는 폭은 작게) · 보조장비 · 전투 특성은 그대로
 --  (예전엔 특성 가중치만 봐서 잠행 BIS 주장비에 도검이 1등으로 떴다)
+--  단검을 고집하지 않는 경우 (설정 "도적 주장비 단검": 자동 · 항상 단검 · 상관없음)
+--   · 과다출혈을 배웠다 (뒤치기 · 매복 대신 과다출혈로 기력을 쓰는 빌드는 무기 종류 상관없음)
+--   · 특성 가이드에서 그 보기(PvP · PvE · 육성)의 빌드를 과다출혈 빌드로 골라 뒀다 (아직 안 찍었어도 계획대로)
 local MH_DAGGER = { ["ROGUE:subtlety"] = 0.3, ["ROGUE:assassination"] = 0.6 }
 M.MH_DAGGER = MH_DAGGER
 local MH_LOC = { INVTYPE_WEAPON = true, INVTYPE_WEAPONMAINHAND = true, INVTYPE_2HWEAPON = true }
+local HEMO = { node = 105748, spells = { 16511, 17347, 17348 }, at = -10, known = false }
+local function KnowsHemo()
+	local now = GetTime()
+	if now - HEMO.at < 5 then return HEMO.known end
+	HEMO.at = now
+	local k = false
+	for _, id in ipairs(HEMO.spells) do
+		if IsPlayerSpell then
+			local ok, v = pcall(IsPlayerSpell, id)
+			if ok and v then k = true break end
+		end
+	end
+	if not k and C_Traits and C_Traits.GetNodeInfo then
+		local T = Ink.modules.Talents
+		local cfg = T and T.ConfigID and T.ConfigID()
+		if cfg then
+			local ok, n = pcall(C_Traits.GetNodeInfo, cfg, HEMO.node)
+			if ok and n and ((n.currentRank or n.ranksPurchased or 0) > 0) then k = true end
+		end
+	end
+	HEMO.known = k
+	return k
+end
+local function PlanHemo(prof, spec)
+	local ck = (prof or "") .. ":" .. (spec or "")
+	local c = HEMO.plan and HEMO.plan[ck]
+	local now = GetTime()
+	if c and now - c[2] < 2 then return c[1] end
+	local r = false
+	local T = Ink.modules.Talents
+	if T and T.LoadBuilds then pcall(T.LoadBuilds) end
+	local pick = Ink.cdb and Ink.cdb.talentPick and Ink.cdb.talentPick[prof or ""]
+	if not pick and prof == "lvl" then pick = Ink.cdb and Ink.cdb.talentBuild end
+	local b = pick and ns.TalentData and ns.TalentData.builds and ns.TalentData.builds[pick]
+	if b and spec and b.spec and b.spec ~= spec then b = nil end   -- 다른 전문화 빌드를 골라 둔 건 이 보기와 상관없음
+	for _, st in ipairs(b and b.steps or {}) do
+		if st[8] == HEMO.node or st[6] == "Hemorrhage" then r = true break end
+	end
+	HEMO.plan = HEMO.plan or {}
+	HEMO.plan[ck] = { r, now }
+	return r
+end
+-- 단검을 고집하지 않는 까닭 (고집하면 nil)
+function M:DaggerFree(prof, spec)
+	local mode = Ink.db and Ink.db.mhDagger or "auto"
+	if mode == "off" then return "설정: 상관없음" end
+	if mode == "on" then return end
+	if KnowsHemo() then return "과다출혈을 배워서" end
+	if PlanHemo(prof or self:Profile(), spec) then return "특성 가이드의 과다출혈 빌드" end
+end
 function M:MainHandRule(spec)
-	spec = SplitProfile(spec)
-	if spec == "" then spec = nil end
+	local base, prof = SplitProfile(spec)
+	if base == "" then base = nil end
 	local class, cur = self:Spec()
-	return MH_DAGGER[(class or "") .. ":" .. (spec or cur or "")]
+	local f = MH_DAGGER[(class or "") .. ":" .. (base or cur or "")]
+	if not f then return end
+	local why = self:DaggerFree(prof, base or cur)
+	if why then return nil, why end
+	return f
 end
 
 -- 착용 · 사용 · 발동 효과 점수 (기준마다)
@@ -1124,7 +1181,8 @@ function M:Score(link, asOffhand, spec)
 	local roomH = HitRoom(link, loc, asOffhand, "hit", cap, spellCls)
 	local roomS = HitRoom(link, loc, asOffhand, "shit", spellCls and cap or (prof == "pve" and 17 or 4), true)
 	local overF = DW_SPEC[wkey] and 0.5 or 0.15
-	local key = link .. (asOffhand and "#oh" or "") .. self:Mode() .. sig .. string.format("#r%.1f/%.1f", roomH, roomS)
+	local mhf = (not asOffhand and MH_LOC[loc]) and self:MainHandRule(spec) or nil
+	local key = link .. (asOffhand and "#oh" or "") .. self:Mode() .. sig .. string.format("#r%.1f/%.1f", roomH, roomS) .. (mhf and ("#d" .. mhf) or "")
 	if scoreCache[key] then return scoreCache[key] end
 	local stats = GetItemStats(link)
 	if not stats then M.missed = true return end
@@ -1179,12 +1237,9 @@ function M:Score(link, asOffhand, spec)
 	end
 	total = total + EffectPoints(tip, w, prof, class, wkey)
 	-- 주장비로 쓸 무기가 단검이 아니면 (잠행 · 암살)
-	if not asOffhand and MH_LOC[loc] then
-		local f = self:MainHandRule(spec)
-		if f then
-			local _, _, _, _, _, classID, subID = GetItemInfoInstant(link)
-			if classID == 2 and subID ~= 15 then total = total * f end
-		end
+	if mhf then
+		local _, _, _, _, _, classID, subID = GetItemInfoInstant(link)
+		if classID == 2 and subID ~= 15 then total = total * mhf end
 	end
 	-- 툴팁 줄(장착 효과 · 적중 %)이 덜 왔으면 기억하지 않는다 → 도착 후 다시 계산
 	--  (예전엔 이것 때문에 아이템이 도착할 때마다 점수 기억을 통째로 지웠다)

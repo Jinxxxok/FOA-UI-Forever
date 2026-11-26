@@ -717,7 +717,8 @@ function M:BuildRanksForever()
 	local skey = SpecKey()
 	local own, osig = self:OwnedItems()
 	self.ownMap = own
-	local key = skey .. ":" .. lvl .. ":" .. view .. (Ink.db.bisCrafts == false and "" or ":c") .. (Ink.db.bisQuests == false and "" or ":q") .. (Ink.db.bisWorld == false and "" or ":w") .. ":" .. osig
+	local dagger = ns.Score and ns.Score.MainHandRule and ns.Score:MainHandRule(ScoreSpec())
+	local key = skey .. ":" .. lvl .. ":" .. view .. ":d" .. tostring(dagger or 1) .. (Ink.db.bisCrafts == false and "" or ":c") .. (Ink.db.bisQuests == false and "" or ":q") .. (Ink.db.bisWorld == false and "" or ":w") .. ":" .. osig
 	if self.rankKey == key and not self.dirty then return end
 	-- 아이템이 도착할 때마다(dirty) 곧바로 다시 만들면, 0.2초마다 다시 그려지는 아이템 툴팁이
 	--  수천 개 후보를 계속 훑었다 → 같은 조건이면 2초에 한 번만, 미뤄진 건 잠시 뒤 한 번에
@@ -6657,8 +6658,9 @@ function M:PaintBis()
 	-- 주장비: 잠행 · 암살은 단검 (매복 · 뒤치기)
 	local mhNote = ""
 	if sb.inv == 16 and ns.Score and ns.Score.MainHandRule then
-		local f = ns.Score:MainHandRule(FOREVER and ViewKey() or nil)
-		if f then mhNote = "  ·  |cffFFD15F주장비는 단검 (매복 · 뒤치기)|r" end
+		local f, why = ns.Score:MainHandRule(FOREVER and ScoreSpec() or nil)
+		if f then mhNote = "  ·  |cffFFD15F주장비는 단검 (매복 · 뒤치기)|r"
+		elseif why then mhNote = "  ·  |cff8E939B주장비 무기 종류 상관없음 (" .. why .. ")|r" end
 	end
 	p.cur:SetText("지금: " .. (curLink or "비어 있음") .. (curR and ("  (" .. RankText(curR) .. ")") or "") .. (other and "  ·  다른 전문화 보는 중" or "") .. mhNote)
 	local list = bySlot[sb.ej] or {}
