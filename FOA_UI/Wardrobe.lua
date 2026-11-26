@@ -233,39 +233,91 @@ local function RankOf(id)
 end
 
 -------------------------------------------------------------------------------
+-- 즐겨찾기 (계정 공통 · InkUIDB.wardFav = { [아이템] = true })
+--  아이템 번호로 기억한다: 외형 번호는 게임이 늦게 알려 주기도 해서 번호로 묶으면 잃어버릴 수 있다
+--  같은 외형의 아이템 중 하나라도 들어 있으면 그 외형이 즐겨찾기
+-------------------------------------------------------------------------------
+local function FavDB()
+	local t = Ink.db.wardFav
+	if type(t) ~= "table" then t = {}; Ink.db.wardFav = t end
+	return t
+end
+function M.IsFav(g)
+	if not g then return false end
+	local fav = FavDB()
+	for _, id in ipairs(g.ids or { g.first }) do if fav[id] then return true end end
+	return false
+end
+function M.FavCount()
+	local n = 0
+	for _ in pairs(FavDB()) do n = n + 1 end
+	return n
+end
+-- 켜기 = 대표 아이템 하나 · 끄기 = 그 외형의 아이템 모두
+--  즐겨찾기 탭에서 끄면 칸은 그대로 두고 별만 빈다 (잘못 눌렀으면 다시 누르면 되게 · 다른 탭에 다녀오면 빠진다)
+function M:ToggleFav(g)
+	if not (g and g.first) then return end
+	local fav = FavDB()
+	if M.IsFav(g) then
+		for _, id in ipairs(g.ids or { g.first }) do fav[id] = nil end
+	else
+		fav[g.first] = true
+	end
+	self:PaintFav()
+end
+
+-------------------------------------------------------------------------------
 -- 목록: 고른 부위 · 획득처 · 내 직업 · 검색어로 거른 뒤 같은 외형끼리 묶는다
 -------------------------------------------------------------------------------
 function M:List()
 	local items = self:Collect()
+	local favMode = self.fav
 	local slot = SLOTS[self.slot or 1]
 	local kind, mine, q = self.kind or "all", self.mine ~= false, self.query
 	local Dg = D()
 	local fmc = Dg and Dg.ForMyClass
 	local groups, byKey, nItems = {}, {}, 0
-	for id, e in pairs(items) do
-		local _, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
-		local gone = Dg and Dg.itemFail and Dg.itemFail[id]
-		if loc and not gone and slot.inv[loc] and (kind == "all" or e.kinds[kind]) and (not mine or not fmc or fmc({ id = id })) then
-			local ok = true
-			if q and q ~= "" then
-				local n = ItemName(id)
-				ok = n and n:lower():find(q, 1, true) ~= nil
-				if not n and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
-			end
-			if ok then
-				nItems = nItems + 1
-				local app, src = Appearance(id)
-				local key = app and ("a" .. app) or ("i" .. id)
-				local g = byKey[key]
-				if not g then
-					g = { app = app, src = src, ids = {}, icon = icon }
-					byKey[key] = g
-					groups[#groups + 1] = g
-				end
-				g.ids[#g.ids + 1] = id
-			end
+	-- 즐겨찾기 탭: 부위 · 획득처 · 내 직업 상관없이 즐겨찾기한 아이템 + 그와 같은 외형
+	local fav, favApp = nil, {}
+	if favMode then
+		fav = FavDB()
+		for id in pairs(fav) do
+			local a = Appearance(id)
+			if a then favApp[a] = true end
 		end
 	end
+	local anyApp = next(favApp) ~= nil
+	local function Consider(id, e)
+		local _, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
+		local si = loc and SLOT_OF[loc]
+		if not si or (Dg and Dg.itemFail and Dg.itemFail[id]) then return end
+		if favMode then
+			if not fav[id] then
+				local a = anyApp and Appearance(id)
+				if not (a and favApp[a]) then return end
+			end
+		elseif not (slot.inv[loc] and (kind == "all" or e.kinds[kind]) and (not mine or not fmc or fmc({ id = id }))) then
+			return
+		end
+		if q and q ~= "" then
+			local n = ItemName(id)
+			if not n and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+			if not (n and n:lower():find(q, 1, true)) then return end
+		end
+		nItems = nItems + 1
+		local app, src = Appearance(id)
+		local key = app and ("a" .. app) or ("i" .. id)
+		local g = byKey[key]
+		if not g then
+			g = { app = app, src = src, ids = {}, icon = icon, slot = si }
+			byKey[key] = g
+			groups[#groups + 1] = g
+		end
+		g.ids[#g.ids + 1] = id
+	end
+	for id, e in pairs(items) do Consider(id, e) end
+	-- 도감 자료에 없는 아이템(내 직업이 아닌 BIS 칸에서 Ctrl+클릭으로 열어 본 것 등)도 즐겨찾기엔 보인다
+	if favMode then for id in pairs(fav) do if not items[id] then Consider(id, nil) end end end
 	for _, g in ipairs(groups) do
 		-- 한 외형 안에서는 BIS → 등급 높은 것 → 번호 순 (대표 아이템 = 맨 앞)
 		table.sort(g.ids, function(a, b)
@@ -293,8 +345,9 @@ function M:List()
 		if g.have then nHave = nHave + 1 end
 	end
 	self.nHave = nHave
-	-- 외형끼리: 지금 특성 BIS · 대체 → 등급 → 번호(새 장비가 앞)
+	-- 외형끼리: (즐겨찾기 탭은 부위 순서 먼저) 지금 특성 BIS · 대체 → 등급 → 번호(새 장비가 앞)
 	table.sort(groups, function(a, b)
+		if favMode and a.slot ~= b.slot then return a.slot < b.slot end
 		local ra, rb = a.rank or 99, b.rank or 99
 		if ra ~= rb then return ra < rb end
 		if a.q ~= b.q then return a.q > b.q end
@@ -419,6 +472,64 @@ local function TextButton(parent, text, w, h, onClick)
 	return b
 end
 
+-- 즐겨찾기 별 단추: 빈 별(흐리게) = 아님 · 금색 별 = 즐겨찾기 · 격자 칸 모델보다 위에
+function M.SetStar(b)
+	if b.on then
+		b.icon:SetTexture(Ink.icon("Star"))
+		b.icon:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 1)
+	else
+		b.icon:SetTexture(Ink.icon("StarLine"))
+		local p = b:GetParent()
+		b.icon:SetVertexColor(1, 1, 1, b.hot and 1 or ((p and p.hover) and 0.75 or (b.dim or 0.3)))
+	end
+end
+
+local function StarButton(parent, size, onClick)
+	local b = CreateFrame("Button", nil, parent)
+	b:SetSize(size, size)
+	b:SetFrameLevel((parent:GetFrameLevel() or 1) + 8)
+	b.icon = b:CreateTexture(nil, "OVERLAY")
+	b.icon:SetSize(size - 7, size - 7)
+	b.icon:SetPoint("CENTER", 0, 0)
+	b:SetScript("OnEnter", function(self)
+		self.hot = true
+		M.SetStar(self)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:SetText(self.on and "즐겨찾기에서 빼기" or "즐겨찾기에 넣기", 1, 1, 1)
+		if self.hint then GameTooltip:AddLine(self.hint, 0.55, 0.58, 0.62) end
+		GameTooltip:Show()
+	end)
+	b:SetScript("OnLeave", function(self) self.hot = nil; M.SetStar(self); GameTooltip:Hide() end)
+	b:SetScript("OnClick", function(self, ...)
+		onClick(self, ...)
+		if self.hot then self:GetScript("OnEnter")(self) end
+	end)
+	return b
+end
+
+function M:PaintStar(c)
+	local b = c.star
+	if not b then return end
+	b:SetShown(c.g ~= nil)
+	if c.g then b.on = M.IsFav(c.g); M.SetStar(b) end
+end
+
+local function PaintSelStar(f, g)
+	local b = f.selStar
+	if not b then return end
+	b:SetShown(g ~= nil)
+	if g then b.on = M.IsFav(g); M.SetStar(b) end
+end
+
+function M:PaintFav()
+	local f = self.frame
+	if not f then return end
+	for _, c in ipairs(f.cells) do self:PaintStar(c) end
+	PaintSelStar(f, self.sel)
+	local n = M.FavCount()
+	f.favBtn.n:SetText(n > 0 and tostring(n) or "")
+end
+
 function M:SavePos()
 	local f = self.frame
 	if not (f and f:GetLeft()) then return end
@@ -481,21 +592,49 @@ function M:Build()
 	f.close:SetScript("OnEnter", function(self) self.x:SetTextColor(C.text[1], C.text[2], C.text[3]) end)
 	f.close:SetScript("OnLeave", function(self) self.x:SetTextColor(C.muted[1], C.muted[2], C.muted[3]) end)
 
+	-- 왼쪽 맨 위: 즐겨찾기 탭 (부위 상관없이 모아 보기)
+	local fb = CreateFrame("Button", nil, f)
+	fb:SetSize(LEFT_W, 26)
+	fb:SetPoint("TOPLEFT", 12, -50)
+	fb.hl = Ink:Round(fb, "BACKGROUND", true, false)
+	fb.hl:SetAllPoints()
+	fb.hl:SetVertexColor(1, 1, 1, 0)
+	fb.icon = fb:CreateTexture(nil, "ARTWORK")
+	fb.icon:SetTexture(Ink.icon("Star"))
+	fb.icon:SetSize(13, 13)
+	fb.icon:SetPoint("LEFT", 10, 0)
+	fb.icon:SetVertexColor(C.gold[1], C.gold[2], C.gold[3])
+	fb.label = Ink:Text(fb, F.semi, 12, C.text, "LEFT")
+	fb.label:SetPoint("LEFT", 29, 0)
+	fb.label:SetText("즐겨찾기")
+	fb.n = Ink:Text(fb, F.num, 11, C.muted, "RIGHT")
+	fb.n:SetPoint("RIGHT", -10, 0)
+	fb:SetScript("OnClick", function() M.fav = true; M.page = 1; M:Refresh() end)
+	fb:SetScript("OnEnter", function(self) if not M.fav then self.hl:SetVertexColor(1, 1, 1, 0.05) end end)
+	fb:SetScript("OnLeave", function(self) if not M.fav then self.hl:SetVertexColor(1, 1, 1, 0) end end)
+	f.favBtn = fb
+	f.favSep = f:CreateTexture(nil, "ARTWORK")
+	f.favSep:SetColorTexture(1, 1, 1, 0.06)
+	f.favSep:SetHeight(1)
+	f.favSep:SetPoint("TOPLEFT", 20, -83)
+	f.favSep:SetPoint("TOPRIGHT", f, "TOPLEFT", 4 + LEFT_W, -83)
+
 	-- 왼쪽: 부위
+	local function SlotOn(i) return not M.fav and (M.slot or 1) == i end
 	f.slots = {}
 	for i, s in ipairs(SLOTS) do
 		local b = CreateFrame("Button", nil, f)
 		b:SetSize(LEFT_W, 26)
-		b:SetPoint("TOPLEFT", 12, -50 - (i - 1) * 28 - (i > 9 and 10 or 0))
+		b:SetPoint("TOPLEFT", 12, -92 - (i - 1) * 28 - (i > 9 and 10 or 0))
 		b.hl = Ink:Round(b, "BACKGROUND", true, false)
 		b.hl:SetAllPoints()
 		b.hl:SetVertexColor(1, 1, 1, 0)
 		b.label = Ink:Text(b, F.semi, 12, C.text, "LEFT")
 		b.label:SetPoint("LEFT", 10, 0)
 		b.label:SetText(s.ko)
-		b:SetScript("OnClick", function() M.slot = i; M.page = 1; M:Refresh() end)
-		b:SetScript("OnEnter", function(self) if M.slot ~= i then self.hl:SetVertexColor(1, 1, 1, 0.05) end end)
-		b:SetScript("OnLeave", function(self) if M.slot ~= i then self.hl:SetVertexColor(1, 1, 1, 0) end end)
+		b:SetScript("OnClick", function() M.slot = i; M.fav = false; M.page = 1; M:Refresh() end)
+		b:SetScript("OnEnter", function(self) if not SlotOn(i) then self.hl:SetVertexColor(1, 1, 1, 0.05) end end)
+		b:SetScript("OnLeave", function(self) if not SlotOn(i) then self.hl:SetVertexColor(1, 1, 1, 0) end end)
 		f.slots[i] = b
 	end
 	f.sep = f:CreateTexture(nil, "ARTWORK")
@@ -518,6 +657,11 @@ function M:Build()
 	end
 	f.mine = TextButton(f, "내 직업", 58, 22, function() M.mine = not (M.mine ~= false); M.page = 1; M:Refresh() end)
 	f.mine:SetPoint("TOPLEFT", x + 8, -48)
+	-- 즐겨찾기 탭에선 획득처 칩 · 내 직업 대신 안내 한 줄 (부위 · 획득처 상관없이 모두)
+	f.favNote = Ink:Text(f, F.sans, 11, C.soft, "LEFT")
+	f.favNote:SetPoint("LEFT", f, "TOPLEFT", gx + 2, -59)
+	f.favNote:SetText("부위 · 획득처 상관없이 즐겨찾기한 외형을 모아 봐요")
+	f.favNote:Hide()
 	f.search = CreateFrame("EditBox", nil, f)
 	f.search:SetSize(120, 22)
 	f.search:SetPoint("TOPLEFT", f.mine, "TOPRIGHT", 8, 0)
@@ -570,22 +714,30 @@ function M:Build()
 		c.src:SetWidth(CELL_W - 16)
 		c.badge = Ink:Text(c, F.semi, 10, C.accent, "LEFT")
 		c.badge:SetPoint("TOPLEFT", 8, -7)
+		-- 오른쪽 위: [+n] [가진 외형 ✓] [즐겨찾기 별]
 		c.have = c:CreateTexture(nil, "OVERLAY")
 		c.have:SetTexture(Ink.icon("Check"))
 		c.have:SetSize(16, 16)
-		c.have:SetPoint("TOPRIGHT", -6, -6)
+		c.have:SetPoint("TOPRIGHT", -27, -6)
 		c.have:SetVertexColor(C.green[1], C.green[2], C.green[3])
 		c.have:Hide()
 		c.more = Ink:Text(c, F.semi, 9, C.soft, "RIGHT")
-		c.more:SetPoint("TOPRIGHT", -8, -7)
-		c:SetScript("OnEnter", function(self) M:CellTip(self) end)
+		c.more:SetPoint("TOPRIGHT", -29, -7)
+		c.star = StarButton(c, 22, function(self) M:ToggleFav(c.g) end)
+		c.star:SetPoint("TOPRIGHT", -3, -3)
+		c.star.hint = "칸을 오른쪽 클릭해도 돼요"
+		c:SetScript("OnEnter", function(self) self.hover = true; M:CellTip(self); M:PaintStar(self) end)
 		c:SetScript("OnLeave", function(self)
+			self.hover = nil
 			self.bd:SetVertexColor(1, 1, 1, M.selKey == self.key and 0.5 or 0.06)
 			GameTooltip:Hide()
+			M:PaintStar(self)
 		end)
 		c:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 		c:SetScript("OnClick", function(self, btn)
 			if not self.g then return end
+			-- 오른쪽 클릭 = 즐겨찾기 넣기 · 빼기
+			if btn == "RightButton" then M:ToggleFav(self.g) return end
 			local link = select(2, C_Item.GetItemInfo(self.g.first))
 			if link and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink then ChatEdit_InsertLink(link) return end
 			M:Select(self.g)
@@ -676,7 +828,11 @@ function M:Build()
 	-- 고른 외형 정보
 	f.selName = Ink:Text(f, F.bold, 13, C.text, "LEFT")
 	f.selName:SetPoint("TOPLEFT", f.bDress, "BOTTOMLEFT", 0, -12)
-	f.selName:SetWidth(PREV_W)
+	f.selName:SetWidth(PREV_W - 28)
+	f.selStar = StarButton(f, 24, function() M:ToggleFav(M.sel) end)
+	f.selStar.dim = 0.55
+	f.selStar:SetPoint("TOPRIGHT", f.bBis, "BOTTOMRIGHT", 3, -6)
+	f.selStar:Hide()
 	f.selInfo = Ink:Text(f, F.sans, 10, C.soft, "LEFT")
 	f.selInfo:SetPoint("TOPLEFT", f.selName, "BOTTOMLEFT", 0, -6)
 	f.selInfo:SetWidth(PREV_W)
@@ -702,7 +858,7 @@ function M:Build()
 			if not f:IsShown() then wipe(arrived) return end
 			local slot = SLOTS[M.slot or 1]
 			for _, c in ipairs(f.cells) do
-				if c.pend and arrived[c.pend] and c.g then c.pend = ShowInCell(c.model, c.g, slot) and c.g.first or nil end
+				if c.pend and arrived[c.pend] and c.g then c.pend = ShowInCell(c.model, c.g, c.slotDef or slot) and c.g.first or nil end
 			end
 			if M.prevPend and arrived[M.prevPend] then local pid = M.prevPend; M.prevPend = nil; M:TryOn(pid) end
 			wipe(arrived)
@@ -740,7 +896,9 @@ function M:PaintText()
 			c.name:SetText(n or "불러오는 중…")
 			c.name:SetTextColor(q[1], q[2], q[3])
 			local e = self.items[id]
-			c.src:SetText(e and e.src[1] and SrcText(e.src[1]) or "")
+			-- 즐겨찾기 탭은 부위가 섞여 있어서 획득처 앞에 부위 이름
+			local pre = (self.fav and c.slotDef) and ("|cffC9CDD4" .. c.slotDef.ko .. "|r · ") or ""
+			c.src:SetText(pre .. (e and e.src[1] and SrcText(e.src[1]) or ""))
 		end
 	end
 	if self.sel then self:PaintSel() end
@@ -750,14 +908,18 @@ function M:Paint()
 	local f = self.frame
 	if not f then return end
 	local slot = SLOTS[self.slot or 1]
-	for i, b in ipairs(f.slots) do
-		local on = i == (self.slot or 1)
+	local favMode = self.fav and true or false
+	local function Hl(b, on)
 		b.hl:SetVertexColor(on and C.accent[1] or 1, on and C.accent[2] or 1, on and C.accent[3] or 1, on and 0.14 or 0)
 		local c = on and C.accent or C.text
 		b.label:SetTextColor(c[1], c[2], c[3])
 	end
-	for _, b in ipairs(f.kinds) do b:SetOn(b.kind == (self.kind or "all")) end
+	Hl(f.favBtn, favMode)
+	for i, b in ipairs(f.slots) do Hl(b, not favMode and i == (self.slot or 1)) end
+	for _, b in ipairs(f.kinds) do b:SetOn(b.kind == (self.kind or "all")); b:SetShown(not favMode) end
 	f.mine:SetOn(self.mine ~= false)
+	f.mine:SetShown(not favMode)
+	f.favNote:SetShown(favMode)
 	local groups = self.groups or {}
 	local n = math.max(1, math.ceil(#groups / PAGE))
 	self.page = math.max(1, math.min(n, self.page or 1))
@@ -768,15 +930,18 @@ function M:Paint()
 		if g then
 			c.key = g.app and ("a" .. g.app) or ("i" .. g.first)
 			c:Show()
-			if c.shownKey ~= c.key or c.shownSlot ~= slot.key then
-				c.pend = ShowInCell(c.model, g, slot) and g.first or nil
-				c.shownKey, c.shownSlot = c.key, slot.key
+			-- 즐겨찾기 탭: 칸마다 그 외형의 부위로 (카메라 · 숨김 장비가 부위마다 다르다)
+			local gs = (favMode and SLOTS[g.slot]) or slot
+			c.slotDef = gs
+			if c.shownKey ~= c.key or c.shownSlot ~= gs.key then
+				c.pend = ShowInCell(c.model, g, gs) and g.first or nil
+				c.shownKey, c.shownSlot = c.key, gs.key
 			end
 			c.badge:SetText(g.rank == 0 and "BIS" or (g.rank and ("대체 " .. g.rank)) or "")
 			c.more:SetText(#g.ids > 1 and ("+" .. (#g.ids - 1)) or "")
 			c.have:SetShown(g.have and true or false)
 			c.more:ClearAllPoints()
-			c.more:SetPoint("TOPRIGHT", g.have and -26 or -8, -7)
+			c.more:SetPoint("TOPRIGHT", g.have and -45 or -29, -7)
 			if c.model then c.model:SetAlpha(1) end
 			c.bd:SetVertexColor(1, 1, 1, self.selKey == c.key and 0.5 or 0.06)
 		else
@@ -788,9 +953,15 @@ function M:Paint()
 	f.pageText:SetText(self.page .. " / " .. n)
 	f.prev:SetShown(n > 1)
 	f.next:SetShown(n > 1)
-	f.count:SetText(string.format("%s · 외형 %d개 (아이템 %d개) · 가진 외형 %d개", slot.ko, #groups, self.nItems or 0, self.nHave or 0))
+	f.count:SetText(string.format("%s · 외형 %d개 (아이템 %d개) · 가진 외형 %d개", favMode and "즐겨찾기" or slot.ko, #groups, self.nItems or 0, self.nHave or 0))
 	f.empty:SetShown(#groups == 0)
-	f.empty:SetText((self.mine ~= false) and "조건에 맞는 장비가 없어요\n'내 직업'을 끄면 다른 직업 장비도 보여요" or "조건에 맞는 장비가 없어요")
+	if favMode then
+		f.empty:SetText((M.FavCount() > 0 and self.query and self.query ~= "") and "검색어에 맞는 즐겨찾기가 없어요"
+			or "아직 즐겨찾기한 외형이 없어요\n칸 오른쪽 위의 별을 누르거나, 칸을 오른쪽 클릭하면 여기에 모여요")
+	else
+		f.empty:SetText((self.mine ~= false) and "조건에 맞는 장비가 없어요\n'내 직업'을 끄면 다른 직업 장비도 보여요" or "조건에 맞는 장비가 없어요")
+	end
+	self:PaintFav()
 end
 
 local HAVE_TXT = { equipped = "착용 중", bag = "가방에 있음", bank = "은행에 있음", col = "수집품에 모은 외형" }
@@ -820,7 +991,8 @@ function M:CellTip(c)
 		end
 	end
 	if #g.ids > shown then GameTooltip:AddLine(string.format("   … 같은 외형 %d개 더", #g.ids - shown), 0.55, 0.58, 0.62) end
-	GameTooltip:AddLine("누르면 오른쪽에서 입어 보기 · Shift+클릭 채팅 링크", 0.55, 0.58, 0.62)
+	if M.IsFav(g) then GameTooltip:AddLine("즐겨찾기한 외형", C.gold[1], C.gold[2], C.gold[3]) end
+	GameTooltip:AddLine("누르면 오른쪽에서 입어 보기 · 오른쪽 클릭 즐겨찾기 · Shift+클릭 채팅 링크", 0.55, 0.58, 0.62, true)
 	GameTooltip:Show()
 end
 
@@ -883,6 +1055,7 @@ end
 function M:PaintSel()
 	local f = self.frame
 	local g = self.sel
+	PaintSelStar(f, g)
 	if not g then
 		f.selName:SetText("")
 		f.selInfo:SetText("격자에서 외형을 누르면 지금 내 장비 위에 입혀 봐요\nBIS 입기 = 지금 특성 BIS 를 한꺼번에")
@@ -947,7 +1120,7 @@ function M:OpenItem(id)
 	local _, _, _, loc = C_Item.GetItemInfoInstant(id)
 	local si = loc and SLOT_OF[loc]
 	self.slot = si or self.slot or 1
-	self.kind, self.query = "all", nil
+	self.kind, self.query, self.fav = "all", nil, false
 	local f = self:Build()
 	if f.search then f.search:SetText("") end
 	self.page = 1
