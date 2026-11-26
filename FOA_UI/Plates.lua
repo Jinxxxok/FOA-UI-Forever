@@ -120,6 +120,16 @@ local function Subtitle(unit)
 	return t
 end
 
+-- 아군 플레이어 길드 이름 (이름 아래 작게 · 같은 길드는 초록)
+local function GuildOf(unit)
+	if not GetGuildInfo then return end
+	local ok, g = pcall(GetGuildInfo, unit)
+	if not ok or (issecretvalue and issecretvalue(g)) then return end
+	g = plain(g)
+	if type(g) ~= "string" or g == "" then return end
+	return g
+end
+
 local function NpcRole(unit)
 	if Ink.db.npcIcons == false then return end
 	if plain(UnitIsPlayer(unit)) then return end
@@ -967,9 +977,25 @@ local function LevelLook(u)
 	return lv .. plus, LVL_COL[key]
 end
 
+-- 아군 플레이어: 이름 아래 길드 (길드 정보는 이름표가 생긴 뒤에 늦게 오기도 해서 UpdateInfo 에서도)
+function M:FriendlyGuild(f)
+	local u = f.unit
+	if not (u and f.friendly and plain(UnitIsPlayer(u))) then return false end
+	local g = Ink.db.plateGuild ~= false and GuildOf(u)
+	if not g then f.sub:Hide() return false end
+	f.sub:SetText("<" .. g .. ">")
+	local mine = GuildOf("player")
+	local c = (mine and mine == g) and C.green or C.muted
+	f.sub:SetTextColor(c[1], c[2], c[3])
+	f.sub:SetAlpha(f.nameAlpha or 0.9)
+	f.sub:Show()
+	return true
+end
+
 function M:UpdateInfo(f)
 	local u = f.unit
 	f.name:SetText((UnitName(u)))
+	if f.friendly then pcall(self.FriendlyGuild, self, f) end
 	if f.lvl then
 		local txt, col
 		if not f.friendly then txt, col = LevelLook(u) end
@@ -1198,7 +1224,7 @@ function M:SetFriendly(f, friendly)
 			if role then f.sub:SetTextColor(role.rgb[1], role.rgb[2], role.rgb[3]) else f.sub:SetTextColor(C.muted[1], C.muted[2], C.muted[3]) end
 			f.sub:SetAlpha(f.nameAlpha)
 			f.sub:Show()
-		else
+		elseif not self:FriendlyGuild(f) then
 			f.sub:Hide()
 		end
 		f.markL:Hide(); f.markR:Hide(); f.elite:Hide()

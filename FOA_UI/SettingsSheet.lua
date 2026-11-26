@@ -459,6 +459,7 @@ function M:BuildRegistry()
 			} },
 			{ t = "표시", rows = {
 				SW("npcIcons", "NPC 역할 아이콘", "상인 · 수리 · 여관 등 머리 위에"),
+				SW("plateGuild", "아군 길드 이름", "아군 플레이어 이름 아래에 <길드> 작게 · 같은 길드는 초록", { def = true }),
 				SW("questObjects", "퀘스트 물체 배지", "줍기 · 부수기 물체 위에 노란 배지"),
 				SW("questSparkle", "퀘스트 물체 반짝임", "배지 주위로 별이 반짝이고 빛이 퍼져요 · 몬스터 전리품처럼", { dep = "questObjects" }),
 				SW("lockboxes", "자물쇠 사물함 (도적)", "자물쇠 따기 연습 사물함: 미니맵 · 지도에 자리, 가까우면 자물쇠 배지 · 반짝임 · 300이면 자동으로 숨김"),

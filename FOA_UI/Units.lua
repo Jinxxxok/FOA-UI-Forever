@@ -831,7 +831,12 @@ function M:BuildPlayer()
 	f.badge:SetPoint("RIGHT", f, "TOPLEFT", P_COL, -10)
 	f.level = Ink:Text(f, F.latinB, 12, C.soft, "RIGHT")
 	f.level:SetPoint("RIGHT", f.badge, "LEFT", -4, 0)
-	-- 이름 오른쪽: 전투 중(검) / 휴식 중(달) 표시
+	-- 이름 오른쪽: 파티장 왕관 → 전투 중(검) / 휴식 중(달) 표시
+	f.crown = f:CreateTexture(nil, "OVERLAY")
+	f.crown:SetTexture(Ink.icon("Crown"))
+	f.crown:SetSize(14, 14)
+	f.crown:SetVertexColor(C.gold[1], C.gold[2], C.gold[3])
+	f.crown:Hide()
 	f.status = f:CreateTexture(nil, "OVERLAY")
 	f.status:SetSize(13, 13)
 	f.status:Hide()
@@ -1298,7 +1303,7 @@ function M:UpdateInfo(f)
 		f.level:SetText((lvl and lvl > 0) and tostring(lvl) or "??")
 		self:UpdateBadge(f)
 	end
-	if f == self.player then self:UpdateStatus() end
+	if f == self.player then self:UpdateStatus(); self:UpdateCrown() end
 	if f == self.target or f == self.focus then
 		local r, g, b = UnitColor(u)
 		f.hp:SetStatusBarColor(r, g, b)
@@ -1386,8 +1391,27 @@ function M:PlaceStatus()
 	if not f or not f.status then return end
 	local w = f.name:GetStringWidth() or 0
 	if issecretvalue and issecretvalue(w) then w = f.name:GetWidth() end
+	local x = math.min(w, f.name:GetWidth()) + 6
+	if f.crown and f.crown:IsShown() then
+		f.crown:ClearAllPoints()
+		f.crown:SetPoint("LEFT", f.name, "LEFT", x, 1)
+		x = x + 18
+	end
 	f.status:ClearAllPoints()
-	f.status:SetPoint("LEFT", f.name, "LEFT", math.min(w, f.name:GetWidth()) + 6, 0)
+	f.status:SetPoint("LEFT", f.name, "LEFT", x, 0)
+end
+
+-- 내가 파티장이면 이름 옆에 금색 왕관 (파티 · 레이드 칸에는 남의 왕관)
+function M:UpdateCrown()
+	local f = self.player
+	if not (f and f.crown) then return end
+	local on = false
+	if IsInGroup and IsInGroup() and UnitIsGroupLeader then
+		local ok, v = pcall(UnitIsGroupLeader, "player")
+		on = ok and plain(v) == true
+	end
+	f.crown:SetShown(on)
+	self:PlaceStatus()
 end
 
 function M:UpdateUnit(f)
@@ -1560,6 +1584,7 @@ function M:Init()
 		"UNIT_SPELLCAST_CHANNEL_UPDATE", "UNIT_SPELLCAST_INTERRUPTIBLE", "UNIT_SPELLCAST_NOT_INTERRUPTIBLE",
 		"UNIT_PET", "PET_UI_UPDATE", "UNIT_HAPPINESS", "PET_BAR_UPDATE", "UNIT_SPELLCAST_SUCCEEDED",
 		"RAID_TARGET_UPDATE", "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION",
+		"GROUP_ROSTER_UPDATE", "PARTY_LEADER_CHANGED",
 	}) do
 		pcall(e.RegisterEvent, e, ev) -- 클라이언트마다 없는 이벤트가 있다 (기분은 포에버만)
 	end
@@ -1570,6 +1595,10 @@ function M:Init()
 		end
 		if event:find("^UNIT_SPELLCAST") then
 			M:CastEvent(event, unit, castGUID, spellID)
+			return
+		end
+		if event == "GROUP_ROSTER_UPDATE" or event == "PARTY_LEADER_CHANGED" then
+			M:UpdateCrown()
 			return
 		end
 		if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_UPDATE_RESTING" then

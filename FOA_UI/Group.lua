@@ -40,6 +40,39 @@ local function SetRole(t, role, onlyTankHealer)
 	t:Show()
 end
 
+-- 파티장 왕관: 이름 글자 바로 뒤에 금색 작은 왕관 (Lucide crown · 채운 모양)
+local function Crown(parent, size)
+	local t = parent:CreateTexture(nil, "OVERLAY")
+	t:SetTexture(Ink.icon("Crown"))
+	t:SetSize(size, size)
+	t:SetVertexColor(C.gold[1], C.gold[2], C.gold[3])
+	t:Hide()
+	return t
+end
+local function IsLeader(u)
+	if not (u and UnitIsGroupLeader) then return false end
+	local ok, v = pcall(UnitIsGroupLeader, u)
+	return ok and plain(v) == true
+end
+-- 이름 글자 폭을 재서 그 뒤에 (칸 폭을 넘으면 칸 끝에)
+local function PlaceCrown(t, name, maxW, on, dy)
+	if not on then t:Hide() return end
+	local w = math.min(name:GetStringWidth() or 0, maxW)
+	t:ClearAllPoints()
+	t:SetPoint("LEFT", name, "LEFT", w + 4, dy or 1)
+	t:Show()
+end
+M.IsLeader = IsLeader
+-- 레이드 칸은 이름 칸이 좁아서 왼쪽 위 모서리에 배지처럼
+local function CornerCrown(f, on)
+	local t = f.crown
+	if not t then return end
+	if not on then t:Hide() return end
+	t:ClearAllPoints()
+	t:SetPoint("CENTER", f.top, "TOPLEFT", 2, -1)
+	t:Show()
+end
+
 -- 해제 가능한 디버프가 있으면 그 종류 색을 돌려준다 (플레이어가 해제할 수 있는 것만)
 local function DispelColor(unit)
 	if not (C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDispelTypeColor) then return end
@@ -147,6 +180,7 @@ local function BuildPartyVisual(f)
 	f.level:SetPoint("LEFT", f.name, "RIGHT", 5, -1)
 	f.role = RoleIcon(f, 13)
 	f.role:SetPoint("LEFT", f.level, "RIGHT", 5, 1)
+	f.crown = Crown(f, 13)
 	RaidIcon(f, f, 18)
 	f.ricon:SetPoint("RIGHT", f.name, "LEFT", -14, 0)
 
@@ -228,6 +262,7 @@ function M:UpdateParty(f)
 	f.dirty = nil
 	f.name:SetText((UnitName(u)))
 	f.name:SetTextColor(ns.ClassColor(u))
+	PlaceCrown(f.crown, f.name, 96, IsLeader(u), 1)
 	local lvl = plain(UnitLevel(u))
 	f.level:SetText((lvl and lvl > 0) and tostring(lvl) or "??")
 	SetRole(f.role, UnitGroupRolesAssigned(u))
@@ -447,6 +482,7 @@ local function BuildRaidVisual(f)
 	f.status:SetPoint("BOTTOMRIGHT", -5, 5)
 	f.role = RoleIcon(f.top, 10)
 	f.role:SetPoint("TOPRIGHT", -5, -5)
+	f.crown = Crown(f.top, 10)
 	RaidIcon(f, f.top, 14)
 	f.ricon:SetPoint("TOP", f, "TOP", 0, -3)
 	TargetMark(f, true)
@@ -495,6 +531,7 @@ function M:UpdateRaid(f)
 	f.name:SetText((UnitName(u)))
 	local cr, cg, cb = ns.ClassColor(u)
 	f.name:SetTextColor(cr, cg, cb)
+	CornerCrown(f, IsLeader(u))
 	safe(function()
 		local mx = UnitHealthMax(u)
 		f.hp:SetMinMaxValues(0, mx)
@@ -666,6 +703,7 @@ function M:BuildPreview()
 		BuildPartyVisual(f)
 		local cc = FAKE_CLASS[d[2]]
 		f.name:SetText(d[1]); f.name:SetTextColor(cc[1], cc[2], cc[3])
+		PlaceCrown(f.crown, f.name, 96, i == 1, 1)
 		f.level:SetText("60")
 		SetRole(f.role, d[3])
 		f.spec.icon:SetTexture(d[5]); f.spec.text:SetText(d[4])
@@ -868,7 +906,7 @@ function M:Init()
 	for _, ev in ipairs({
 		"UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_AURA",
 		"UNIT_NAME_UPDATE", "UNIT_CONNECTION", "UNIT_THREAT_SITUATION_UPDATE", "UNIT_FLAGS", "UNIT_IN_RANGE_UPDATE",
-		"GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "INSPECT_READY", "PLAYER_REGEN_ENABLED",
+		"GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "INSPECT_READY", "PLAYER_REGEN_ENABLED", "PARTY_LEADER_CHANGED",
 		"UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED",
 		"READY_CHECK", "READY_CHECK_CONFIRM", "READY_CHECK_FINISHED", "PLAYER_TARGET_CHANGED", "RAID_TARGET_UPDATE",
 	}) do
@@ -888,6 +926,11 @@ function M:Init()
 		elseif event == "PLAYER_TARGET_CHANGED" then
 			for _, f in ipairs(M.party or {}) do UpdateTargetMark(f) end
 			for _, f in ipairs(M.raidButtons or {}) do UpdateTargetMark(f) end
+			return
+		elseif event == "PARTY_LEADER_CHANGED" then
+			for _, f in ipairs(M.party or {}) do if f.crown and f:IsShown() then PlaceCrown(f.crown, f.name, 96, IsLeader(f.unit), 1) end end
+			for _, f in ipairs(M.raidButtons or {}) do if f:IsShown() then CornerCrown(f, IsLeader(f.unit)) end end
+			if M.OnLeaderChanged then pcall(M.OnLeaderChanged, M) end
 			return
 		elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "PLAYER_REGEN_ENABLED" then
 			if event == "GROUP_ROSTER_UPDATE" then
