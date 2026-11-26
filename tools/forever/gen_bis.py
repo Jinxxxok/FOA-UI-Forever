@@ -175,6 +175,7 @@ L = ['-- FOA UI · 포에버 BIS · 준비물 (자동 생성 · tools/forever/ge
      '--       공략에 60 추천이 아직 없는 전문화(고양 · 복원 주술사 · 신성 사제 · 야성)는 같은 역할 공략 기준 (psrc 에 적음)',
      '--  아이템 번호는 각 사이트의 와우헤드 포에버 링크 · 포에버 아이템 자료(QuestieDB · ATT)와 이름 대조함',
      '--  획득처의 {n:번호|영어} NPC · {q:…} 퀘스트 · {f:…} 평판 = 게임에서 그 언어 이름으로 (번호: QuestieDB GPL-3.0 포에버 합본 · ATT 평판 목록)',
+     '-- nm = 게임이 정보를 아직 안 준 아이템의 한글 이름 (wowf.io · "불러오는 중…" 대신)',
      '-- from = 이 전문화 장비 목록 출처 · g = BIS { [칸] = 아이템 } · gh = 호드 BIS (다른 칸만) · alt = 대체 { 칸, 아이템 } (공략 순서) · src = 획득처 ([A]/[H] = 그 진영 조각) · en = 마부 · co = 소모품 · psrc = 준비물 출처(없으면 Method)',
      '-- PvP: Skill Capped WoW Forever PvP 장비 공략 (2026-11-19 · 공격대 전 예측 세트) · 진영 짝 · 프리미어 PvP 진영 (AllTheThings MIT)',
      'local _, ns = ...', 'ns.BIS_FOREVER = {', '\tsrc = "Method 공략",', '\tspecs = {']
@@ -284,6 +285,16 @@ if os.path.exists(pf):
 for k, v in wfac.items(): fac.setdefault(k, v)
 L.append('\tpair = { ' + ', '.join(f'[{k}] = {v}' for k, v in sorted(pair.items())) + ' },')
 L.append('\tfac = { ' + ', '.join(f'[{k}] = {v}' for k, v in sorted(fac.items())) + ' },')
+# 한글 이름 (wowf_names.txt): 게임이 아이템 정보를 아직 안 준 칸에 "불러오는 중…" 대신
+wn = src_dir + '/wowf_names.txt'
+nm = {}
+if os.path.exists(wn):
+    for line in open(wn, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#'): continue
+        for part in line.split('|'):
+            a, b = part.split('=', 1); nm[int(a)] = b
+L.append('\tnm = { ' + ', '.join(f'[{k}] = "{esc(v)}"' for k, v in sorted(nm.items())) + ' },')
 L += ['}', '']
 open(out, 'w', encoding='utf-8').write('\n'.join(L))
 print(len(pv), 'pvp specs', len(pair), 'pairs', len(fac), 'faction items')

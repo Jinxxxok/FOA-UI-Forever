@@ -755,6 +755,10 @@ function M.PvPGuide(skey) return M.FacGuide("pvp", skey) end
 
 -- 포에버: 공략 BIS (g) = BIS, 공략 대체(alt) 순서 = 대체 1~3 (던전 도감이 없어서 전리품 표 대신 공략 목록)
 function M:BuildRanksForever()
+	-- 서버가 없다고 답했고 지금도 이름을 모르는 아이템은 뺀다 (잠깐 실패했다가 받으면 다시 들어옴)
+	local function Gone(id)
+		return M.itemFail[id] and not (C_Item.GetItemInfo(id) or (C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)))
+	end
 	local lvl = UnitLevel("player") or 60
 	local view = BisView()
 	local skey = SpecKey()
@@ -856,7 +860,7 @@ function M:BuildRanksForever()
 			end
 			local cand, seen = {}, {}
 			for _, it in ipairs(list) do
-				if not self.ranks[it.id] and not seen[it.id] and not (slot == 14 and M.IsRelic(it.id)) then
+				if not self.ranks[it.id] and not seen[it.id] and not (slot == 14 and M.IsRelic(it.id)) and not Gone(it.id) then
 					seen[it.id] = true
 					local l = "item:" .. it.id
 					local v = sc:Score(l, slot == 11 and dual or nil, FOREVER and ScoreSpec() or nil)
@@ -901,7 +905,7 @@ function M:BuildRanksForever()
 	end
 	for inv, id in pairs(spec.g) do
 		local slot = INV2EJ[inv]
-		if slot then
+		if slot and not Gone(id) then
 			local it = GuideItem(id)
 			it.slot = it.slot or slot
 			self.ranks[id] = { rank = 0, slot = slot, it = it, inv = inv }
@@ -911,7 +915,7 @@ function M:BuildRanksForever()
 	for _, a in ipairs(spec.alt) do
 		local inv, id = a[1], a[2]
 		local slot = INV2EJ[inv]
-		if slot and not self.ranks[id] then
+		if slot and not self.ranks[id] and not Gone(id) then
 			per[slot] = (per[slot] or 0) + 1
 			if per[slot] <= 3 then
 				local it = GuideItem(id)
@@ -1872,6 +1876,8 @@ end
 
 -- 이름을 아직 못 받은 퀘스트: 받는 중이면 "불러오는 중", 서버에 자료가 없으면 번호
 M.questFail = {}
+-- 게임(서버)이 "그런 아이템 없음"이라고 답한 아이템: 공략 BIS · 대체에서 뺀다 (예: 티부의 불타는 롱소드 1728 — 툴팁이 '아이템 정보 검색'에서 멈춤)
+M.itemFail = {}
 function M.QuestFallback(qid)
 	return M.questFail[qid] and ("퀘스트 #" .. qid) or "퀘스트 이름 불러오는 중…"
 end
@@ -6759,7 +6765,9 @@ function M:PaintBis()
 			row.itemID, row.link, row.it = it.id, it.link or bLink, it
 			row.icon:Set(it.icon or (C_Item.GetItemIconByID and C_Item.GetItemIconByID(it.id)), quality, SLOT_GLYPH[it.slot or -1])
 			local q = QCOL[quality or 1] or QCOL[1]
-			row.name:SetText(it.name or bName or "불러오는 중…")
+			-- 게임이 아직 정보를 안 준 아이템(예: 티부의 불타는 롱소드)은 공략 자료의 한글 이름으로
+			local nm = ns.BIS_FOREVER and ns.BIS_FOREVER.nm
+			row.name:SetText(it.name or bName or (nm and nm[it.id]) or "불러오는 중…")
 			row.name:SetTextColor(q[1], q[2], q[3])
 			row.src:SetText(self:SourceText(it))
 			local isBis = r.rank == 0
@@ -7008,6 +7016,10 @@ function M:Init()
 		local pending
 		e:SetScript("OnEvent", function(_, event, a1, a2)
 			if event == "QUEST_DATA_LOAD_RESULT" and a2 == false and a1 then M.questFail[plain(a1) or a1] = true end
+			if (event == "ITEM_DATA_LOAD_RESULT" or event == "GET_ITEM_INFO_RECEIVED") and a1 and plain(a2) == false then
+				local fid = plain(a1) or a1
+				if not M.itemFail[fid] then M.itemFail[fid] = true; M.dirty = true end
+			end
 			if event == "ADDON_LOADED" then
 				if not M.bisTab then M:AttachBisTab() end
 				if not M.mapHooked and ns.FOREVER_LOOT then M:HookMap() end
