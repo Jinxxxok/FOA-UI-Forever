@@ -150,6 +150,27 @@ function M:Collect()
 	return items
 end
 
+-- 게임 수집품에 모은 외형인가 (외형 하나라도 · 그 아이템 · 그 출처)
+function M.Collected(g)
+	local T = C_TransmogCollection
+	if not T then return false end
+	if g.src and T.GetAppearanceInfoBySource then
+		local ok, info = pcall(T.GetAppearanceInfoBySource, g.src)
+		if ok and type(info) == "table" and (info.appearanceIsCollected or info.sourceIsCollected) then return true end
+	end
+	for _, id in ipairs(g.ids or {}) do
+		if T.PlayerHasTransmog then
+			local ok, v = pcall(T.PlayerHasTransmog, id)
+			if ok and v == true then return true end
+		end
+	end
+	if g.src and T.PlayerHasTransmogItemModifiedAppearance then
+		local ok, v = pcall(T.PlayerHasTransmogItemModifiedAppearance, g.src)
+		if ok and v == true then return true end
+	end
+	return false
+end
+
 -- 외형 번호 · 외형 출처 번호 (게임에 외형 자료가 없으면 nil → 아이템 번호로 입혀 본다)
 local appMemo = {}
 local function Appearance(id)
@@ -162,7 +183,7 @@ local function Appearance(id)
 	end
 	if type(app) ~= "number" or app == 0 then app = nil end
 	if type(src) ~= "number" or src == 0 then src = nil end
-	appMemo[id] = { app, src }
+	if app then appMemo[id] = { app, src } end
 	return app, src
 end
 M.Appearance = Appearance
@@ -172,14 +193,24 @@ local function Quality(id)
 	return (Dg and Dg.QualityOf and Dg.QualityOf(id)) or (C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)) or 1
 end
 
+-- 이름: 한 번 받은 이름은 기억해 둔다
+--  게임이 들고 있는 아이템 정보는 개수 한도가 있어서 수백 개를 훑으면 먼저 받은 이름이 밀려난다
+--  → 기억 없이 그리면 "아이템 #번호"와 이름이 번갈아 깜빡였다
+local nameMemo = {}
 local function ItemName(id)
-	local n = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+	local n = nameMemo[id]
+	if n then return n end
+	n = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
 	if not n and C_Item.GetItemInfo then n = C_Item.GetItemInfo(id) end
-	if not n then
-		local nm = ns.BIS_FOREVER and ns.BIS_FOREVER.nm
-		n = nm and nm[id]
-	end
-	return n
+	if type(n) == "string" and n ~= "" then nameMemo[id] = n return n end
+	local nm = ns.BIS_FOREVER and ns.BIS_FOREVER.nm
+	return nm and nm[id]
+end
+local function Cached(id)
+	return not C_Item.IsItemDataCachedByID or C_Item.IsItemDataCachedByID(id) or nameMemo[id] ~= nil
+end
+local function Request(id)
+	if C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
 end
 
 local function QuestTitle(qid)
@@ -213,7 +244,8 @@ function M:List()
 	local groups, byKey, nItems = {}, {}, 0
 	for id, e in pairs(items) do
 		local _, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
-		if loc and slot.inv[loc] and (kind == "all" or e.kinds[kind]) and (not mine or not fmc or fmc({ id = id })) then
+		local gone = Dg and Dg.itemFail and Dg.itemFail[id]
+		if loc and not gone and slot.inv[loc] and (kind == "all" or e.kinds[kind]) and (not mine or not fmc or fmc({ id = id })) then
 			local ok = true
 			if q and q ~= "" then
 				local n = ItemName(id)
@@ -247,6 +279,20 @@ function M:List()
 		g.rank = RankOf(g.first)
 		g.q = Quality(g.first)
 	end
+	-- 가진 외형: 착용 · 가방 · 은행(FOA 가 기억한 것) 또는 게임 수집품에 모은 외형
+	local own = {}
+	if Dg and Dg.OwnedItems then local ok, o = pcall(Dg.OwnedItems, Dg); if ok and type(o) == "table" then own = o end end
+	local nHave = 0
+	for _, g in ipairs(groups) do
+		g.have = nil
+		for _, id in ipairs(g.ids) do
+			local o = own[id]
+			if o then g.have, g.haveID = o.kind, id break end
+		end
+		if not g.have and M.Collected(g) then g.have = "col" end
+		if g.have then nHave = nHave + 1 end
+	end
+	self.nHave = nHave
 	-- 외형끼리: 지금 특성 BIS · 대체 → 등급 → 번호(새 장비가 앞)
 	table.sort(groups, function(a, b)
 		local ra, rb = a.rank or 99, b.rank or 99
@@ -265,17 +311,35 @@ local function ApplyCam(m)
 	if m.cameraID and m.cameraID > 0 and Model_ApplyUICamera then pcall(Model_ApplyUICamera, m, m.cameraID) end
 end
 
-local function NewModel(parent)
+local function FlatLight(m)
+	if not (m.SetLight and CreateVector3D and CreateColor) then return end
+	pcall(m.SetLight, m, true, {
+		omnidirectional = false, point = CreateVector3D(-1, 1, -1),
+		ambientIntensity = 1.05, ambientColor = CreateColor(1, 1, 1),
+		diffuseIntensity = 0, diffuseColor = CreateColor(1, 1, 1),
+	})
+end
+
+local function NewModel(parent, cell)
 	local ok, m = pcall(CreateFrame, "DressUpModel", nil, parent)
 	if not ok or not m then return nil end
-	m:SetScript("OnModelLoaded", ApplyCam)
+	if cell then
+		-- 본섭 외형 창과 같은 조명(앞뒤 고르게) · 자동으로 내 장비 입히기 끔
+		--  기본 조명은 어깨처럼 옆 · 뒤에서 보는 카메라에서 몸이 까맣게 보였다
+		pcall(m.SetAutoDress, m, false)
+		FlatLight(m)
+		m:SetScript("OnModelLoaded", ApplyCam)
+	end
 	return m
 end
 
 -- 격자 칸: 본섭 외형 창과 같은 방식 (방어구 = 벗은 몸에 그 칸만 · 무기 = 무기만)
+--  돌려주는 값: 아이템 정보가 아직 안 와서 제대로 못 입혔으면 true (정보가 오면 다시 그린다)
 local function ShowInCell(m, g, slot)
 	if not m then return end
 	m.cameraID = nil
+	if not g.app then g.app, g.src = Appearance(g.first) end
+	local pending = not Cached(g.first)
 	if slot.armor then
 		local set = SETUP[slot.ts]
 		if m.slotKey ~= slot.key then
@@ -291,18 +355,21 @@ local function ShowInCell(m, g, slot)
 		for s, on in pairs(set and set.slots or {}) do
 			if on and SETUP_GEAR[s] then pcall(m.TryOn, m, SETUP_GEAR[s]) end
 		end
-		local ok = pcall(m.TryOn, m, g.src or ("item:" .. g.first))
-		if not ok and g.src then pcall(m.TryOn, m, "item:" .. g.first) end
+		local ok, r = pcall(m.TryOn, m, g.src or ("item:" .. g.first))
+		if (not ok or r == 3) and g.src then ok, r = pcall(m.TryOn, m, "item:" .. g.first) end
+		if r == 3 then pending = true end   -- Enum.ItemTryOnReason.DataPending
 	else
 		m.slotKey = slot.key
 		local ok = g.app and pcall(m.SetItemAppearance, m, g.app)
-		if not ok then pcall(m.SetItem, m, g.first) end
+		if not ok then pcall(m.SetItem, m, g.first) else pending = false end
 	end
 	if g.app and C_TransmogCollection and C_TransmogCollection.GetAppearanceCameraID then
 		local ok, cam = pcall(C_TransmogCollection.GetAppearanceCameraID, g.app)
 		if ok and type(cam) == "number" then m.cameraID = cam end
 	end
 	ApplyCam(m)
+	if pending then Request(g.first) end
+	return pending
 end
 
 -------------------------------------------------------------------------------
@@ -331,6 +398,16 @@ local function TextButton(parent, text, w, h, onClick)
 	b.label:SetPoint("CENTER", 0, 0)
 	b.label:SetText(text)
 	b:SetScript("OnClick", onClick)
+	-- 화살표: 글자(‹ ›) 대신 그림 · 글꼴에 따라 □ 로 깨지지 않게 (SettingsSheet 와 같은 방식)
+	if text == "<" or text == ">" then
+		b.label:SetText("")
+		b.icon = b:CreateTexture(nil, "ARTWORK")
+		b.icon:SetTexture(Ink.icon("Chevron"))
+		b.icon:SetSize(14, 14)
+		b.icon:SetPoint("CENTER", 0, 0)
+		b.icon:SetRotation(text == "<" and -math.pi / 2 or math.pi / 2)
+		b.icon:SetVertexColor(C.soft[1], C.soft[2], C.soft[3])
+	end
 	b:SetScript("OnEnter", function(self) self.bg:SetVertexColor(1, 1, 1, 0.1) end)
 	b:SetScript("OnLeave", function(self) self.bg:SetVertexColor(1, 1, 1, self.on and 0.12 or 0.05) end)
 	function b:SetOn(on)
@@ -479,7 +556,7 @@ function M:Build()
 		c.bd = Ink:Round(c, "BORDER", true, true)
 		c.bd:SetAllPoints()
 		c.bd:SetVertexColor(1, 1, 1, 0.06)
-		c.model = NewModel(c)
+		c.model = NewModel(c, true)
 		if c.model then
 			c.model:SetPoint("TOPLEFT", 4, -4)
 			c.model:SetSize(CELL_W - 8, MODEL_H)
@@ -491,8 +568,14 @@ function M:Build()
 		c.src = Ink:Text(c, F.sans, 9, C.muted, "LEFT")
 		c.src:SetPoint("TOPLEFT", c.name, "BOTTOMLEFT", 0, -3)
 		c.src:SetWidth(CELL_W - 16)
-		c.badge = Ink:Text(c, F.latinB or F.bold, 9, C.accent, "LEFT")
+		c.badge = Ink:Text(c, F.semi, 10, C.accent, "LEFT")
 		c.badge:SetPoint("TOPLEFT", 8, -7)
+		c.have = c:CreateTexture(nil, "OVERLAY")
+		c.have:SetTexture(Ink.icon("Check"))
+		c.have:SetSize(16, 16)
+		c.have:SetPoint("TOPRIGHT", -6, -6)
+		c.have:SetVertexColor(C.green[1], C.green[2], C.green[3])
+		c.have:Hide()
 		c.more = Ink:Text(c, F.semi, 9, C.soft, "RIGHT")
 		c.more:SetPoint("TOPRIGHT", -8, -7)
 		c:SetScript("OnEnter", function(self) M:CellTip(self) end)
@@ -518,8 +601,8 @@ function M:Build()
 	f:EnableMouseWheel(true)
 	f:SetScript("OnMouseWheel", function(_, d) M:Turn(-d) end)
 	-- 쪽 넘기기
-	f.prev = TextButton(f, "‹", 28, 22, function() M:Turn(-1) end)
-	f.next = TextButton(f, "›", 28, 22, function() M:Turn(1) end)
+	f.prev = TextButton(f, "<", 28, 22, function() M:Turn(-1) end)
+	f.next = TextButton(f, ">", 28, 22, function() M:Turn(1) end)
 	f.pageText = Ink:Text(f, F.num, 12, C.soft, "CENTER")
 	local midX = gx + (COLS * (CELL_W + 6) - 6) / 2
 	f.pageText:SetPoint("BOTTOM", f, "BOTTOMLEFT", midX, 22)
@@ -572,7 +655,11 @@ function M:Build()
 			self.zoom = math.max(0, math.min(0.75, (self.zoom or 0) + d * 0.08))
 			pcall(self.SetPortraitZoom, self, self.zoom)
 		end)
-		m:SetScript("OnModelLoaded", function(self) pcall(self.SetFacing, self, self.facing or 0) end)
+		m:SetScript("OnModelLoaded", function(self)
+			pcall(self.SetFacing, self, self.facing or 0)
+			-- 모델을 다 불러온 뒤에 내 장비를 다시 (불러오기 전에 입힌 건 사라질 수 있다)
+			if self.needDress then self.needDress = nil; M:DressMine() end
+		end)
 	end
 	pv.hint = Ink:Text(pv, F.sans, 9, C.dim, "CENTER")
 	pv.hint:SetPoint("BOTTOM", 0, 6)
@@ -602,11 +689,25 @@ function M:Build()
 	-- 아이템 이름 · 퀘스트 이름이 도착하면 보이는 칸 글자만 다시
 	local ev = CreateFrame("Frame")
 	ev:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+	ev:RegisterEvent("ITEM_DATA_LOAD_RESULT")
 	ev:RegisterEvent("QUEST_DATA_LOAD_RESULT")
-	ev:SetScript("OnEvent", function()
-		if not f:IsShown() or M.textPend then return end
+	local arrived = {}
+	ev:SetScript("OnEvent", function(_, event, id)
+		if not f:IsShown() then return end
+		if event ~= "QUEST_DATA_LOAD_RESULT" and id then arrived[id] = true end
+		if M.textPend then return end
 		M.textPend = true
-		C_Timer.After(0.4, function() M.textPend = nil; if f:IsShown() then M:PaintText() end end)
+		C_Timer.After(0.3, function()
+			M.textPend = nil
+			if not f:IsShown() then wipe(arrived) return end
+			local slot = SLOTS[M.slot or 1]
+			for _, c in ipairs(f.cells) do
+				if c.pend and arrived[c.pend] and c.g then c.pend = ShowInCell(c.model, c.g, slot) and c.g.first or nil end
+			end
+			if M.prevPend and arrived[M.prevPend] then local pid = M.prevPend; M.prevPend = nil; M:TryOn(pid) end
+			wipe(arrived)
+			M:PaintText()
+		end)
 	end)
 	return f
 end
@@ -634,9 +735,9 @@ function M:PaintText()
 		if g then
 			local id = g.first
 			local n = ItemName(id)
-			if not n and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
-			local q = QCOL[Quality(id) or 1] or QCOL[1]
-			c.name:SetText(n or ("아이템 #" .. id))
+			if not n then Request(id) end
+			local q = n and (QCOL[Quality(id) or 1] or QCOL[1]) or C.dim
+			c.name:SetText(n or "불러오는 중…")
 			c.name:SetTextColor(q[1], q[2], q[3])
 			local e = self.items[id]
 			c.src:SetText(e and e.src[1] and SrcText(e.src[1]) or "")
@@ -668,11 +769,15 @@ function M:Paint()
 			c.key = g.app and ("a" .. g.app) or ("i" .. g.first)
 			c:Show()
 			if c.shownKey ~= c.key or c.shownSlot ~= slot.key then
-				ShowInCell(c.model, g, slot)
+				c.pend = ShowInCell(c.model, g, slot) and g.first or nil
 				c.shownKey, c.shownSlot = c.key, slot.key
 			end
 			c.badge:SetText(g.rank == 0 and "BIS" or (g.rank and ("대체 " .. g.rank)) or "")
 			c.more:SetText(#g.ids > 1 and ("+" .. (#g.ids - 1)) or "")
+			c.have:SetShown(g.have and true or false)
+			c.more:ClearAllPoints()
+			c.more:SetPoint("TOPRIGHT", g.have and -26 or -8, -7)
+			if c.model then c.model:SetAlpha(1) end
 			c.bd:SetVertexColor(1, 1, 1, self.selKey == c.key and 0.5 or 0.06)
 		else
 			c:Hide()
@@ -683,19 +788,23 @@ function M:Paint()
 	f.pageText:SetText(self.page .. " / " .. n)
 	f.prev:SetShown(n > 1)
 	f.next:SetShown(n > 1)
-	f.count:SetText(string.format("%s · 외형 %d개 (아이템 %d개)", slot.ko, #groups, self.nItems or 0))
+	f.count:SetText(string.format("%s · 외형 %d개 (아이템 %d개) · 가진 외형 %d개", slot.ko, #groups, self.nItems or 0, self.nHave or 0))
 	f.empty:SetShown(#groups == 0)
 	f.empty:SetText((self.mine ~= false) and "조건에 맞는 장비가 없어요\n'내 직업'을 끄면 다른 직업 장비도 보여요" or "조건에 맞는 장비가 없어요")
 end
 
+local HAVE_TXT = { equipped = "착용 중", bag = "가방에 있음", bank = "은행에 있음", col = "수집품에 모은 외형" }
 -- 칸 툴팁: 아이템 툴팁 + 이 외형이 나오는 아이템 · 획득처
 function M:CellTip(c)
 	local g = c.g
 	if not g then return end
 	c.bd:SetVertexColor(C.accent[1], C.accent[2], C.accent[3], 0.6)
-	GameTooltip:SetOwner(c, "ANCHOR_RIGHT")
+	GameTooltip:SetOwner(c, "ANCHOR_NONE")
+	GameTooltip:ClearAllPoints()
+	GameTooltip:SetPoint("TOPRIGHT", self.frame, "TOPLEFT", -6, -40)
 	GameTooltip:SetItemByID(g.first)
 	GameTooltip:AddLine(" ")
+	if g.have then GameTooltip:AddLine("가지고 있는 외형 · " .. (HAVE_TXT[g.have] or ""), 0.44, 0.83, 0.6) end
 	GameTooltip:AddLine("|cffFFF468FOA|r 획득처", 1, 1, 1)
 	local shown = 0
 	for _, id in ipairs(g.ids) do
@@ -716,18 +825,33 @@ function M:CellTip(c)
 end
 
 -- 미리보기
+--  내 장비: 게임의 Dress() 만으로는 맨몸에 무기 · 허리띠만 보이는 일이 있어서(포에버) 보이는 칸을 하나씩 입힌다
+local SHOWN_INV = { 1, 3, 4, 5, 6, 7, 8, 9, 10, 15, 19, 16, 17, 18 }
+function M:DressMine()
+	local m = self.frame and self.frame.pv.model
+	if not m then return end
+	pcall(m.Undress, m)
+	for _, inv in ipairs(SHOWN_INV) do
+		local link = GetInventoryItemLink and GetInventoryItemLink("player", inv)
+		if link then
+			if inv == 17 then pcall(m.TryOn, m, link, "SECONDARYHANDSLOT") else pcall(m.TryOn, m, link) end
+		end
+	end
+	if self.sel then self:TryOn(self.sel.first) end
+end
+
 function M:ResetPreview(clearSel)
 	local m = self.frame and self.frame.pv.model
 	if not m then return end
+	m.needDress = true
 	pcall(m.SetUnit, m, "player")
 	pcall(m.SetSheathed, m, false)
-	pcall(m.Dress, m)
+	self:DressMine()
 	m.facing, m.zoom, m.py, m.pz = 0, 0, 0, 0
 	pcall(m.SetFacing, m, 0)
 	pcall(m.SetPortraitZoom, m, 0)
 	pcall(m.SetPosition, m, 0, 0, 0)
-	if clearSel then self.sel, self.selKey = nil, nil; self:PaintSel(); self:Paint()
-	elseif self.sel then self:TryOn(self.sel.first) end
+	if clearSel then self.sel, self.selKey = nil, nil; self:PaintSel(); self:Paint(); self:DressMine() end
 end
 
 function M:Undress()
@@ -741,8 +865,9 @@ function M:TryOn(id)
 	local m = self.frame and self.frame.pv.model
 	if not m then return end
 	local _, src = Appearance(id)
-	local ok = pcall(m.TryOn, m, src or ("item:" .. id))
-	if not ok then pcall(m.TryOn, m, "item:" .. id) end
+	local ok, r = pcall(m.TryOn, m, src or ("item:" .. id))
+	if not ok or r == 3 then ok, r = pcall(m.TryOn, m, "item:" .. id) end
+	if r == 3 or not Cached(id) then self.prevPend = id; Request(id) end
 end
 
 function M:Select(g)
@@ -765,9 +890,10 @@ function M:PaintSel()
 	end
 	local id = g.first
 	local q = QCOL[Quality(id) or 1] or QCOL[1]
-	f.selName:SetText(ItemName(id) or ("아이템 #" .. id))
+	f.selName:SetText(ItemName(id) or "불러오는 중…")
 	f.selName:SetTextColor(q[1], q[2], q[3])
 	local lines = {}
+	if g.have then lines[#lines + 1] = "|cff6FD39A가지고 있는 외형 · " .. (HAVE_TXT[g.have] or "") .. "|r" end
 	if g.rank then lines[#lines + 1] = "|cffFFF468" .. (g.rank == 0 and "지금 특성 BIS" or ("지금 특성 대체 " .. g.rank .. "위")) .. "|r" end
 	for _, iid in ipairs(g.ids) do
 		local e = self.items[iid]
