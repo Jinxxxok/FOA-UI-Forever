@@ -1,0 +1,114 @@
+# wowf.io 아이템 점수(cv)에서 거꾸로 맞춘 능력치 값 (방어구 칸 · 특수 효과/세트 없는 아이템 · 최소 제곱)
+#  K|키  W|능력치번호=값:표본 수 … |n 표본 r2 maxe|무기 초당 공격력 값(중앙값 · 표본)  C|상한 · 추천 조합 값(cw)  H|능력치 환산(statHelp)
+K|ROGUE:combat
+W|3=166.2:41 4=86.2:24 7=7.0:50 31=-4.1:16 32=151.4:19 38=81.7:17|n=59 r2=0.9947 maxe=615|mh=454.7n18 oh=- 2h=- rg=2.6n18
+C|meleeHit:31:8:10:precision=3/3 expertise:37:6.5:10:weapon_expertise=2/2|cw={"31":12,"37":241}|heal=0|sets=11
+H|3:ap=1.000,rap=1.000,crit=0.03450,dodge=0.06900,armor=2.000 4:ap=1.000 7:health=10.00 13:dodge=0.08333 31:hit=0.1000 32:crit=0.07143
+K|ROGUE:assassination
+W|3=167.8:44 4=83.4:27 31=-2.3:17 32=170.4:21 38=80.9:18|n=64 r2=0.9931 maxe=564|mh=411.4n12 oh=- 2h=- rg=1.9n18
+C|meleeHit:31:8:10:precision=3/3 expertise:37:6.5:10:weapon_expertise=2/2|cw={"31":12,"37":239}|heal=0|sets=8
+H|3:ap=1.000,rap=1.000,crit=0.03450,dodge=0.06900,armor=2.000 4:ap=1.000 7:health=10.00 13:dodge=0.08333 31:hit=0.1000 32:crit=0.07143
+K|ROGUE:subtlety
+W|3=168.4:40 4=87.9:24 7=7.9:48 31=-5.0:14 32=150.2:19 38=83.3:17|n=58 r2=0.9945 maxe=608|mh=455.3n12 oh=- 2h=- rg=2.9n18
+C|meleeHit:31:8:10:precision=3/3 expertise:37:6.5:10:weapon_expertise=2/2|cw={"31":11,"37":217}|heal=0|sets=10
+H|3:ap=1.000,rap=1.000,crit=0.03450,dodge=0.06900,armor=2.000 4:ap=1.000 7:health=10.00 13:dodge=0.08333 31:hit=0.1000 32:crit=0.07143
+K|WARRIOR:arms
+W|3=145.5:35 4=246.1:38 31=13.8:29 32=230.5:34 37=-31.0:1 38=111.7:21|n=74 r2=0.9600 maxe=1676|mh=- oh=- 2h=884.3n16 rg=8.3n19
+C|meleeHit:31:8:10: expertise:37:6.5:10:|cw={"31":19,"37":386}|heal=0|sets=9
+H|3:rap=1.000,crit=0.05000,dodge=0.05000,armor=2.000 4:ap=2.000 7:health=10.00 13:dodge=0.08333 31:hit=0.1000 32:crit=0.07143
+K|WARRIOR:fury
+W|3=106.4:44 4=163.5:44 31=7.2:28 32=162.0:36 37=-23.0:1 38=74.4:20|n=80 r2=0.9491 maxe=1343|mh=400.5n15 oh=- 2h=- rg=2.5n16
+C|meleeHit:31:8:10: offHandHit:31:27:10:furious_precision=3/3 expertise:37:6.5:10:|cw={"31":9,"37":177}|heal=0|sets=10
+H|3:rap=1.000,crit=0.05000,dodge=0.05000,armor=2.000 4:ap=2.000 7:health=10.00 13:dodge=0.08333 31:hit=0.1000 32:crit=0.07143
+K|WARRIOR:prot
+W|3=86.6:29 4=64.4:52 7=124.4:87 12=-164.2:37 13=88.5:8 14=-46.3:2 15=96.3:1 31=-33.6:19 32=52.6:14 37=36.8:4 38=36.8:8 armor=3.3:72|n=93 r2=0.8589 maxe=2440|mh=29.7n13 oh=- 2h=- rg=-30.4n10
+C|defense:12:440:undefined:anticipation=5/5 meleeHit:31:8:10: expertise:37:6.5:10:|cw={"12":208,"31":5,"37":98}|heal=0|sets=7
+H|3:rap=1.000,crit=0.05000,dodge=0.05000,armor=2.000 4:ap=2.000 7:health=10.00 13:dodge=0.08333 14:parry=0.06667 15:block=0.2000 31:hit=0.1000 32:crit=0.07143
+K|PALADIN:holy
+W|5=62.7:44 6=16.6:31 32=59.6:3 41=122.8:63 43=95.3:12|n=67 r2=0.9869 maxe=600|mh=- oh=- 2h=- rg=-
+C||cw={}|heal=1|sets=3
+H|4:ap=2.000 5:mana=15.00,spellCrit=0.01850 7:health=10.00 32:crit=0.07143
+K|PALADIN:prot
+W|3=89.8:21 4=12.8:36 5=49.8:24 7=95.8:101 12=-114.9:38 13=152.4:9 14=-200.1:1 15=112.8:2 31=-29.8:21 37=44.6:4 42=58.0:36 43=184.3:2 armor=4.4:77|n=108 r2=0.7657 maxe=3517|mh=57.7n14 oh=- 2h=- rg=-
+C|defense:12:440:undefined:anticipation=5/5 meleeHit:31:8:10:precision=3/3 spellHit:31:17:10:precision=3/3+divine_precision=2/2 expertise:37:6.5:10:|cw={"12":225,"31":1,"37":15}|heal=0|sets=6
+H|3:crit=0.05000,dodge=0.05000,armor=2.000 4:ap=2.000 5:mana=15.00,spellCrit=0.01850 7:health=10.00 13:dodge=0.08333 14:parry=0.06667 15:block=0.2000 31:hit=0.1000 32:crit=0.07143
+K|PALADIN:ret
+W|3=129.1:30 4=244.4:48 5=63.8:18 31=9.4:27 32=221.9:43 37=-17.9:1 38=98.0:19 42=74.9:21 43=-73.1:1 84=9.5:1|n=89 r2=0.9813 maxe=1390|mh=- oh=- 2h=730.2n24 rg=-
+C|meleeHit:31:8:10:precision=3/3 spellHit:31:17:10:precision=3/3+divine_precision=2/2 expertise:37:6.5:10:|cw={"31":19,"37":383}|heal=0|sets=10
+H|3:crit=0.05000,dodge=0.05000,armor=2.000 4:ap=2.000 5:mana=15.00,spellCrit=0.01850 7:health=10.00 13:dodge=0.08333 31:hit=0.1000 32:crit=0.07143
+K|HUNTER:bm
+W|3=187.2:55 5=105.6:21 31=13.0:22 32=136.0:25 38=77.5:19 43=379.9:1|n=70 r2=0.8450 maxe=1748|mh=- oh=- 2h=279.3n8 rg=269.5n20
+C|rangedHit:31:8:10:surefooted=3/3|cw={"31":12}|heal=0|sets=8
+H|3:ap=1.000,rap=2.000,crit=0.01890,dodge=0.03770,armor=2.000 4:ap=1.000 5:mana=15.00 7:health=10.00 13:dodge=0.08333 31:hit=0.1000 32:crit=0.07143
+K|HUNTER:mm
+W|3=177.6:52 5=107.7:21 31=17.2:23 32=156.3:28 38=66.8:19 43=329.5:1|n=70 r2=0.8361 maxe=1981|mh=- oh=- 2h=271.3n10 rg=277.4n20
+C|rangedHit:31:8:10:surefooted=3/3|cw={"31":11}|heal=0|sets=8
+H|3:ap=1.000,rap=2.000,crit=0.01890,dodge=0.03770,armor=2.000 4:ap=1.000 5:mana=15.00 7:health=10.00 13:dodge=0.08333 31:hit=0.1000 32:crit=0.07143
+K|HUNTER:sv
+W|3=190.5:56 4=43.0:10 5=92.7:19 7=21.5:58 31=22.3:25 32=134.0:28 38=83.3:20 43=324.3:1|n=74 r2=0.8132 maxe=1898|mh=- oh=- 2h=268.6n6 rg=288.2n21
+C|rangedHit:31:8:10:surefooted=3/3|cw={"31":11}|heal=0|sets=7
+H|3:ap=1.000,rap=2.000,crit=0.01890,dodge=0.03770,armor=2.000 4:ap=1.000 5:mana=15.00 7:health=10.00 13:dodge=0.08333 31:hit=0.1000 32:crit=0.07143
+K|PRIEST:disc
+W|5=56.0:33 6=36.1:28 41=129.3:45 43=92.2:9|n=48 r2=0.9869 maxe=648|mh=- oh=- 2h=- rg=9.5n2
+C||cw={}|heal=1|sets=6
+H|5:mana=15.00,spellCrit=0.01690 7:health=10.00 32:crit=0.07143
+K|PRIEST:holy
+W|5=60.8:37 6=49.1:37 41=126.5:53 43=96.7:9|n=56 r2=0.9789 maxe=699|mh=- oh=- 2h=- rg=9.2n2
+C||cw={}|heal=1|sets=4
+H|4:ap=1.000 5:mana=15.00,spellCrit=0.01690 7:health=10.00 32:crit=0.07143
+K|PRIEST:shadow
+W|5=57.5:70 6=39.2:31 7=-8.4:72 31=4.3:17 32=66.9:13 42=169.3:72 43=84.4:5 47=121.0:8 88=192.2:12|n=98 r2=0.8903 maxe=2161|mh=- oh=- 2h=- rg=18.5n8
+C|spellHit:31:17:10:shadow_focus=5/5|cw={"31":10}|heal=0|sets=7
+H|3:crit=0.05000,dodge=0.05000,armor=2.000 4:ap=1.000 5:mana=15.00,spellCrit=0.01690 7:health=10.00 31:hit=0.1000 32:crit=0.07143
+K|SHAMAN:enh
+W|3=123.7:49 4=258.6:37 5=13.8:34 31=-14.6:20 32=240.0:37 38=77.4:22 43=391.1:1 45=21.8:11|n=89 r2=0.8915 maxe=2048|mh=- oh=- 2h=814.2n13 rg=-
+C|meleeHit:31:8:10:tidal_focus=5/5 expertise:37:6.5:10:|cw={"31":19,"37":374}|heal=0|sets=9
+H|3:crit=0.05000,dodge=0.05000,armor=2.000 4:ap=2.000 5:mana=15.00,spellCrit=0.01680 7:health=10.00 13:dodge=0.08333 31:hit=0.1000 32:crit=0.07143
+K|SHAMAN:ele
+W|5=64.7:55 7=3.9:49 31=4.1:11 32=117.0:11 42=196.7:64 43=48.4:4 47=102.5:4 86=161.7:4|n=70 r2=0.9902 maxe=956|mh=- oh=- 2h=- rg=-
+C|spellHit:31:17:10:tidal_focus=5/5|cw={"31":11}|heal=0|sets=6
+H|3:crit=0.05000,dodge=0.05000,armor=2.000 4:ap=2.000 5:mana=15.00,spellCrit=0.01680 7:health=10.00 31:hit=0.1000 32:crit=0.07143
+K|SHAMAN:resto
+W|5=57.9:39 6=26.5:34 32=71.3:2 41=127.1:57 43=105.8:12|n=62 r2=0.9839 maxe=689|mh=- oh=- 2h=- rg=-
+C||cw={}|heal=1|sets=3
+H|5:mana=15.00,spellCrit=0.01680 7:health=10.00 31:hit=0.1000 32:crit=0.07143
+K|MAGE:arcane
+W|5=113.1:65 6=-20.3:25 7=19.2:55 31=6.3:13 32=109.6:8 42=154.9:66 43=75.8:4 47=58.9:6 89=168.0:5|n=78 r2=0.8942 maxe=2027|mh=- oh=- 2h=- rg=11.9n6
+C|spellHit:31:17:10:elemental_precision=3/3|cw={"31":11}|heal=0|sets=8
+H|4:ap=1.000 5:mana=15.00,spellCrit=0.01680 7:health=10.00 31:hit=0.1000 32:crit=0.07143
+K|MAGE:fire
+W|5=80.2:62 6=10.2:26 7=3.6:58 31=-9.9:16 32=133.4:12 42=165.6:61 43=87.0:3 47=137.3:7 85=169.5:11|n=84 r2=0.9574 maxe=1565|mh=- oh=- 2h=- rg=16.1n6
+C|spellHit:31:17:10:elemental_precision=3/3|cw={"31":13}|heal=0|sets=6
+H|4:ap=1.000 5:mana=15.00,spellCrit=0.01680 7:health=10.00 31:hit=0.1000 32:crit=0.07143
+K|MAGE:frost
+W|5=49.0:57 6=9.4:22 7=17.4:53 31=-3.1:13 32=116.7:10 42=174.2:58 43=85.3:3 47=45.8:6 87=185.8:10|n=75 r2=0.9046 maxe=2019|mh=- oh=- 2h=- rg=19.1n5
+C|spellHit:31:17:10:elemental_precision=3/3|cw={"31":13}|heal=0|sets=8
+H|3:crit=0.05000,dodge=0.05000,armor=2.000 4:ap=1.000 5:mana=15.00,spellCrit=0.01680 7:health=10.00 31:hit=0.1000 32:crit=0.07143
+K|WARLOCK:aff
+W|5=60.9:60 6=35.8:19 7=34.1:59 31=8.2:9 32=63.3:10 42=168.0:61 43=116.1:3 47=84.6:6 88=143.2:12|n=78 r2=0.8319 maxe=2570|mh=- oh=- 2h=- rg=18.0n6
+C|spellHit:31:17:10:suppression=5/5|cw={"31":10}|heal=0|sets=6
+H|4:ap=1.000 5:mana=15.00,spellCrit=0.01650 7:health=10.00 31:hit=0.1000 32:crit=0.07143
+K|WARLOCK:demo
+W|5=82.7:60 6=35.2:21 7=5.0:59 31=33.2:12 32=46.6:10 42=156.5:56 43=228.5:3 47=153.8:5 85=55.5:4 88=124.6:11|n=77 r2=0.8434 maxe=1703|mh=- oh=- 2h=- rg=9.0n5
+C|spellHit:31:17:10:suppression=5/5|cw={"31":11}|heal=0|sets=7
+H|3:crit=0.05000,dodge=0.05000,armor=2.000 4:ap=1.000 5:mana=15.00,spellCrit=0.01650 7:health=10.00 31:hit=0.1000 32:crit=0.07143
+K|WARLOCK:destro
+W|5=61.7:68 7=8.1:68 31=12.9:10 32=82.5:12 42=173.2:69 43=144.5:3 47=121.9:7 85=75.0:6 88=128.5:10|n=90 r2=0.8288 maxe=2417|mh=- oh=- 2h=- rg=12.2n7
+C|spellHit:31:17:10:suppression=5/5|cw={"31":10}|heal=0|sets=7
+H|4:ap=1.000 5:mana=15.00,spellCrit=0.01650 7:health=10.00 31:hit=0.1000 32:crit=0.07143
+K|DRUID:balance
+W|5=86.0:47 6=24.5:24 7=-3.8:41 31=1.5:10 32=114.0:10 42=179.5:54 43=25.6:2 47=62.1:3 86=91.5:2 89=97.9:1|n=60 r2=0.9427 maxe=1849|mh=- oh=- 2h=- rg=-
+C|spellHit:31:17:10:nature_s_reach=2/2|cw={"31":12}|heal=0|sets=6
+H|4:ap=2.000 5:mana=15.00,spellCrit=0.01670 7:health=10.00 31:hit=0.1000 32:crit=0.07143
+K|DRUID:feral
+W|3=215.8:52 4=246.3:42 5=10.0:2 7=9.0:60 31=17.7:15 32=194.9:19 38=101.0:16|n=71 r2=0.9604 maxe=2039|mh=- oh=- 2h=- rg=-
+C|meleeHit:31:8:10:nature_s_reach=2/2 expertise:37:6.5:10:|cw={"31":13,"37":263}|heal=0|sets=7
+H|3:ap=1.000,crit=0.05000,dodge=0.05000,armor=2.000 4:ap=2.000 5:mana=15.00,spellCrit=0.01670 7:health=10.00 13:dodge=0.08333 31:hit=0.1000 32:crit=0.07143
+K|DRUID:guardian
+W|3=105.6:57 4=78.9:51 7=173.1:85 12=-148.2:33 13=110.8:9 31=10.5:12 32=63.3:12 37=-11.0:4 38=24.0:8 armor=7.4:76|n=94 r2=0.9172 maxe=2074|mh=- oh=- 2h=- rg=-
+C|defense:12:440:undefined: meleeHit:31:8:10:nature_s_reach=2/2 expertise:37:6.5:10:|cw={"12":237,"31":6,"37":127}|heal=0|sets=7
+H|3:ap=1.000,crit=0.05000,dodge=0.05000,armor=2.000 4:ap=2.000 5:mana=15.00,spellCrit=0.01670 7:health=10.00 13:dodge=0.08333 14:parry=0.06667 31:hit=0.1000 32:crit=0.07143
+K|DRUID:resto
+W|5=53.6:46 6=59.8:50 32=46.8:3 41=127.2:67 43=89.2:11|n=72 r2=0.9864 maxe=829|mh=- oh=- 2h=- rg=-
+C||cw={}|heal=1|sets=2
+H|4:ap=2.000 5:mana=15.00,spellCrit=0.01670 7:health=10.00 31:hit=0.1000 32:crit=0.07143

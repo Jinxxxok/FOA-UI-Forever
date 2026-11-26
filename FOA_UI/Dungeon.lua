@@ -471,10 +471,11 @@ local function LooseItem(id)
 	local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(id)
 	local _, link = C_Item.GetItemInfo(id)
 	local data = ns.BIS
-	local src = (data and data.crafted[id]) and "전문기술 제작"
+	local own = (data and data.crafted[id]) and "전문기술 제작"
 		or (data and data.tier[id]) and "티어 세트 · 레이드 / 촉매"
-		or (ns.ItemSourceText and ns.ItemSourceText(id)) or "기타 (평판 · 상점 · 월드 드랍 등)"
-	return { id = id, name = name, icon = icon, quality = q or 4, link = link, srcText = src }
+		or (ns.ItemSourceText and ns.ItemSourceText(id))
+	-- loose: FOA 자료에 획득처가 없는 아이템 (공략 글이 있으면 그걸로)
+	return { id = id, name = name, icon = icon, quality = q or 4, link = link, srcText = own or "기타 (평판 · 상점 · 월드 드랍 등)", loose = not own }
 end
 
 -- 아이템 출처 글자
@@ -564,6 +565,16 @@ local function TokenName(kind, id, en)
 end
 local function KoSource(s)
 	if not s then return "기타" end
+	-- " / " 로 나눈 조각 중 [A] 얼라이언스 · [H] 호드 꼬리표가 붙은 건 내 진영 것만 (꼬리표는 지운다)
+	if s:find("%[[AH]%]") then
+		local mine = UnitFactionGroup and UnitFactionGroup("player") == "Horde" and "H" or "A"
+		local keep = {}
+		for part in (s .. " / "):gmatch("(.-) / ") do
+			local tag = part:match("%[([AH])%]$")
+			if not tag or tag == mine then keep[#keep + 1] = (part:gsub("%[[AH]%]$", "")) end
+		end
+		s = #keep > 0 and table.concat(keep, " / ") or (s:gsub("%[[AH]%]", ""))
+	end
 	-- 번호 표시는 먼저 빼 두고(영어 이름이 아래 바꾸기에 걸리지 않게) 마지막에 게임 언어 이름으로
 	local names = {}
 	s = s:gsub("{(%a):(%d+)|([^}]*)}", function(k, id, en)
@@ -710,15 +721,19 @@ ForeverScan = function(key, quiet)
 	return data
 end
 
--- PvP 공략 (ForeverBIS.lua 의 pvp · Skill Capped): 내 진영 아이템으로 바꾼 { from, g, alt, src }
---  진영 장비(프리미어 PvP 세트 · 테라모어/검은창 평판 · 전장 평판 망토 …)는 짝(pair)으로 바꾸고, 짝이 없는 다른 진영 장비는 뺀다
-function M.PvPGuide(skey)
+-- 공략 (ForeverBIS.lua) 을 내 진영 아이템으로 바꾼 { from, g, alt, src, … }
+--  kind = "specs" (PvE · wowf.io) 또는 "pvp" (Skill Capped)
+--  호드는 gh(호드 추천 조합이 다른 칸)로 바꾸고, 진영 장비(fac)는 짝(pair)으로 · 짝이 없는 다른 진영 장비는 뺀다
+--  예) 전사 반지: 얼라 = 철갑 상층 퀘스트 반지 · 호드 = 검은아귀 탈환 반지 / PvP 프리미어 세트 · 평판 망토
+M.facGuideCache = {}
+function M.FacGuide(kind, skey)
 	local B = ns.BIS_FOREVER
-	local d = B and B.pvp and B.pvp[skey or ""]
+	local d = B and B[kind] and B[kind][skey or ""]
 	if not d then return end
 	local my = UnitFactionGroup("player") == "Horde" and 1 or 2
-	local c = M.pvpGuideCache
-	if c and c.key == skey and c.my == my then return c.v end
+	local ck = kind .. "|" .. tostring(skey) .. "|" .. my
+	local c = M.facGuideCache[ck]
+	if c then return c end
 	local fac, pair = B.fac or {}, B.pair or {}
 	local function Mine(id)
 		if fac[id] and fac[id] ~= my then return pair[id] end
@@ -726,15 +741,17 @@ function M.PvPGuide(skey)
 	end
 	local g, alt, src = {}, {}, {}
 	for inv, id in pairs(d.g) do g[inv] = Mine(id) end
-	for _, a in ipairs(d.alt) do
+	if my == 1 and d.gh then for inv, id in pairs(d.gh) do g[inv] = id end end
+	for _, a in ipairs(d.alt or {}) do
 		local id = Mine(a[2])
 		if id then alt[#alt + 1] = { a[1], id } end
 	end
 	for id, t in pairs(d.src or {}) do local m = Mine(id); if m then src[m] = t end end
-	local v = { from = d.from, g = g, alt = alt, src = src }
-	M.pvpGuideCache = { key = skey, my = my, v = v }
+	local v = { from = d.from, stats = d.stats, psrc = d.psrc, g = g, alt = alt, src = src, en = d.en, co = d.co }
+	M.facGuideCache[ck] = v
 	return v
 end
+function M.PvPGuide(skey) return M.FacGuide("pvp", skey) end
 
 -- 포에버: 공략 BIS (g) = BIS, 공략 대체(alt) 순서 = 대체 1~3 (던전 도감이 없어서 전리품 표 대신 공략 목록)
 function M:BuildRanksForever()
@@ -767,8 +784,8 @@ function M:BuildRanksForever()
 	self.viewNow = view
 	wipe(self.ranks)
 	wipe(self.rankCount)
-	local spec = ns.BIS_FOREVER and ns.BIS_FOREVER.specs[skey]
-	-- 출처 이름은 전문화마다 (MythicSim 시뮬 · wowforever.be · Method 공략)
+	local spec = M.FacGuide("specs", skey)
+	-- 출처 이름은 전문화마다 (wowf.io BiS · 예전 MythicSim 시뮬 · wowforever.be · Method 공략)
 	self.spec = spec and { src = (spec.from and spec.from ~= "" and spec.from) or ns.BIS_FOREVER.src, g = spec.g, fo = spec } or nil
 	self.guideBis = (spec and next(spec.g) ~= nil) and true or false   -- 공략이 장비 표를 낸 전문화인지
 	self.isExample = false
@@ -873,11 +890,19 @@ function M:BuildRanksForever()
 		end
 	end
 	if not spec then Fill() return end
+	-- 공략 아이템: 던전 전리품 → PvP 장비 → 퀘스트 보상 · 제작 · 필드(위에서 모은 후보) → 그 밖 (번호만)
+	--  획득처 글: FOA 자료가 아는 아이템은 FOA 글 (퀘스트 이름 · 제작 숙련 · 상인 위치 …) · 모르면 공략 글(src)
+	local poolById = {}
+	for _, list in pairs(pool) do for _, it in ipairs(list) do poolById[it.id] = poolById[it.id] or it end end
+	local function GuideItem(id)
+		local it = byId[id] or (pg and self.pvpById and self.pvpById[id]) or poolById[id] or LooseItem(id)
+		if not it.inst and (not it.srcText or (it.loose and spec.src[id])) then it.srcText = KoSource(spec.src[id]) end
+		return it
+	end
 	for inv, id in pairs(spec.g) do
 		local slot = INV2EJ[inv]
 		if slot then
-			local it = byId[id] or (pg and self.pvpById and self.pvpById[id]) or LooseItem(id)
-			if not it.inst and (spec.src[id] or not it.srcText) then it.srcText = KoSource(spec.src[id]) end
+			local it = GuideItem(id)
 			it.slot = it.slot or slot
 			self.ranks[id] = { rank = 0, slot = slot, it = it, inv = inv }
 			bisSlot[slot] = true
@@ -889,8 +914,7 @@ function M:BuildRanksForever()
 		if slot and not self.ranks[id] then
 			per[slot] = (per[slot] or 0) + 1
 			if per[slot] <= 3 then
-				local it = byId[id] or (pg and self.pvpById and self.pvpById[id]) or LooseItem(id)
-				if not it.inst and (spec.src[id] or not it.srcText) then it.srcText = KoSource(spec.src[id]) end
+				local it = GuideItem(id)
 				it.slot = it.slot or slot
 				self.ranks[id] = { rank = per[slot], slot = slot, it = it, inv = inv }
 			end

@@ -308,7 +308,7 @@ C|Elixir|item=250351
 C|Potion|item=13444
 C|Food|item=13935
 C|Weapon|item=18262
-@SHAMAN:resto PRIEST:holy
+@SHAMAN:resto PRIEST:holy PRIEST:disc
 R|포에버 공략에 60 추천이 아직 없어 치유 공략(Method 회복 드루이드 · 신성 성기사) 기준
 E|Main Hand|spell=1248636
 E|Head|item=19790
@@ -368,7 +368,7 @@ T|적중(8%까지) > 치명타 > 가속 > 민첩 > 지능 > 원거리 전투력 
 T|적중 > 치명타 > 가속 > 민첩 > 힘 > 전투력 > 지능 > 정신력 > 체력
 @PALADIN:ret
 T|무기 숙련 > 무기 초당 공격력 · 속도 > 적중(9%) > 숙련(6.5%) > 주문 공격력 > 지능 > 힘 · 전투력 > 민첩 · 치명타
-@PRIEST:holy
+@PRIEST:holy PRIEST:disc
 T|치유량 > 지능 > 5초당 마나 > 정신력 > 치명타 > 체력
 @WARRIOR:arms
 T|적중(8%까지) > 숙련(6.5%까지) > 치명타 > 힘 > 민첩 > 가속

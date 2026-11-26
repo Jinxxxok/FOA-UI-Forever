@@ -102,6 +102,43 @@ local W = {
 	-- 복원: 치유량 > 치명타 > 지능 > 정신력 > 마나 회복
 	["SHAMAN:resto"] = Caster({ heal = 1, sp = 1, scrit = 10, int = 0.65, spi = 0.4, mp5 = 1.2, haste = 6, sta = 0.1 }),
 }
+-- [자동 생성 · tools/forever/gen_weights.py] wowf.io 포에버 BiS 아이템 점수에서 맞춘 능력치 값 (2026-11-26)
+--  위 W 표(공략 우선순위)에 덮어쓴다 · 적중 · 가속 · 방어 숙련 · 계열 주문 공격력은 위 값 그대로
+local WOWF = {
+	["DRUID:balance"] = { crit = 8.89, int = 0.48, scrit = 8.89, sdmg = 1, spi = 0.14 },
+	["DRUID:feral"] = { agi = 2.14, crit = 27.0, exp = 26.0, sta = 0.09, str = 2.44 },
+	["DRUID:guardian"] = { agi = 0.85, armor = 0.06, crit = 7.17, exp = 10.3, sta = 1.4, str = 0.64 },
+	["DRUID:resto"] = { int = 0.42, mp5 = 0.7, spi = 0.47 },
+	["HUNTER:bm"] = { agi = 2.42, ap = 1, crit = 24.6, dps = 3.6, int = 1.36, rap = 1, rdps = 3.5 },
+	["HUNTER:mm"] = { agi = 2.66, ap = 1, crit = 32.8, dps = 4.1, int = 1.61, rap = 1, rdps = 4.2 },
+	["HUNTER:sv"] = { agi = 2.29, ap = 1, crit = 22.5, dps = 3.2, int = 1.11, rap = 1, rdps = 3.5, sta = 0.26, str = 0.52 },
+	["MAGE:arcane"] = { crit = 9.91, int = 0.73, scrit = 9.91, sdmg = 1, spen = 0.38, sta = 0.12 },
+	["MAGE:fire"] = { crit = 11.3, int = 0.48, scrit = 11.3, sdmg = 1, spen = 0.83, spi = 0.06, sta = 0.02 },
+	["MAGE:frost"] = { crit = 9.38, int = 0.28, scrit = 9.38, sdmg = 1, spen = 0.26, spi = 0.05, sta = 0.1 },
+	["PALADIN:holy"] = { int = 0.51, mp5 = 0.78, spi = 0.14 },
+	["PALADIN:prot"] = { agi = 1.5, armor = 0.07, dps = 1.0, exp = 2.5, int = 0.83, sp = 0.97, sta = 1.6, str = 0.21 },
+	["PALADIN:ret"] = { agi = 1.32, crit = 31.7, dps = 7.5, exp = 39.1, int = 0.65, sp = 0.76, str = 2.49 },
+	["PRIEST:disc"] = { int = 0.43, mp5 = 0.71, spi = 0.28 },
+	["PRIEST:holy"] = { int = 0.48, mp5 = 0.76, spi = 0.39 },
+	["PRIEST:shadow"] = { crit = 5.53, int = 0.34, mp5 = 0.5, scrit = 5.53, sdmg = 1, spen = 0.71, spi = 0.23 },
+	["ROGUE:assassination"] = { agi = 2.07, crit = 29.5, dps = 5.1, exp = 29.5, str = 1.03 },
+	["ROGUE:combat"] = { agi = 2.03, crit = 25.9, dps = 5.6, exp = 29.5, sta = 0.09, str = 1.06 },
+	["ROGUE:subtlety"] = { agi = 2.02, crit = 25.2, dps = 5.5, exp = 26.1, sta = 0.09, str = 1.06 },
+	["SHAMAN:ele"] = { crit = 8.33, int = 0.33, scrit = 8.33, sdmg = 1, sta = 0.02 },
+	["SHAMAN:enh"] = { agi = 1.6, crit = 43.4, dps = 10.5, exp = 44.0, str = 3.34 },
+	["SHAMAN:resto"] = { int = 0.46, mp5 = 0.83, spi = 0.21 },
+	["WARLOCK:aff"] = { crit = 5.27, int = 0.36, scrit = 5.27, sdmg = 1, spen = 0.5, spi = 0.21, sta = 0.2 },
+	["WARLOCK:demo"] = { crit = 4.17, int = 0.53, scrit = 4.17, sdmg = 1, spen = 0.98, spi = 0.22, sta = 0.03 },
+	["WARLOCK:destro"] = { crit = 6.67, int = 0.36, scrit = 6.67, sdmg = 1, spen = 0.7, sta = 0.05 },
+	["WARRIOR:arms"] = { agi = 1.3, crit = 28.9, dps = 7.9, exp = 34.6, str = 2.2 },
+	["WARRIOR:fury"] = { agi = 1.43, crit = 30.5, dps = 5.4, exp = 23.8, str = 2.2 },
+	["WARRIOR:prot"] = { agi = 1.11, armor = 0.04, crit = 9.47, dps = 0.4, exp = 12.6, sta = 1.6, str = 0.83 },
+}
+for key, t in pairs(WOWF) do
+	local w = W[key]
+	if w then for k, v in pairs(t) do w[k] = v end end
+end
+M.WOWF = WOWF
 -- 특정 계열 주문 공격력 ("비전 주문 효과에 의한 공격력이 최대 9만큼 증가")
 --  주 계열은 일반 주문 공격력만큼 · 가끔 쓰는 계열은 조금만 (예: 냉기 마법사의 신비한 폭발 · 비전 화살)
 local SCHOOL_W = {
@@ -1670,7 +1707,7 @@ end
 
 -- 세트 장비: 지금 특성 BIS 가 같은 세트 여러 부위를 같이 낀 기준이면 한 줄 (포에버)
 --  점수는 아이템 하나의 능력치만 보고 세트 효과는 넣지 않는다 → 폭풍안개 갑옷처럼 세트로 BIS 가 된 장비는
---  하나만 보면 점수가 낮게 나온다 (MythicSim 전투 도적: 폭풍안개 어깨 · 가슴 · 장갑 3세트)
+--  하나만 보면 점수가 낮게 나온다 (예: wowf.io 전투 도적 BiS 의 검은장막 T0.5 6세트)
 local SET_SLOT = { [1] = "머리", [2] = "목", [3] = "어깨", [5] = "가슴", [6] = "허리", [7] = "다리", [8] = "발", [9] = "손목",
 	[10] = "손", [11] = "반지", [12] = "반지", [13] = "장신구", [14] = "장신구", [15] = "등", [16] = "주장비", [17] = "보조장비", [18] = "원거리" }
 function M:SetNote(link)
@@ -1679,7 +1716,9 @@ function M:SetNote(link)
 	local setID = id and select(16, C_Item.GetItemInfo(id))
 	if type(setID) ~= "number" or setID == 0 then return end
 	local class, cur = self:Spec()
-	local spec = class and cur and ns.BIS_FOREVER.specs[class .. ":" .. cur]
+	local D3 = Ink.modules.Dungeon
+	local skey = class and cur and (class .. ":" .. cur)
+	local spec = skey and ((D3 and D3.FacGuide and D3.FacGuide("specs", skey)) or ns.BIS_FOREVER.specs[skey])
 	if not (spec and spec.g) then return end
 	local slots = {}
 	for inv, bid in pairs(spec.g) do

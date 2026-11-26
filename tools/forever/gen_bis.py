@@ -46,6 +46,66 @@ if os.path.exists(ms):
         if len(q) >= 4 and q[2].isdigit():
             slot = q[0].lower()
             specs[cur]['pre'].append((SLOT2.get(slot, slot), int(q[2]), q[3]))
+# wowf.io BiS (wowf_bis.txt): 28 전문화 모두 · 사이트 추천 조합 = BIS · 칸 순위 = 대체 (MythicSim · Method 장비 목록을 바꾼다)
+#  RA = 얼라이언스 추천 조합 · RH = 호드 추천 조합(다를 때만 → gh) · L칸 = 그 칸 순위 (꼬리표 a/h = 진영 전용 → fac)
+#  wowf_src.txt : 획득처 글 (FOA 던전 전리품 · ForeverSources 가 모르는 아이템만 · [A]/[H] = 그 진영 조각)
+WSLOT = {0: 1, 1: 2, 2: 3, 3: 15, 4: 5, 5: 9, 6: 10, 7: 6, 8: 7, 9: 8, 15: 18}
+WALT = dict(WSLOT); WALT.update({10: 11, 11: 13, 12: 16, 13: 17, 14: 16})
+wfac, wsrc = {}, {}
+def wassign(tokens):
+    g, ring, trink, weap = {}, 0, 0, []
+    for t in tokens:
+        a, b = t.split(':')
+        iid, sis = int(a), [int(x) for x in b.split('.')]
+        si = sis[0]
+        if si in WSLOT: g[WSLOT[si]] = iid
+        elif si == 10: g[11 + min(ring, 1)] = iid; ring += 1
+        elif si == 11: g[13 + min(trink, 1)] = iid; trink += 1
+        else: weap.append((iid, sis))
+    for iid, sis in weap:
+        if 14 in sis or (12 in sis and 16 not in g): g[16] = iid
+        elif 13 in sis or 12 in sis: g[17] = iid
+    return g
+ws = src_dir + '/wowf_src.txt'
+if os.path.exists(ws):
+    mac = {}
+    for line in open(ws, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#'): continue
+        if line.startswith('@'):
+            k, v = line[1:].split('=', 1); mac['@' + k] = v; continue
+        ids, lab = line.split('|', 1)
+        for i in ids.split(','): wsrc[int(i)] = mac.get(lab, lab)
+wf = src_dir + '/wowf_bis.txt'
+if os.path.exists(wf):
+    cur = None
+    for line in open(wf, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#'): continue
+        kind, body = line.split('|', 1)
+        if kind == 'K':
+            cur = body
+            d = specs.setdefault(cur, {'pre': [], 'alt': [], 'stats': '', 'E': [], 'C': []})
+            d['pre'], d['alt'], d['from'], d['wg'], d['wgh'], d['walt'] = [], [], 'wowf.io BiS 11/26', {}, {}, []
+        elif kind == 'RA':
+            specs[cur]['wg'] = wassign(body.split())
+        elif kind == 'RH':
+            gh = wassign(body.split())
+            specs[cur]['wgh'] = {k: v for k, v in gh.items() if specs[cur]['wg'].get(k) != v}
+        elif kind[0] == 'L':
+            inv = WALT[int(kind[1:])]
+            d = specs[cur]
+            used = set(d['wg'].values()) | set(d['wgh'].values())
+            n = 0
+            for t in re.split(r'[ ,]', body):
+                m = re.match(r'(\d+)([a-z]*)', t)
+                if not m: continue
+                iid, fl = int(m.group(1)), m.group(2)
+                if 'a' in fl: wfac[iid] = 2
+                elif 'h' in fl: wfac[iid] = 1
+                if iid in used or n >= (6 if inv in (11, 13, 16, 17) else 5): continue
+                used.add(iid); n += 1
+                d['walt'].append((inv, iid))
 for line in open(src_dir + '/cons.txt', encoding='utf-8'):
     line = line.strip()
     if not line or line.startswith('#'): continue
@@ -85,7 +145,7 @@ FRX = re.compile('|'.join(re.escape(n) for n, _ in FACTIONS))
 FID = dict(FACTIONS)
 unres = set()
 def tokenize(s):
-    if not qdb: return s
+    if not qdb or re.search('[가-힣]', s): return s  # 한국어 글(wowf.io)은 그대로
     # 모양 맞추기: "Dungeon · 보스, 던전" → "던전 · 보스" · "Vendor · 상인, 지역 (값)" → "Vendor · 상인 (지역) · 값"
     m = re.match(r'^Dungeon · (.+), ([^,]+)$', s)
     if m: s = m.group(2) + ' · ' + m.group(1)
@@ -108,20 +168,25 @@ def tokenize(s):
         out.append(f)
     return ''.join(out)
 L = ['-- FOA UI · 포에버 BIS · 준비물 (자동 생성 · tools/forever/gen_bis.py)',
-     '-- 출처: MythicSim 포에버 시뮬 BIS (2026-11-22 · 공격대 전) · wowforever.be (방어 전사 · 신성 사제 · 복원 주술사)',
+     '-- 장비 출처: wowf.io 포에버 BiS (2026-11-26 · 28 전문화 · 사이트 추천 조합 = BIS · 칸 순위 = 대체 · gh = 호드 추천이 다른 칸)',
+     '--  (예전: MythicSim 포에버 시뮬 BIS 2026-11-22 · wowforever.be — 자료 파일은 tools/forever 에 남겨 둠)',
      '--       Method WoW Forever 공략 (2026-11-04 · 신성 · 보호 성기사 · 회복 드루이드 · 마부 · 소모품 / 11-24 전사 준비물)',
      '--       Wowhead 포에버 공략 (2026-11 · 마법사 · 징벌 성기사 · 조화 드루이드 · 정기 주술사 준비물 · 능력치 순서)',
      '--       공략에 60 추천이 아직 없는 전문화(고양 · 복원 주술사 · 신성 사제 · 야성)는 같은 역할 공략 기준 (psrc 에 적음)',
      '--  아이템 번호는 각 사이트의 와우헤드 포에버 링크 · 포에버 아이템 자료(QuestieDB · ATT)와 이름 대조함',
      '--  획득처의 {n:번호|영어} NPC · {q:…} 퀘스트 · {f:…} 평판 = 게임에서 그 언어 이름으로 (번호: QuestieDB GPL-3.0 포에버 합본 · ATT 평판 목록)',
-     '-- from = 이 전문화 장비 목록 출처 · g = BIS { [칸] = 아이템 } · alt = 대체 { 칸, 아이템 } (공략 순서) · src = 획득처 · en = 마부 · co = 소모품 · psrc = 준비물 출처(없으면 Method)',
+     '-- from = 이 전문화 장비 목록 출처 · g = BIS { [칸] = 아이템 } · gh = 호드 BIS (다른 칸만) · alt = 대체 { 칸, 아이템 } (공략 순서) · src = 획득처 ([A]/[H] = 그 진영 조각) · en = 마부 · co = 소모품 · psrc = 준비물 출처(없으면 Method)',
      '-- PvP: Skill Capped WoW Forever PvP 장비 공략 (2026-11-19 · 공격대 전 예측 세트) · 진영 짝 · 프리미어 PvP 진영 (AllTheThings MIT)',
      'local _, ns = ...', 'ns.BIS_FOREVER = {', '\tsrc = "Method 공략",', '\tspecs = {']
 for key in sorted(specs):
     d = specs[key]
     g, alt, srcs = {}, [], {}
     used = {}
-    for slot, iid, s in d['pre']:
+    if d.get('wg'):
+        g, alt = dict(d['wg']), list(d['walt'])
+        for iid in list(g.values()) + list(d['wgh'].values()) + [b for _, b in alt]:
+            if iid in wsrc: srcs[iid] = wsrc[iid]
+    for slot, iid, s in ([] if d.get('wg') else d['pre']):
         invs = INV.get(slot)
         if not invs: continue
         n = used.get(slot, 0); used[slot] = n + 1
@@ -131,7 +196,7 @@ for key in sorted(specs):
         else:
             g[inv] = iid
         srcs[iid] = s
-    for slot, iid, s in d['alt']:
+    for slot, iid, s in ([] if d.get('wg') else d['alt']):
         invs = INV.get(slot)
         if not invs or iid in g.values(): continue
         alt.append((invs[0], iid)); srcs.setdefault(iid, s)
@@ -142,6 +207,7 @@ for key in sorted(specs):
     co = ', '.join(f'{{ "{esc(s)}", {n} }}' for s, t, n in d['C'])
     fr = d.get('from') or ('Method 공략' if g else '')
     ps = f', psrc = "{esc(d["psrc"])}"' if d.get('psrc') else ''
+    if d.get('wgh'): ps += ', gh = { ' + ', '.join(f'[{k}] = {v}' for k, v in sorted(d['wgh'].items())) + ' }'
     L.append(f'\t\t["{key}"] = {{ from = "{esc(fr)}", stats = "{esc(d["stats"])}"{ps}, g = {{ {gs} }}, alt = {{ {als} }}, src = {{ {ss} }}, en = {{ {en} }}, co = {{ {co} }} }},')
 L.append('\t},')
 # PvP: Skill Capped 포에버 PvP 장비 (skillcapped_pvp.txt) · 진영 짝 (pvp_pairs.txt) · 프리미어 PvP 진영 (pvp_premier_faction.txt)
@@ -154,6 +220,7 @@ SC = {'HEAD': [1], 'NECK': [2], 'SHOULDERS': [3], 'SHOULDER': [3], 'BACK': [15],
 allsrc = {}
 for key in specs:
     for slot, iid, sx in specs[key]['pre'] + specs[key]['alt']: allsrc.setdefault(iid, sx)
+for k, v in wsrc.items(): allsrc.setdefault(k, v)
 pvp_path = src_dir + '/skillcapped_pvp.txt'
 pv, curp = {}, None
 if os.path.exists(pvp_path):
@@ -214,6 +281,7 @@ if os.path.exists(pf):
         if not line or line.startswith('#'): continue
         f, ids = line.split('|')
         for x in ids.split(): fac.setdefault(int(x), 2 if f == 'A' else 1)
+for k, v in wfac.items(): fac.setdefault(k, v)
 L.append('\tpair = { ' + ', '.join(f'[{k}] = {v}' for k, v in sorted(pair.items())) + ' },')
 L.append('\tfac = { ' + ', '.join(f'[{k}] = {v}' for k, v in sorted(fac.items())) + ' },')
 L += ['}', '']

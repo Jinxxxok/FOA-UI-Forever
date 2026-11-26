@@ -131,7 +131,9 @@ function M:Block(cd)
 	local D2 = Ink.modules.Dungeon
 	local key = D2 and D2.ViewKey and D2.ViewKey()
 	if not key and ns.Score and ns.Score.Spec then local _, k = ns.Score:Spec(); key = k end
-	local spec = key and ns.BIS_FOREVER and ns.BIS_FOREVER.specs[MyClass() .. ":" .. key]
+	local D3 = Ink.modules.Dungeon
+	local skey = key and (MyClass() .. ":" .. key)
+	local spec = skey and ns.BIS_FOREVER and ((D3 and D3.FacGuide and D3.FacGuide("specs", skey)) or ns.BIS_FOREVER.specs[skey])
 	if not spec then return 1 end
 	local want = {}
 	for _, id in pairs(spec.g or {}) do want[id] = true end

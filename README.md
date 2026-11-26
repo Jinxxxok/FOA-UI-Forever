@@ -63,6 +63,7 @@ FOA UI 는 **GNU General Public License v3.0 (또는 그 이후 버전)** 으로
 - 퀘스트 선행 · 택일 · 연결 퀘스트 · 조건(숙련도 · 평판 · 레벨) · 보고 NPC 와 자리: [QuestieDB](https://github.com/Questie/QuestieDB) 포에버 합본 자료 (GPL-3.0 · 포에버 실제 플레이 기록으로 확인한 선행 관계 포함 · `FOA_UI/LICENSE-QuestieDB.txt` · 만드는 방법은 `tools/quests/questie_export.py` → `tools/quests/gen_quests.py`)
 - 0.5티(던전 세트 2) 가이드: 단계 · 내야 하는 장비 · 재료 · 보상은 AllTheThings 포에버 0.5 세트 자료, 퀘스트 한글 이름 · 목표 · NPC 자리는 QuestieDB 포에버 합본 (만드는 방법은 `tools/forever/gen_t05.py`)
 - 상인에게 살 수 있는 제작 재료(파는 상인 · 자리 · 한글 이름): QuestieDB 포에버 합본 · 구입 가격 · 수량 한정: [cMaNGOS classic-db](https://github.com/cmangos/classic-db) (GPL-3.0 · 클래식 1.12 기준, 게임 안에서 상인 창을 열면 실제 가격으로 바꿔 기억 · 만드는 방법은 `tools/professions/gen_vendormats.py`)
+- PvE BIS · 아이템 점수: [wowf.io](https://wowf.io/ko/bis) 포에버 BiS (28 전문화 · 사이트 추천 조합 = BIS · 칸 순위 = 대체 · 아이템 번호 · 획득처 글만 옮김 · `tools/forever/wowf_bis.txt` · `wowf_src.txt`) · 능력치 가중치는 사이트 아이템 점수에서 거꾸로 맞춘 값 (`tools/forever/wowf_weights.txt` → `gen_weights.py`)
 - PvP BIS: [Skill Capped](https://www.skill-capped.com/wowarticles/forever/guides/) WoW Forever PvP 장비 공략 (공격대 전 예측 세트 · 아이템 번호와 진영 짝만 옮김 · `tools/forever/skillcapped_pvp.txt`) · 프리미어 PvP 장비 진영은 AllTheThings 포에버 자료
 - 포에버에서 바뀐 지도 경계(스톰윈드 · 동부 역병지대 · 멀고어 · 붉은마루 산맥) 변환식: QuestieDB 자료와 대조해 확인 (`tools/maps/forever_frame_fixes.json`)
 - 아이콘: [Lucide](https://lucide.dev) (ISC License · `FOA_UI/Media/Icons/LICENSE-lucide.txt`)
