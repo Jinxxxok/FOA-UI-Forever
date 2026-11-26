@@ -1614,6 +1614,22 @@ function M:AddOwned(pool)
 	end
 end
 
+-- 공격대 전리품이 있어야 끝나는 퀘스트 (DungeonQuestNotes.lua 의 QUEST_RAID_GATE · QuestieDB 포에버)
+--  그 공격대가 포에버에 아직 없으면(던전 자료에 없거나 곧 열림) 후보에서 뺀다
+--  예) 완벽한 독 (파라드의 연발 석궁 · 라븐홀트 절단기 …): 줄구룹 · 안퀴라즈 폐허 독주머니 → 포에버에 두 공격대가 없다
+M.RAID_KO = { mc = "화산 심장부", bwl = "검은날개 둥지", zg = "줄구룹", aq20 = "안퀴라즈 폐허", aq40 = "안퀴라즈 사원",
+	naxx = "낙스라마스", onyxia = "오닉시아의 둥지" }
+function M.RaidGated(qid)
+	local need = ns.QUEST_RAID_GATE and ns.QUEST_RAID_GATE[qid]
+	if not need then return end
+	local closed = {}
+	for _, k in ipairs(need) do
+		local d = FLoot(k)
+		if not d or d.soon then closed[#closed + 1] = M.RAID_KO[k] or k end
+	end
+	if #closed > 0 then return table.concat(closed, " · ") end
+end
+
 -- 퀘스트 보상 장비도 후보로 (ForeverQuestRewards.lua · AllTheThings MIT)
 --  내 진영 · 내 직업 퀘스트만, 이미 끝낸 퀘스트는 빼고, 퀘스트 레벨로 대충 레벨 창을 좁힌다
 function M:AddQuestRewards(pool, lvl)
@@ -1632,7 +1648,7 @@ function M:AddQuestRewards(pool, lvl)
 		--  (예: 3625 마력이 깃든 아즈샤리트 퇴마검 · 45레벨부터 · 슬픔의 늪부터 14단계 연퀘)
 		-- 끝낸 퀘스트 보상: 내가 가진 것(착용 · 가방 · 은행)은 그대로 순위에 · 안 고른 보상은 더 못 받으니 뺀다
 		local owned = self.ownMap and self.ownMap[id]
-		if okFac and okCls and qlvl <= lvl and (owned or (qlvl >= lvl - 22 and not (done and done(qid)))) then
+		if okFac and okCls and qlvl <= lvl and (owned or (qlvl >= lvl - 22 and not (done and done(qid)) and not M.RaidGated(qid))) then
 			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
 			local slot = iid and loc and EQUIP_EJ[loc]
 			if slot then
@@ -1865,7 +1881,11 @@ function M:QuestRewardTooltip(it, tt)
 		end
 	end
 	local inLog = C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(it.quest)
-	if inLog then tt:AddLine("지금 진행 중인 퀘스트예요", 0.44, 0.83, 0.55)
+	local raid = M.RaidGated(it.quest)
+	if raid then
+		tt:AddLine("공격대 전리품 필요: " .. raid, 1, 0.42, 0.37)
+		tt:AddLine("포에버에 아직 없는 공격대라 지금은 끝낼 수 없어요", 0.7, 0.72, 0.75)
+	elseif inLog then tt:AddLine("지금 진행 중인 퀘스트예요", 0.44, 0.83, 0.55)
 	else
 		-- 선행 퀘스트: 남은 개수와 맨 처음 받을 퀘스트 (누구 · 어디 · 몇 레벨)
 		local chain = M.QuestChain and M.QuestChain(it.quest)

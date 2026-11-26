@@ -213,3 +213,8 @@ ns.DUNGEON_QUEST_SKILL = {
 	[7493] = { 165, 300 },
 	[7497] = { 165, 300 },
 }
+ns.QUEST_RAID_GATE = {
+	-- [자동 생성 · tools/quests/gen_raidgate.py] 공격대 전리품이 있어야 끝나는 퀘스트 (QuestieDB 포에버)
+	--  { FOA 키, … } · 그 공격대가 포에버에 열려 있지 않으면 BIS 후보 · 퀘스트 보상 목록에서 뺀다
+	[9023] = { "aq20", "zg" },  -- The Perfect Poison (안퀴라즈 폐허 · 줄구룹)
+}
