@@ -1985,17 +1985,25 @@ function M:MakeMovable()
 	h:SetFrameLevel(wm:GetFrameLevel() + 600)
 	h:EnableMouse(true)
 	h:RegisterForDrag("LeftButton")
-	h:SetScript("OnDragStart", function()
-		-- 보호된 상태일 때만 전투 중에 막는다 (예전엔 전투 중이면 늘 안 움직였다)
-		if (wm:IsProtected() and InCombatLockdown()) or (wm.IsMaximized and wm:IsMaximized()) then return end
-		wm:StartMoving()
-	end)
-	h:SetScript("OnDragStop", function()
-		wm:StopMovingOrSizing()
+	local function save()
 		local l, t = wm:GetLeft(), wm:GetTop()
 		-- 지도 크기(배율)를 바꿔도 같은 자리에 오게 화면 기준 좌표로 저장
 		local sc = wm:GetScale() or 1
 		if l and t then Ink.db.mapPos = { l * sc, t * sc, ui = true } end
+		if wm.SetUserPlaced then pcall(wm.SetUserPlaced, wm, false) end
+	end
+	-- 끌기는 커서를 직접 따라가게 (Mover.lua · StartMoving 은 제목 줄을 잡으면 화면 맨 위로 튀고 멈추는 일이 있었다)
+	h:SetScript("OnDragStart", function()
+		-- 보호된 상태일 때만 전투 중에 막는다 (예전엔 전투 중이면 늘 안 움직였다)
+		if (wm:IsProtected() and InCombatLockdown()) or (wm.IsMaximized and wm:IsMaximized()) then return end
+		local Mv = Ink.modules.Mover
+		if Mv and Mv.DragStart then Mv.DragStart(wm, save) else wm:StartMoving() end
+	end)
+	h:SetScript("OnDragStop", function()
+		local Mv = Ink.modules.Mover
+		if Mv and Mv.Dragging and Mv.Dragging(wm) then Mv.DragStop() return end
+		wm:StopMovingOrSizing()
+		save()
 	end)
 	h:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -2031,7 +2039,14 @@ function M:MakeMovable()
 		wm:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pos[1] / sc, pos[2] / sc)
 		busy = false
 	end
-	hooksecurefunc(wm, "SetPoint", function() if not busy and wm:IsShown() then snap() end end)
+	hooksecurefunc(wm, "SetPoint", function()
+		-- 끄는 중에 블리자드가 지도를 다시 붙이면 저장 자리 말고 지금 커서 자리로
+		local Mv = Ink.modules.Mover
+		local dragging, dbusy = false, false
+		if Mv and Mv.Dragging then dragging, dbusy = Mv.Dragging(wm) end
+		if dragging then if not dbusy then Mv.DragApply() end return end
+		if not busy and wm:IsShown() then snap() end
+	end)
 	wm:HookScript("OnShow", function() restore(); C_Timer.After(0, restore) end)
 	for _, fn in ipairs({ "Maximize", "Minimize" }) do
 		if wm[fn] then hooksecurefunc(wm, fn, function() C_Timer.After(0, function() restore(); M:LayoutUnder() end) end) end

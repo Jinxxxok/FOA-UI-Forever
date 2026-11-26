@@ -710,6 +710,32 @@ ForeverScan = function(key, quiet)
 	return data
 end
 
+-- PvP 공략 (ForeverBIS.lua 의 pvp · Skill Capped): 내 진영 아이템으로 바꾼 { from, g, alt, src }
+--  진영 장비(프리미어 PvP 세트 · 테라모어/검은창 평판 · 전장 평판 망토 …)는 짝(pair)으로 바꾸고, 짝이 없는 다른 진영 장비는 뺀다
+function M.PvPGuide(skey)
+	local B = ns.BIS_FOREVER
+	local d = B and B.pvp and B.pvp[skey or ""]
+	if not d then return end
+	local my = UnitFactionGroup("player") == "Horde" and 1 or 2
+	local c = M.pvpGuideCache
+	if c and c.key == skey and c.my == my then return c.v end
+	local fac, pair = B.fac or {}, B.pair or {}
+	local function Mine(id)
+		if fac[id] and fac[id] ~= my then return pair[id] end
+		return id
+	end
+	local g, alt, src = {}, {}, {}
+	for inv, id in pairs(d.g) do g[inv] = Mine(id) end
+	for _, a in ipairs(d.alt) do
+		local id = Mine(a[2])
+		if id then alt[#alt + 1] = { a[1], id } end
+	end
+	for id, t in pairs(d.src or {}) do local m = Mine(id); if m then src[m] = t end end
+	local v = { from = d.from, g = g, alt = alt, src = src }
+	M.pvpGuideCache = { key = skey, my = my, v = v }
+	return v
+end
+
 -- 포에버: 공략 BIS (g) = BIS, 공략 대체(alt) 순서 = 대체 1~3 (던전 도감이 없어서 전리품 표 대신 공략 목록)
 function M:BuildRanksForever()
 	local lvl = UnitLevel("player") or 60
@@ -765,7 +791,17 @@ function M:BuildRanksForever()
 		end
 	end
 	-- 육성 · PvP: 공략 목록 없이 FOA 점수 순 (아래 BuildLevelRanks) · PvP 는 명예 · 계급 장비를 더하고 PvP 가중치로
+	--  PvP 공략(Skill Capped)이 있는 전문화는 PvE 처럼: 공략 기본 세트 = BIS · 공략의 다른 세트 = 대체 · 빈 자리는 FOA PvP 점수
 	self.levelMode = view ~= "pve"
+	local pg = view == "pvp" and M.PvPGuide(skey) or nil
+	self.pvpGuide = pg and true or nil
+	if pg then
+		self.levelMode = false
+		spec = pg
+		self.spec = { src = pg.from, g = pg.g, fo = pg }
+		self.guideBis = next(pg.g) ~= nil
+		self:AddPvP(pool)
+	end
 	if self.levelMode then
 		self:AddCrafts(pool, plv)
 		self:AddQuestRewards(pool, plv)
@@ -840,8 +876,8 @@ function M:BuildRanksForever()
 	for inv, id in pairs(spec.g) do
 		local slot = INV2EJ[inv]
 		if slot then
-			local it = byId[id] or LooseItem(id)
-			if not it.inst then it.srcText = KoSource(spec.src[id]) end
+			local it = byId[id] or (pg and self.pvpById and self.pvpById[id]) or LooseItem(id)
+			if not it.inst and (spec.src[id] or not it.srcText) then it.srcText = KoSource(spec.src[id]) end
 			it.slot = it.slot or slot
 			self.ranks[id] = { rank = 0, slot = slot, it = it, inv = inv }
 			bisSlot[slot] = true
@@ -853,14 +889,15 @@ function M:BuildRanksForever()
 		if slot and not self.ranks[id] then
 			per[slot] = (per[slot] or 0) + 1
 			if per[slot] <= 3 then
-				local it = byId[id] or LooseItem(id)
-				if not it.inst then it.srcText = KoSource(spec.src[id]) end
+				local it = byId[id] or (pg and self.pvpById and self.pvpById[id]) or LooseItem(id)
+				if not it.inst and (spec.src[id] or not it.srcText) then it.srcText = KoSource(spec.src[id]) end
 				it.slot = it.slot or slot
 				self.ranks[id] = { rank = per[slot], slot = slot, it = it, inv = inv }
 			end
 		end
 	end
 	Fill()
+	if pg then for _, r in pairs(self.ranks) do r.pvp = true end end
 end
 
 -- 순위 매기기
@@ -958,8 +995,11 @@ end
 
 -- 자료 출처 한 줄
 function M:SourceLabel()
+	if FOREVER and self.viewNow == "pvp" and self.pvpGuide then
+		return "PvP BIS · 대체: " .. (self.spec and self.spec.src or "Skill Capped PvP") .. " (공격대 전 예측 세트)\n빈 자리 · 나머지 대체는 FOA PvP 점수 순"
+	end
 	if FOREVER and self.viewNow == "pvp" then
-		return "PvP 명예 · 계급 장비 + 던전 · 제작 · 퀘스트 · 평판\nFOA PvP 점수 순 (직업별 PvP 능력치 · 적중 상한은 플레이어 기준)"
+		return "PvP 명예 · 계급 장비 + 던전 · 제작 · 퀘스트 · 평판\nFOA PvP 점수 순 (PvP 공략이 아직 없는 전문화 · 직업별 PvP 능력치)"
 	end
 	if FOREVER and self.levelMode then
 		local srcs = { "던전" }
@@ -983,7 +1023,7 @@ end
 -- 순위 글: 최고(BIS)가 1위, 그다음부터 2위 · 3위 · 4위 (예전 "다음 1 · 2순위" 처럼 두 숫자가 섞이지 않게)
 local function RankText(r)
 	if not r then return nil end
-	if r.lvlMode and r.pvp then return r.rank == 0 and "PvP BIS" or ("PvP " .. (r.rank + 1) .. "위") end
+	if r.pvp then return r.rank == 0 and "PvP BIS" or ("PvP " .. (r.rank + 1) .. "위") end
 	if r.lvlMode then return r.rank == 0 and "최고" or ((r.rank + 1) .. "위") end
 	if r.rank == 0 then return "BIS" end
 	return (r.rank + 1) .. "위"
@@ -1760,11 +1800,14 @@ function M:AddPvP(pool)
 	local data = ns.FOREVER_PVP
 	if not data then return end
 	local fac = UnitFactionGroup("player") == "Horde" and "H" or "A"
+	-- 명예 파란 세트(N)에 두 진영 프리미어 장비가 섞여 있다 → 내 진영 것만 (ForeverBIS.lua fac · AllTheThings 프리미어 PvP 표)
+	local pf = ns.BIS_FOREVER and ns.BIS_FOREVER.fac
+	local myN = fac == "H" and 1 or 2
 	self.pvpById = self.pvpById or {}
 	local have = {}
 	for _, list in pairs(pool) do for _, it in ipairs(list) do have[it.id] = true end end
 	local function Add(id, rank)
-		if have[id] then return end
+		if have[id] or (pf and pf[id] and pf[id] ~= myN) then return end
 		local it = self.pvpById[id]
 		if not it then
 			local iid, _, _, loc, icon = C_Item.GetItemInfoInstant(id)
@@ -6615,7 +6658,8 @@ function M:PaintBis()
 	end
 	local pvpView = self.viewNow == "pvp"
 	p.sumL:SetText(pvpView and "칸 PvP BIS 착용" or (self.levelMode and "칸 레벨 최고템 착용" or "칸 BIS 착용"))
-	p.hint:SetText(pvpView and "마우스를 올리면 툴팁 · 획득처\nPvP 점수: 직업마다 PvP 공략의 능력치 순서로 FOA가 계산해요"
+	p.hint:SetText((pvpView and self.pvpGuide) and "마우스를 올리면 툴팁 · 획득처\nPvP BIS = Skill Capped 기본 세트 · 대체 = 공략의 다른 세트 + FOA PvP 점수"
+		or pvpView and "마우스를 올리면 툴팁 · 획득처\nPvP 점수: 직업마다 PvP 공략의 능력치 순서로 FOA가 계산해요"
 		or (self.levelMode and "마우스를 올리면 툴팁 · 획득처\n제작템은 클릭하면 제조법 상인 위치를 지도에 찍어요"
 		or (self.guideBis == false and "마우스를 올리면 툴팁 · 획득처\n공략 BIS가 없는 전문화라 BIS · 대체 모두 FOA 점수로 골랐어요"
 		or "마우스를 올리면 툴팁 · 획득처\n대체템은 BIS 장비의 능력치 비중으로 FOA가 고른 거예요")))

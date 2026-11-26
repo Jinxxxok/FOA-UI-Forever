@@ -767,16 +767,24 @@ function M:MakeMovable()
 		f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pos[1] / sc, pos[2] / sc)
 		busy = false
 	end
-	h:SetScript("OnDragStart", function()
-		if f:IsProtected() and InCombatLockdown() then return end
-		f:StartMoving()
-	end)
-	h:SetScript("OnDragStop", function()
-		f:StopMovingOrSizing()
+	local function save()
 		local l, t = f:GetLeft(), f:GetTop()
 		local sc = f:GetScale() or 1
 		if l and t then Ink.db.charPos = { l * sc, t * sc } end
+		if f.SetUserPlaced then pcall(f.SetUserPlaced, f, false) end
 		place()
+	end
+	-- 끌기는 커서를 직접 따라가게 (Mover.lua · StartMoving 은 제목 줄을 잡으면 화면 맨 위로 튀고 멈추는 일이 있었다)
+	h:SetScript("OnDragStart", function()
+		if f:IsProtected() and InCombatLockdown() then return end
+		local Mv = Ink.modules.Mover
+		if Mv and Mv.DragStart then Mv.DragStart(f, save) else f:StartMoving() end
+	end)
+	h:SetScript("OnDragStop", function()
+		local Mv = Ink.modules.Mover
+		if Mv and Mv.Dragging and Mv.Dragging(f) then Mv.DragStop() return end
+		f:StopMovingOrSizing()
+		save()
 	end)
 	h:SetScript("OnMouseUp", function(_, button)
 		if button ~= "RightButton" or not Ink.db.charPos then return end
@@ -791,7 +799,14 @@ function M:MakeMovable()
 		GameTooltip:Show()
 	end)
 	h:SetScript("OnLeave", GameTooltip_Hide)
-	hooksecurefunc(f, "SetPoint", function() if not busy and f:IsShown() then place() end end)
+	hooksecurefunc(f, "SetPoint", function()
+		-- 끄는 중에 블리자드가 창을 다시 붙이면 저장 자리 말고 지금 커서 자리로
+		local Mv = Ink.modules.Mover
+		local dragging, dbusy = false, false
+		if Mv and Mv.Dragging then dragging, dbusy = Mv.Dragging(f) end
+		if dragging then if not dbusy then Mv.DragApply() end return end
+		if not busy and f:IsShown() then place() end
+	end)
 	f:HookScript("OnShow", function() place(); C_Timer.After(0, place) end)
 	self.moveHandle = h
 end

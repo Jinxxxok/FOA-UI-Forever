@@ -30,6 +30,61 @@ local NAMES = {
 local S = setmetatable({}, { __mode = "k" })   -- 프레임 → { name, handle, busy, moving }
 local pending = {}                              -- 전투 중이라 못 붙인 창
 
+-------------------------------------------------------------------------------
+-- 끌기: 게임의 StartMoving 대신 커서를 직접 따라가게 한다 (캐릭터 창 · 지도도 이걸 쓴다)
+--  StartMoving 으로 옮기던 때, 제목 줄을 잡으면 창이 화면 맨 위로 튀고 안 움직이는 일이 있었다
+--  (블리자드 창 관리자가 끄는 중에 창을 다시 붙이면 게임의 끌기가 끊기고, 다시 붙인 자리를 FOA 가 되돌리며 엉킨다)
+--  → 잡은 순간 커서와 창 왼쪽 위의 거리를 기억해 두고, 매 프레임 그 거리대로 TOPLEFT 를 다시 붙인다
+--    끄는 중에 다른 코드가 창을 옮겨도 다음 프레임에 커서 자리로 돌아온다 · 왼쪽 단추를 떼면 끝
+-------------------------------------------------------------------------------
+local drag = {}
+local drv = CreateFrame("Frame")
+drv:Hide()
+local function DragApply()
+	local f = drag.f
+	if not f or drag.busy then return end
+	if f:IsProtected() and InCombatLockdown() then return end
+	local cx, cy = GetCursorPosition()
+	if not (cx and cy) then return end
+	drag.busy = true
+	pcall(function()
+		f:ClearAllPoints()
+		f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", cx / drag.e + drag.dx, cy / drag.e + drag.dy)
+		if drag.w and drag.w > 0 and drag.h and drag.h > 0 then f:SetSize(drag.w, drag.h) end
+	end)
+	drag.busy = false
+end
+M.DragApply = DragApply
+-- 끌기 시작 (onStop(f) = 끝났을 때 자리 저장)
+function M.DragStart(f, onStop)
+	if drag.f then M.DragStop() end
+	if not f or (f:IsProtected() and InCombatLockdown()) then return false end
+	local e, l, t = f:GetEffectiveScale(), f:GetLeft(), f:GetTop()
+	local cx, cy = GetCursorPosition()
+	if not (e and e > 0 and l and t and cx and cy) then return false end
+	-- 블리자드가 원래 끌기(StartMoving)를 걸어 둔 창이면 그건 멈추고 FOA 끌기만
+	if f.StopMovingOrSizing then pcall(f.StopMovingOrSizing, f) end
+	local w, h = f:GetSize()
+	drag.f, drag.e, drag.dx, drag.dy, drag.w, drag.h, drag.onStop = f, e, l - cx / e, t - cy / e, w, h, onStop
+	drv:Show()
+	return true
+end
+function M.DragStop()
+	local f, onStop = drag.f, drag.onStop
+	if not f then return end
+	DragApply()
+	drag.f, drag.onStop = nil, nil
+	drv:Hide()
+	if onStop then pcall(onStop, f) end
+end
+-- 지금 이 창을 끄는 중인가 (끄는 중에 FOA 가 창을 다시 붙이는 중인가)
+function M.Dragging(f) return f ~= nil and drag.f == f, drag.busy end
+drv:SetScript("OnUpdate", function()
+	if not drag.f then drv:Hide() return end
+	if not IsMouseButtonDown("LeftButton") or not drag.f:IsShown() then M.DragStop() return end
+	DragApply()
+end)
+
 local function On() return Ink.db and Ink.db.moveWindows ~= false end
 local function Blocked(f) return f:IsProtected() and InCombatLockdown() end
 local function Saved(name) return Ink.db.winPos and Ink.db.winPos[name] end
@@ -53,19 +108,10 @@ local function Place(f)
 end
 M.Place = Place
 
-local function Start(f)
+local function Done(f)
 	local s = S[f]
-	if not s or not On() or Blocked(f) then return end
-	if not f:IsMovable() then f:SetMovable(true) end
-	s.moving = true
-	f:StartMoving()
-end
-
-local function Stop(f)
-	local s = S[f]
-	if not (s and s.moving) then return end
+	if not s then return end
 	s.moving = nil
-	f:StopMovingOrSizing()
 	-- 게임이 창 자리를 따로 저장(layout-local)하지 않게: 자리 기억은 FOA 가 한다
 	if f.SetUserPlaced then pcall(f.SetUserPlaced, f, false) end
 	local l, t, e = f:GetLeft(), f:GetTop(), f:GetEffectiveScale()
@@ -74,6 +120,18 @@ local function Stop(f)
 		Ink.db.winPos[s.name] = { math.floor(l * e + 0.5), math.floor(t * e + 0.5) }
 	end
 	Place(f)
+end
+
+local function Start(f)
+	local s = S[f]
+	if not s or not On() or Blocked(f) or s.moving then return end
+	if M.DragStart(f, Done) then s.moving = true end
+end
+
+local function Stop(f)
+	local s = S[f]
+	if not (s and s.moving) then return end
+	if M.Dragging(f) then M.DragStop() else Done(f) end
 end
 
 local function Forget(f)
@@ -118,7 +176,11 @@ local function Attach(f, name)
 	s.handle = Handle(f)
 	f:HookScript("OnShow", function(self) Place(self); C_Timer.After(0, function() Place(self) end) end)
 	f:HookScript("OnHide", function(self) Stop(self) end)
-	hooksecurefunc(f, "SetPoint", function(self) if not (S[self] and S[self].busy) and self:IsShown() then Place(self) end end)
+	hooksecurefunc(f, "SetPoint", function(self)
+		local dragging, busy = M.Dragging(self)
+		if dragging then if not busy then DragApply() end return end
+		if not (S[self] and S[self].busy) and self:IsShown() then Place(self) end
+	end)
 	if f:IsShown() then Place(f) end
 end
 

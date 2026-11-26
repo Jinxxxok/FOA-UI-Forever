@@ -115,6 +115,7 @@ L = ['-- FOA UI · 포에버 BIS · 준비물 (자동 생성 · tools/forever/ge
      '--  아이템 번호는 각 사이트의 와우헤드 포에버 링크 · 포에버 아이템 자료(QuestieDB · ATT)와 이름 대조함',
      '--  획득처의 {n:번호|영어} NPC · {q:…} 퀘스트 · {f:…} 평판 = 게임에서 그 언어 이름으로 (번호: QuestieDB GPL-3.0 포에버 합본 · ATT 평판 목록)',
      '-- from = 이 전문화 장비 목록 출처 · g = BIS { [칸] = 아이템 } · alt = 대체 { 칸, 아이템 } (공략 순서) · src = 획득처 · en = 마부 · co = 소모품 · psrc = 준비물 출처(없으면 Method)',
+     '-- PvP: Skill Capped WoW Forever PvP 장비 공략 (2026-11-19 · 공격대 전 예측 세트) · 진영 짝 · 프리미어 PvP 진영 (AllTheThings MIT)',
      'local _, ns = ...', 'ns.BIS_FOREVER = {', '\tsrc = "Method 공략",', '\tspecs = {']
 for key in sorted(specs):
     d = specs[key]
@@ -142,7 +143,81 @@ for key in sorted(specs):
     fr = d.get('from') or ('Method 공략' if g else '')
     ps = f', psrc = "{esc(d["psrc"])}"' if d.get('psrc') else ''
     L.append(f'\t\t["{key}"] = {{ from = "{esc(fr)}", stats = "{esc(d["stats"])}"{ps}, g = {{ {gs} }}, alt = {{ {als} }}, src = {{ {ss} }}, en = {{ {en} }}, co = {{ {co} }} }},')
-L += ['\t},', '}', '']
+L.append('\t},')
+# PvP: Skill Capped 포에버 PvP 장비 (skillcapped_pvp.txt) · 진영 짝 (pvp_pairs.txt) · 프리미어 PvP 진영 (pvp_premier_faction.txt)
+#  pvp[키] = { from, g = { [칸] = 아이템 }, alt = { { 칸, 아이템 } … }, src = 획득처 (PvE 자료에서 같은 아이템 글을 빌림) }
+#  장신구: [13] = PvP 장신구(진영 휘장) · [14] = 피해(치유 · 마나) 첫째 · 대체 = 나머지 + 생존
+#  pair[아이템] = 반대 진영 아이템 · fac[아이템] = 1 호드 · 2 얼라 (PvP 공략 아이템과 프리미어 PvP 장비)
+SC = {'HEAD': [1], 'NECK': [2], 'SHOULDERS': [3], 'SHOULDER': [3], 'BACK': [15], 'CHEST': [5], 'WRIST': [9], 'HANDS': [10],
+      'WAIST': [6], 'LEGS': [7], 'FEET': [8], 'FINGER': [11, 12], 'RING': [11, 12], 'MAIN_HAND': [16], 'TWO_HAND': [16],
+      'OFF_HAND': [17], 'RANGED': [18], 'WAND': [18], 'IDOL': [18], 'TOTEM': [18], 'LIBRAM': [18], 'RELIC': [18]}
+allsrc = {}
+for key in specs:
+    for slot, iid, sx in specs[key]['pre'] + specs[key]['alt']: allsrc.setdefault(iid, sx)
+pvp_path = src_dir + '/skillcapped_pvp.txt'
+pv, curp = {}, None
+if os.path.exists(pvp_path):
+    for line in open(pvp_path, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#'): continue
+        if line.startswith('@'):
+            curp = line[1:].split()[0]; pv[curp] = {'G': [], 'A': [], 'T': {}}; continue
+        kind, body = line.split('|', 1)
+        if kind == 'T':
+            for part in body.split(' | '):
+                cat, ids = part.split('=')
+                pv[curp]['T'][cat.strip()] = [int(x) for x in ids.split(',') if x]
+        else:
+            pv[curp][kind].append([(a, int(b)) for a, b in (t.split(':') for t in body.split())])
+L.append('\tpvp = {')
+for key in sorted(pv):
+    d = pv[key]
+    g, alt, srcs = {}, [], {}
+    for set_i, sets in enumerate([d['G']] + [[x] for x in d['A']]):
+        for st in sets:
+            used = {}
+            for lab, iid in st:
+                invs = SC.get(lab)
+                if not invs: continue
+                n = used.get(lab, 0); used[lab] = n + 1
+                inv = invs[min(n, len(invs) - 1)]
+                if set_i == 0 and inv not in g: g[inv] = iid
+                elif iid not in g.values() and (inv, iid) not in alt and not any(b == iid for _, b in alt): alt.append((inv, iid))
+                if iid in allsrc: srcs[iid] = allsrc[iid]
+    T = d['T']
+    main = T.get('Damage') or T.get('Healing and mana') or []
+    if T.get('PVP'): g[13] = T['PVP'][0]
+    if main: g[14] = main[0]
+    for iid in main[1:] + T.get('Survival', [])[:2]:
+        if iid not in g.values(): alt.append((13, iid))
+    for iid in list(g.values()) + [b for _, b in alt]:
+        if iid in allsrc: srcs[iid] = allsrc[iid]
+    gs = ', '.join(f'[{k}] = {v}' for k, v in sorted(g.items()))
+    als = ', '.join(f'{{ {a}, {b} }}' for a, b in alt)
+    ss = ', '.join(f'[{k}] = "{esc(tokenize(v))}"' for k, v in srcs.items())
+    L.append(f'\t\t["{key}"] = {{ from = "Skill Capped PvP 11/19", g = {{ {gs} }}, alt = {{ {als} }}, src = {{ {ss} }} }},')
+L.append('\t},')
+pair, fac = {}, {}
+pp = src_dir + '/pvp_pairs.txt'
+if os.path.exists(pp):
+    for line in open(pp, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#'): continue
+        a, f, b = line.split('|'); a, b = int(a), int(b)
+        pair[a], pair[b] = b, a
+        fac[a] = 2 if f == 'A' else 1
+        fac[b] = 1 if f == 'A' else 2
+pf = src_dir + '/pvp_premier_faction.txt'
+if os.path.exists(pf):
+    for line in open(pf, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#'): continue
+        f, ids = line.split('|')
+        for x in ids.split(): fac.setdefault(int(x), 2 if f == 'A' else 1)
+L.append('\tpair = { ' + ', '.join(f'[{k}] = {v}' for k, v in sorted(pair.items())) + ' },')
+L.append('\tfac = { ' + ', '.join(f'[{k}] = {v}' for k, v in sorted(fac.items())) + ' },')
+L += ['}', '']
 open(out, 'w', encoding='utf-8').write('\n'.join(L))
+print(len(pv), 'pvp specs', len(pair), 'pairs', len(fac), 'faction items')
 print(len(specs), 'specs')
 if unres: print('그대로 둔 글:', sorted(unres))
