@@ -156,7 +156,7 @@ local function LoadBuilds()
 	M.nodeInfo = nodes
 	local count = {}
 	for _, e in ipairs(src.list) do
-		local key, mode, label, origin, runs = e[1], e[2], e[3], e[4], e[5]
+		local key, mode, label, origin, runs, author = e[1], e[2], e[3], e[4], e[5], e[6]
 		local spec = key:match(":(%w+)$")
 		local steps, split, final, total, ok = {}, { 0, 0, 0 }, {}, 0, true
 		for sid, stg in runs:gmatch("(%d+):(%d+)") do
@@ -172,7 +172,7 @@ local function LoadBuilds()
 		if ok and #steps > 0 then
 			local c = (count[key .. mode] or 0) + 1
 			count[key .. mode] = c
-			data[key .. ":" .. mode .. ":" .. c] = { label = label, steps = steps, mode = mode, spec = spec, src = origin, split = split, total = total }
+			data[key .. ":" .. mode .. ":" .. c] = { label = label, steps = steps, mode = mode, spec = spec, src = origin, split = split, total = total, author = author }
 		end
 	end
 end
@@ -802,6 +802,8 @@ end
 
 local SRC_NOTE = {
 	["wowf.io"] = "wowf.io 레벨업 순서 · 출시 후 바뀔 수 있음",
+	["wowf.io · 조화 개편 반영"] = "wowf.io 레벨업 순서 · 11/25 조화 개편(새 트리)에 맞춰 고침",
+	["RankedBoost"] = "RankedBoost 레벨업 빌드 · 작성자 찍는 순서",
 }
 
 local TREE_NAMES
@@ -906,7 +908,7 @@ function M:PaintPanel(f, nxt)
 
 	local foot
 	if b and b.mode ~= "lvl" then
-		local by = (b.src or ""):find("^Mobalytics") and "찍는 순서: 공략 작성자" or "찍는 순서: 위 줄부터 (FOA 정리)"
+		local by = (b.author or (b.src or ""):find("^Mobalytics")) and "찍는 순서: 공략 작성자" or "찍는 순서: 위 줄부터 (FOA 정리)"
 		foot = (b.src or "") .. " · 게임 1.60.1 · 60레벨 완성\n" .. by
 	else
 		foot = SRC_NOTE[b and b.src or "wowf.io"] or ((b and b.src or "") .. " 레벨업 순서")

@@ -1,5 +1,6 @@
 -- FOA UI · 포에버 특성 가이드 데이터 (자동 생성 · tools/talents)
 -- 출처: wowf.io 레벨업 가이드의 특성 순서 (베타 클라이언트 기준, 출시 후 바뀔 수 있음)
+--   조화 드루이드는 11/25 개편(새 트리)에 맞춰 FOA 가 고침 (2026-11-28)
 -- 한 줄 = 한 단계: { 아이콘 파일 번호(0 = 아이콘 이름으로 게임에서 찾음), 목표 단계, 최대 단계, 시작 레벨, 끝 레벨, "영문 이름", "아이콘 이름" }
 -- 아이콘 번호로 게임 안의 특성을 찾는다 (한글 / 영문 클라이언트 상관없이)
 local _, ns = ...
@@ -561,25 +562,29 @@ ns.TalentData = {
 			{ 136158, 4, 5, 55, 58, "Malevolence", "spell_shadow_focusedpower" },
 			{ 136169, 2, 3, 59, 60, "Soul Siphon", "spell_shadow_lifedrain02" },
 		} },
-		["DRUID:balance"] = { label = "조화 · 레벨업", steps = {
-			{ 136006, 5, 5, 10, 14, "Improved Wrath", "spell_nature_abolishmagic" },
+		-- 11/25 조화 개편(Starlight Wrath · Moon and Stars · Improved Starfire 2단계 · Moonfury → Dreamstate)에 맞춰 고친 순서
+		--  wowf.io 순서를 바탕으로, 혼자 레벨업할 땐 Dreamstate 대신 Improved Starfire · Overgrowth · Improved Entangling Roots (ConquestCapped 권장)
+		["DRUID:balance"] = { label = "조화 · 레벨업", src = "wowf.io · 조화 개편 반영", steps = {
+			{ 136006, 5, 5, 10, 14, "Starlight Wrath", "spell_nature_abolishmagic" },
 			{ 136087, 3, 3, 15, 17, "Moonglow", "spell_nature_sentinal" },
 			{ 136065, 2, 2, 18, 19, "Nature's Reach", "spell_nature_naturetouchgrow" },
 			{ 135138, 2, 2, 20, 21, "Nature's Majesty", "inv_staff_01" },
-			{ 136096, 2, 2, 22, 23, "Improved Moonfire", "spell_nature_starfall" },
+			{ 136096, 2, 2, 22, 23, "Moon and Stars", "spell_nature_starfall" },
 			{ 136061, 1, 1, 24, 24, "Nature's Splendor", "spell_nature_natureresistancetotem" },
 			{ 136045, 1, 1, 25, 25, "Insect Swarm", "spell_nature_insectswarm" },
-			{ 0, 4, 5, 26, 29, "Improved Starfire", "spell_arcane_starfire" },
-			{ 0, 3, 3, 30, 32, "Eclipse", "ability_druid_eclipse" },
-			{ 0, 5, 5, 33, 33, "Improved Starfire", "spell_arcane_starfire" },
-			{ 136062, 1, 1, 34, 34, "Nature's Grace", "spell_nature_naturesblessing" },
-			{ 136057, 5, 5, 35, 39, "Moonfury", "spell_nature_moonglow" },
-			{ 0, 1, 1, 40, 40, "Moonkin Form", "spell_nature_forceofnature" },
-			{ 136042, 5, 5, 41, 45, "Nature's Focus", "spell_nature_healingwavegreater" },
-			{ 135863, 3, 3, 46, 48, "Reflection", "spell_frost_windwalkon" },
-			{ 136041, 5, 5, 49, 53, "Naturalist", "spell_nature_healingtouch" },
-			{ 135730, 2, 5, 54, 55, "Genesis", "spell_arcane_arcane03" },
-			{ 136075, 5, 5, 56, 60, "Vengeance", "spell_nature_purge" },
+			{ 135753, 2, 2, 26, 27, "Improved Starfire", "spell_arcane_starfire" },
+			{ 136075, 2, 5, 28, 29, "Vengeance", "spell_nature_purge" },
+			{ 236151, 3, 3, 30, 32, "Eclipse", "ability_druid_eclipse" },
+			{ 136062, 1, 1, 33, 33, "Nature's Grace", "spell_nature_naturesblessing" },
+			{ 134196, 2, 2, 34, 35, "Overgrowth", "inv_misc_herb_15" },
+			{ 136075, 5, 5, 36, 38, "Vengeance", "spell_nature_purge" },
+			{ 136100, 1, 3, 39, 39, "Improved Entangling Roots", "spell_nature_stranglevines" },
+			{ 136036, 1, 1, 40, 40, "Moonkin Form", "spell_nature_forceofnature" },
+			{ 136100, 3, 3, 41, 42, "Improved Entangling Roots", "spell_nature_stranglevines" },
+			{ 135730, 5, 5, 43, 47, "Genesis", "spell_arcane_arcane03" },
+			{ 136042, 5, 5, 48, 52, "Nature's Focus", "spell_nature_healingwavegreater" },
+			{ 136041, 5, 5, 53, 57, "Naturalist", "spell_nature_healingtouch" },
+			{ 135863, 3, 3, 58, 60, "Reflection", "spell_frost_windwalkon" },
 		} },
 		["DRUID:feral"] = { label = "야성(표범) · 레벨업", steps = {
 			{ 132190, 5, 5, 10, 14, "Ferocity", "ability_hunter_pet_hyena" },

@@ -2,13 +2,24 @@
 
 FOA 특성 가이드는 세 가지 보기를 쓴다: **육성 · PvE · PvP** (특성 창 오른쪽 안내판의 세그먼트).
 
+## 2026-11-28 갱신 (게임 1.60.1.71139)
+
+- 조화 드루이드 11/25 개편 반영: Improved Wrath → Starlight Wrath · Improved Moonfire → Moon and Stars · Improved Starfire 5 → 2단계 · Moonfury 삭제 → Dreamstate(아이콘 132123).
+  RankedBoost 는 아직 옛 조화 트리여서, 조화 PvE 는 새 트리 기준 ConquestCapped 레이드(36/0/15) · 던전(38/0/13) 빌드로 바꿨다.
+  조화 육성 순서는 wowf.io 순서를 새 트리에 맞춰 고쳤다 (혼자 레벨업: Dreamstate 대신 Improved Starfire · Overgrowth · Improved Entangling Roots).
+- RankedBoost: 기존 PvE · PvP 빌드는 배분이 그대로 → 찍는 순서를 페이지의 작성자 순서(`ord`)로 바꿨다. 새 레벨업 빌드 9개 · 야성 하이브리드 추가.
+- Mobalytics: 생존 사냥꾼(Feor, 11/26) 갱신 · 수양 사제 두 빌드 이름이 서로 바뀌어 있던 것 바로잡음 · 암흑 사제 PvP(Hydra) 2개 · 파괴 흑마법사 PvP(Saucy722) 추가.
+- 다시 만들기: `python3 gen_builds.py ../../FOA_UI/TalentBuilds.lua rb_2026-11-28.txt other_2026-11-28.txt ../../FOA_UI/TalentBuilds.lua`
+  (검사: 51점 · 최대 단계 · 줄 조건 · 같은 배분 중복 · 줄 조건을 어기는 작성자 점수는 뒤로)
+
+
 ## 육성 — `FOA_UI/TalentData.lua`
 
 - `en_builds.txt`: wowf.io 영문 레벨업 가이드의 특성 순서 (`레벨|이름|아이콘|목표/최대`).
 - 아이콘 이름 → 파일 번호는 wowdev/wow-listfile 로 바꿔서 `TalentData.lua` 를 만든다.
 - 게임 안에서는 아이콘 파일 번호로 특성을 찾으므로 한글/영문 클라이언트 모두 맞는다.
 
-## PvE · PvP — `FOA_UI/TalentBuilds.lua` (게임 빌드 1.60.1, 2026-11-16)
+## 레벨업 · PvE · PvP — `FOA_UI/TalentBuilds.lua` (게임 빌드 1.60.1, 2026-11-16 → 11-28 갱신)
 
 | 출처 | 내용 |
 |---|---|

@@ -14,6 +14,11 @@ import att_parse
 
 roots = [att_parse.parse(open(sys.argv[1], encoding="utf-8-sig").read(), "Zones"),
          att_parse.parse(open(sys.argv[2], encoding="utf-8-sig").read(), "Instances")]
+# 2026-11-23 ATT 개편: 훈련사가 가르치는 제조법을 직접 갖지 않고, Professions.lua 의 단계 머리글
+#  ah(단계 주문, {requireSkill, symselector=K, g={ r(단계 주문,{rank,lvl,learnedAt}), 제조법 … }}) 을 sym={{"select","symselector",K}} 로 고른다
+#  · 제작 기술 훈련사는 가르치는 가장 높은 단계 하나만 고른다 → 그 아래 단계도 함께 가르친다고 본다
+_profs_path = os.path.join(os.path.dirname(os.path.abspath(sys.argv[1])), "Professions.lua")
+PROF_ROOT = att_parse.parse(open(_profs_path, encoding="utf-8-sig").read(), "Professions") if os.path.exists(_profs_path) else None
 OUT = sys.argv[3]
 NAMES = {}
 EXTRA = {}   # 보조 훈련사 (QuestieDB 직함으로): [기술] = [(npc, 진영, 지도, x, y, 최고 단계, 이름)]
@@ -64,6 +69,7 @@ def ints(v):
     return [int(x) for x in v] if isinstance(v, list) else []
 
 trainers = {}   # npc -> dict
+SEL = {}        # symselector 번호 -> { skill, rank, recs }
 
 def collect_recipes(node, out):
     """훈련사 아래 (머리글 · 묶음 포함) r(...) 를 모두"""
@@ -89,6 +95,41 @@ def spots_of(co):
                     if isinstance(p, list) and len(p) >= 2: spots.append((m, float(p[0]), float(p[1])))
     return spots
 
+def collect_sel(node):
+    if isinstance(node, tuple) and node[0] == "call":
+        b = body_of(node)
+        if isinstance(b, dict) and b.get("symselector") is not None:
+            recs = []
+            for ch in children(b): collect_recipes(ch, recs)
+            rank = max([int(rb.get("rank")) for _, rb in recs if rb.get("rank")] or [0])
+            SEL[int(b["symselector"])] = {"skill": int(b.get("requireSkill", 0) or 0), "rank": rank, "recs": recs}
+        for ch in children(b): collect_sel(ch)
+        for a in node[2]:
+            if isinstance(a, list):
+                for ch in a: collect_sel(ch)
+    elif isinstance(node, list):
+        for ch in node: collect_sel(ch)
+    elif isinstance(node, dict):
+        for ch in children(node): collect_sel(ch)
+if PROF_ROOT is not None: collect_sel(PROF_ROOT)
+
+def sym_recipes(b, prof):
+    ks = []
+    for e in (b.get("sym") or []):
+        if isinstance(e, list) and len(e) >= 3 and e[0] == "select" and e[1] == "symselector" and isinstance(e[2], int):
+            ks.append(e[2])
+    ks = [k for k in ks if k in SEL]
+    if not ks: return []
+    want = set(ks)
+    for k in ks:
+        sk, rk = SEL[k]["skill"], SEL[k]["rank"]
+        if rk > 1:   # 아래 단계도 (같은 기술 · 단계 번호가 있는 머리글)
+            for k2, v in SEL.items():
+                if v["skill"] == sk and 0 < v["rank"] < rk: want.add(k2)
+    out = []
+    for k in sorted(want): out += SEL[k]["recs"]
+    return out
+
 def walk(node, prof=None, inst=None):
     if isinstance(node, tuple) and node[0] == "call":
         name, args = node[1], node[2]
@@ -105,6 +146,7 @@ def walk(node, prof=None, inst=None):
                 spots, inside = inst, 1        # 던전 안 훈련사: 던전 입구 자리
             recs = []
             for ch in children(b): collect_recipes(ch, recs)
+            recs += sym_recipes(b, prof)
             if spots and recs:
                 t = trainers.setdefault((prof, npc), {"prof": prof, "npc": npc, "fac": int(b.get("r", 0) or 0), "spots": spots, "ranks": {}, "recipes": {}, "inside": inside})
                 for sid, rb in recs:
